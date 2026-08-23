@@ -6,69 +6,11 @@
  * the website-side gallery, the canonical profile copy, and the post-visit
  * review email. No incentives, no star coaching.
  *
- * KNOWN BUGS AND ISSUES (documented, not fixed in this PR):
- * ==========================================================
- *
- * BUG 1 (CRITICAL): Vendor URL regex without boundaries → false positives
- * Location: nvx_public_vendor_image_url_regex (lines 132-134)
- * Python equivalent: VENDOR_URL_RE (scripts/editorial/audit_production_70_postrelease.py:24-27)
- *
- * Root cause: Tokens like 'Endolift®', 'exion' have no word boundaries in URL regex.
- * Applied via nvx_public_html_vendor_attr_is_blocked (lines 144-150) against
- * src/srcset/data-* of every image in the_content (hook priority 198, line 234).
- *
- * Confirmed via grep: approved slugs like /endolift-facial-papada-mandibula/,
- * /exion-face/, /exion-body/ exist. A legitimate image with
- * src=".../exion-face/hero.webp" would be silently deleted from any page.
- *
- * Asymmetry note: The alt regex uses \b boundaries (line 138), but URL regex does not.
- * This asymmetry signals the bug.
- *
- * Fix: Anchor URL regex to filename/packshot stems instead of loose brand tokens,
- * matching nvx_clinic_vendor_packshot_regex pattern (lines 120-122):
- *   return '/deka\.|btl[_-]|btl-exilite|BTL-Exion|eufoton|endolift-lasemar|Endolift-ISO9001|lasemar-1500|Smartlipo®|exilite/i';
- * And replicate in Python audit script.
- *
- * Status: UNFIXED - critical production impact (deletes approved content)
- *
- * BUG 2 (FUNCTIONAL): Fail-open in nvx_public_html_is_abdomen_asset_off_intent
- * Location: nvx_public_html_is_abdomen_asset_off_intent (lines 240-251)
- *
- * Root cause: If nvx_schema_current_path is unavailable, $path = '' and
- * preg_match('/endolaser|.../', '') returns 0, so function returns true →
- * deletes abdomen asset in all routes, including legitimate corporate pages.
- *
- * Runtime analysis: nvx_schema_current_path is guaranteed in normal runtime
- * (loaded via nvx-structured-data.php at functions.php:301). The function_exists
- * check (line 246) is defensive. Fail-open only triggers in anomalous contexts
- * (feeds, REST, some AJAX not via is_admin()).
- *
- * Fix: Treat '' === $path as "do not block" (return false):
- *   if ( '' === $path ) {
- *       return false;
- *   }
- *   return 1 !== preg_match( '/endolaser|remodelacion-corporal|grasa-localizada|laserlipolisis|lipolisis/i', $path );
- *
- * Status: UNFIXED - edge case only, no production impact in normal runtime
- *
- * BUG 3 (FUNCTIONAL): nvx_public_strip_vendor_images doesn't rebuild figure after emptying picture
- * Location: nvx_public_strip_vendor_images (lines 187-230)
- *
- * CodeRabbit thread marked resolved by reordering figure before picture. Current head
- * order is figure → picture → img/source (lines 202-230), which is correct.
- *
- * Remaining edge case: A <figure> containing vendor copy in alt of a <picture> whose
- * internal <img> doesn't match, or figures without vendor that end up with orphaned
- * <figcaption> after deleting only the <img> in the third callback (lines 224-230).
- * The third callback deletes loose <img>/<source> without touching container
- * <figure>/<figcaption> → leaves empty figures with caption.
- *
- * Test coverage: $wrapped in scripts/lint/test-editorial-vendor-images.php only
- * covers case where full <figure> matches.
- *
- * Impact: Minor (orphaned figcaption), no incorrect deletion.
- *
- * Status: UNFIXED - edge case, minor visual impact only
+ * Historical image-hygiene regressions are guarded by blocking CI:
+ * - vendor URL detection is filename-scoped so treatment directories such as
+ *   /exion-face/ and /endolift-facial/ are not false positives;
+ * - unresolved route intent fails safe and never deletes an approved asset;
+ * - vendor figures containing picture/figcaption markup are removed whole.
  *
  * @package nuvanx-medical
  */
@@ -309,6 +251,9 @@ function nvx_public_html_is_abdomen_asset_off_intent( string $html ): bool {
 	$path = '';
 	if ( function_exists( 'nvx_schema_current_path' ) ) {
 		$path = (string) nvx_schema_current_path( (int) get_queried_object_id() );
+	}
+	if ( '' === $path ) {
+		return false;
 	}
 
 	return 1 !== preg_match( '/endolaser|remodelacion-corporal|grasa-localizada|laserlipolisis|lipolisis/i', $path );
