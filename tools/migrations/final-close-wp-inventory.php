@@ -217,7 +217,7 @@ if ( null !== $cronRaw ) {
     } elseif ( preg_match( '/(?:^|[;{}])(?:[OCRr]:[0-9]+:)/', $cronRaw ) ) {
         nvx_final_close_failure( $report, 'cron', 'cron_option_contains_objects_or_references' );
     } else {
-        $cron = @unserialize( $cronRaw, array( 'allowed_classes' => false ) );
+        $cron = unserialize( $cronRaw, ['allowed_classes' => false] );
         if ( is_array( $cron ) ) {
             foreach ( $cron as $timestamp => $hooks ) {
                 if ( ! is_array( $hooks ) || ! ctype_digit( (string) $timestamp ) ) {
