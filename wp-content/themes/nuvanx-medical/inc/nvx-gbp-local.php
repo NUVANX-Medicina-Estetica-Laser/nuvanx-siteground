@@ -495,7 +495,7 @@ function nvx_gbp_visit_send_on( string $visit_date ): string {
 	return gmdate( 'Y-m-d', $time + ( NVX_GBP_DELAY_DAYS * DAY_IN_SECONDS ) );
 }
 
-/** @return int|\\WP_Error */
+/** @return int|\WP_Error */
 function nvx_gbp_register_visit( string $name, string $email, string $clinic_key, string $visit_date ) {
 	$email      = sanitize_email( $email );
 	$clinic_key = 'goya' === $clinic_key ? 'goya' : 'chamberi';
