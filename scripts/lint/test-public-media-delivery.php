@@ -168,4 +168,4 @@ if ( array( 'sizes' => '28vw' ) !== $untouched_attrs ) {
 	$fail( 'unrelated_attachment_image_attributes_changed' );
 }
 
-echo 'PUBLIC_MEDIA_DELIVERY=PASS cases=18' . PHP_EOL;
+echo 'PUBLIC_MEDIA_DELIVERY=PASS' . PHP_EOL;
