@@ -10,7 +10,7 @@ The repository currently keeps exactly three canonical workflows: `gemini-pr-rev
 
 Current contract:
 
-- the canonical static quality gate syntax-checks top-level `scripts/seo/*.js` files with `node --check`;
+- Production syntax-checks `scripts/seo/index-pages.js` with `node --check`;
 - the weekly release regression path audits the package lock with `npm audit --audit-level=high`;
 - dependency changes must update `scripts/seo/package-lock.json` with npm;
 - credentialed mutating Google/GTM helpers are never run automatically;
