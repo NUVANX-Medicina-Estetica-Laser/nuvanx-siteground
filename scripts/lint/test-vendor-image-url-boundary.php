@@ -25,7 +25,7 @@ if ( ! preg_match(
 	$fail( 'regex_function_not_found' );
 }
 
-$regex = $match[1];
+$regex = str_replace( array( '\\\\', "\\'" ), array( '\\', "'" ), $match[1] );
 
 $blocked = array(
 	'https://nuvanx.com/wp-content/uploads/2026/02/deka.webp',
