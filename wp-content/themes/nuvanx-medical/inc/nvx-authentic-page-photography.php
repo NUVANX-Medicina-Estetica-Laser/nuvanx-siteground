@@ -307,7 +307,7 @@ function nvx_governed_public_image_ids(): array {
 			if ( $id > 0 ) {
 				$ids[] = $id;
 			}
-	}
+		}
 	}
 
 	return array_values( array_unique( $ids ) );
@@ -328,6 +328,9 @@ function nvx_governed_public_srcset_cap( int $attachment_id ): int {
  * Never use a multi-megabyte source as the fallback `src` when a governed
  * editorial renderer asks WordPress for `full`.
  *
+ * Legacy attachment 2892 is served from the verified optimized equivalent 2877
+ * so the rendered fallback and its metadata come from the same attachment.
+ *
  * @param mixed        $downsize Existing short-circuit value.
  * @param int          $attachment_id Attachment ID.
  * @param string|int[] $size Requested image size.
@@ -341,7 +344,8 @@ function nvx_governed_public_image_downsize( $downsize, int $attachment_id, $siz
 		return $downsize;
 	}
 
-	$large = wp_get_attachment_image_src( $attachment_id, 'large' );
+	$resolved_id = 2892 === $attachment_id ? 2877 : $attachment_id;
+	$large       = wp_get_attachment_image_src( $resolved_id, 'large' );
 	if ( ! is_array( $large ) || empty( $large[0] ) ) {
 		return $downsize;
 	}
