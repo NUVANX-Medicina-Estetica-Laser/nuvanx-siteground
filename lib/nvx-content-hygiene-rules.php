@@ -35,6 +35,26 @@ const NVX_LITERAL_CONSULTA   = 'consulta médica';
 function nvx_hygiene_str_reps(): array {
     return [
 
+        // ── /medicina-estetica/ legacy media references ─────────────────────
+        // Full-tag matches keep these repairs surgical. Production is already
+        // reconciled; shared hygiene makes independent Staging2 DBs converge.
+        [
+            'from' => '<img class="wp-image-3062" alt="Medicina estética con criterio médico en NUVANX Madrid" decoding="async" loading="eager" src="https://nuvanx.com/wp-content/uploads/2026/07/nuvanx.commedicina-estetica.webp" />',
+            'to'   => '<img class="nvx-brand-hero__image" alt="Medicina estética con criterio médico en NUVANX Madrid" decoding="async" loading="eager" src="https://nuvanx.com/wp-content/uploads/2026/07/nuvanx.commedicina-estetica.webp" />',
+        ],
+        [
+            'from' => '<img class="wp-image-1135" src="https://nuvanx.com/wp-content/uploads/2026/04/aumento-labios-nuvanx.webp" alt="Ácido hialurónico - Labios naturales" loading="lazy" decoding="async">',
+            'to'   => '<img class="wp-image-1156" src="https://nuvanx.com/wp-content/uploads/2026/04/aumento-labios-2.jpg" alt="Tratamiento médico de labios en NUVANX Madrid" loading="lazy" decoding="async">',
+        ],
+        [
+            'from' => '<img class="wp-image-1133" src="https://nuvanx.com/wp-content/uploads/2026/04/rinomodelacion-nuvanx.webp" alt="Perfil nasal - Rinomodelación sin cirugía" loading="lazy" decoding="async">',
+            'to'   => '<img class="wp-image-1134" src="https://nuvanx.com/wp-content/uploads/2026/04/rinomodelacion.jpg" alt="Rinomodelación médica en NUVANX Madrid" loading="lazy" decoding="async">',
+        ],
+        [
+            'from' => '<img class="wp-image-2102" src="https://nuvanx.com/wp-content/uploads/2026/06/tratamiento-ojeras-mirada-nuvanx-madrid.webp" alt="Mirada - Ojeras" loading="lazy" decoding="async">',
+            'to'   => '<img class="wp-image-2450" src="https://nuvanx.com/wp-content/uploads/2026/06/Acercamiento-Rostro.jpg" alt="Mirada y contorno periocular en NUVANX Madrid" loading="lazy" decoding="async">',
+        ],
+
         // ── Valoración ───────────────────────────────────────────────────────
         [ 'from' => 'valoración médica gratuita', 'to' => NVX_LITERAL_VALORACION  ],
         [ 'from' => 'valoración gratuita',        'to' => NVX_LITERAL_VALORACION  ],
