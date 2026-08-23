@@ -10,7 +10,7 @@
  * @package nuvanx-medical
  */
 
-const NVX_AUTHENTIC_PHOTO_ALT_CONSULTATION = 'Consulta médica personalizada en NUVANX';
+const NVX_AUTHENTIC_PHOTO_ALT_CONSULTATION = 'Consulta médica y valoración personalizada en NUVANX Madrid';
 const NVX_AUTHENTIC_PHOTO_CAPTION_VALORACION = 'Valoración médica';
 
 /**
@@ -31,7 +31,7 @@ function nvx_authentic_page_photo_registry(): array {
 			'title'   => 'La tecnología forma parte del acto médico',
 			'images'  => array(
 				array( 'id' => 2472, 'alt' => 'Tecnología de energía en una sesión clínica NUVANX', 'caption' => 'Tecnología facial' ),
-				array( 'id' => 2892, 'alt' => NVX_AUTHENTIC_PHOTO_ALT_CONSULTATION, 'caption' => NVX_AUTHENTIC_PHOTO_CAPTION_VALORACION ),
+				array( 'id' => 2877, 'alt' => NVX_AUTHENTIC_PHOTO_ALT_CONSULTATION, 'caption' => NVX_AUTHENTIC_PHOTO_CAPTION_VALORACION ),
 			),
 		),
 		'medicina-estetica-laser' => array(
@@ -39,15 +39,15 @@ function nvx_authentic_page_photo_registry(): array {
 			'title'   => 'Tecnología real, indicada de forma individual',
 			'images'  => array(
 				array( 'id' => 2472, 'alt' => 'Procedimiento facial con tecnología de energía NUVANX', 'caption' => 'Láser y energía' ),
-				array( 'id' => 2892, 'alt' => NVX_AUTHENTIC_PHOTO_ALT_CONSULTATION, 'caption' => NVX_AUTHENTIC_PHOTO_CAPTION_VALORACION ),
+				array( 'id' => 2877, 'alt' => NVX_AUTHENTIC_PHOTO_ALT_CONSULTATION, 'caption' => NVX_AUTHENTIC_PHOTO_CAPTION_VALORACION ),
 			),
 		),
 		'medicina-estetica' => array(
 			'eyebrow' => 'Consulta NUVANX',
 			'title'   => 'Una indicación empieza por escuchar y valorar',
 			'images'  => array(
-				array( 'id' => 2896, 'alt' => 'Retrato del equipo médico de NUVANX', 'caption' => 'Dirección médica' ),
-				array( 'id' => 2381, 'alt' => 'Consulta entre profesional y paciente en NUVANX', 'caption' => 'Valoración personalizada' ),
+				array( 'id' => 2896, 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Dirección médica' ),
+				array( 'id' => 2381, 'alt' => 'Dr. José Javier Rivera durante una valoración médica en NUVANX Madrid', 'caption' => 'Valoración personalizada' ),
 				array( 'id' => 1630, 'alt' => 'Box de tratamiento real de NUVANX', 'caption' => 'Entorno clínico' ),
 			),
 		),
@@ -55,7 +55,7 @@ function nvx_authentic_page_photo_registry(): array {
 			'eyebrow' => 'NUVANX',
 			'title'   => 'Equipo, método y lugar',
 			'images'  => array(
-				array( 'id' => 2896, 'alt' => 'Dirección médica de NUVANX', 'caption' => 'Dirección médica' ),
+				array( 'id' => 2896, 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Dirección médica' ),
 				array( 'id' => 1632, 'alt' => 'Recepción real de NUVANX', 'caption' => 'La clínica' ),
 				array( 'id' => 2796, 'alt' => 'Fachada de NUVANX Chamberí', 'caption' => 'Chamberí' ),
 			),
@@ -64,7 +64,7 @@ function nvx_authentic_page_photo_registry(): array {
 			'eyebrow' => 'Protocolos',
 			'title'   => 'La secuencia se decide en consulta',
 			'images'  => array(
-				array( 'id' => 2892, 'alt' => 'Valoración médica en NUVANX', 'caption' => 'Consulta' ),
+				array( 'id' => 2877, 'alt' => NVX_AUTHENTIC_PHOTO_ALT_CONSULTATION, 'caption' => 'Consulta' ),
 				array( 'id' => 2471, 'alt' => 'Valoración corporal individualizada en NUVANX', 'caption' => 'Criterio corporal' ),
 			),
 		),
@@ -72,7 +72,7 @@ function nvx_authentic_page_photo_registry(): array {
 			'eyebrow' => 'Planificación',
 			'title'   => 'La planificación es tan importante como la tecnología',
 			'images'  => array(
-				array( 'id' => 2892, 'alt' => NVX_AUTHENTIC_PHOTO_ALT_CONSULTATION, 'caption' => 'Valoración previa' ),
+				array( 'id' => 2877, 'alt' => NVX_AUTHENTIC_PHOTO_ALT_CONSULTATION, 'caption' => 'Valoración previa' ),
 			),
 		),
 		'papada-definicion-mandibular-madrid' => array(
@@ -180,27 +180,27 @@ function nvx_authentic_page_photo_registry(): array {
 			'title'   => 'Espacios creados para la consulta y el seguimiento',
 			'images'  => array(
 				array( 'id' => 2796, 'alt' => 'Fachada de NUVANX Chamberí', 'caption' => 'Chamberí' ),
-				array( 'id' => 2071, 'alt' => 'Fachada de NUVANX Goya', 'caption' => 'Salamanca–Goya' ),
-				array( 'id' => 1632, 'alt' => 'Recepción de NUVANX', 'caption' => 'Recepción' ),
-				array( 'id' => 1630, 'alt' => 'Box clínico de NUVANX', 'caption' => 'Entorno clínico' ),
+				array( 'id' => 2071, 'alt' => 'Fachada de NUVANX Salamanca–Goya', 'caption' => 'Salamanca–Goya' ),
+				array( 'id' => 1632, 'alt' => 'Recepción de NUVANX Chamberí', 'caption' => 'Recepción' ),
+				array( 'id' => 1630, 'alt' => 'Box clínico de NUVANX Chamberí', 'caption' => 'Entorno clínico' ),
 			),
 		),
 		'equipo-medico' => array(
 			'eyebrow' => 'Equipo médico',
 			'title'   => 'Profesionales que acompañan cada decisión',
 			'images'  => array(
-				array( 'id' => 2381, 'alt' => 'Javier Rivera — valoración médica NUVANX', 'caption' => 'Dirección médica' ),
-				array( 'id' => 1840, 'alt' => 'Retrato de la Dra. Ivon en NUVANX', 'caption' => 'Medicina preventiva' ),
-				array( 'id' => 2897, 'alt' => 'Retrato de un profesional del equipo NUVANX', 'caption' => 'Equipo NUVANX' ),
+				array( 'id' => 2381, 'alt' => 'Dr. José Javier Rivera durante una valoración médica en NUVANX Madrid', 'caption' => 'Dirección médica' ),
+				array( 'id' => 1840, 'alt' => 'Dra. Ivon Rivera Deras — equipo médico NUVANX Madrid', 'caption' => 'Medicina preventiva' ),
+				array( 'id' => 2897, 'alt' => 'Francisco Geraldo — coordinación NUVANX Madrid', 'caption' => 'Coordinación NUVANX' ),
 			),
 		),
 		'nosotros' => array(
 			'eyebrow' => 'Nosotros',
 			'title'   => 'Una práctica médica de personas y espacios reales',
 			'images'  => array(
-				array( 'id' => 2896, 'alt' => 'Dirección médica de NUVANX', 'caption' => 'Equipo médico' ),
-				array( 'id' => 1632, 'alt' => 'Interior de NUVANX', 'caption' => 'La clínica' ),
-				array( 'id' => 2796, 'alt' => 'Fachada de NUVANX Chamberí', 'caption' => 'Chamberí' ),
+				array( 'id' => 2896, 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Equipo médico' ),
+				array( 'id' => 1632, 'alt' => 'Interior de NUVANX Chamberí, Madrid', 'caption' => 'La clínica' ),
+				array( 'id' => 2796, 'alt' => 'Fachada de NUVANX Chamberí, Madrid', 'caption' => 'Chamberí' ),
 			),
 		),
 	);
@@ -223,18 +223,19 @@ function nvx_authentic_page_photo_markup( array $data ): string {
 			continue;
 		}
 
-		// Use the available source attachment rather than a historic WordPress
-		// derivative, which may no longer exist on the media filesystem.
+		// Request WordPress' governed large derivative instead of forcing the
+		// multi-megabyte source. Runtime acceptance measures currentSrc so a
+		// missing historic derivative cannot silently reintroduce transfer debt.
 		$markup = wp_get_attachment_image(
 			$attachment_id,
-			'full',
+			'large',
 			false,
 			array(
 				'class'    => 'nvx-authentic-photo-grid__image',
 				'loading'  => 'lazy',
 				'decoding' => 'async',
 				'alt'      => $image['alt'],
-				'sizes'    => '(min-width: 1024px) 33vw, (min-width: 641px) 50vw, 100vw',
+				'sizes'    => '(min-width: 1320px) 400px, (min-width: 1024px) 30vw, (min-width: 641px) 46vw, 92vw',
 			)
 		);
 
