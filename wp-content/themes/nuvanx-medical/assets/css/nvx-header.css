@@ -269,7 +269,7 @@
   padding: var(--nvx-space-8) var(--nvx-gutter-inner);
   background: var(--nvx-light);
   color: inherit;
-  animation: slideIn 300ms ease;
+  animation: slideIn var(--nvx-duration-normal) ease;
 }
 
 @keyframes slideIn {
