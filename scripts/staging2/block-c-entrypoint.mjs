@@ -8,6 +8,7 @@ import { createSiteGroundOriginVerifier } from './siteground-origin-verifier.mjs
 import { renderBlockCEvidence, writeEvidenceBundle } from './block-c-evidence.mjs';
 
 const coreScript = fileURLToPath(new URL('./block-c-entrypoint-core.mjs', import.meta.url));
+const clinicMediaRuntimeScript = fileURLToPath(new URL('./clinic-media-runtime.mjs', import.meta.url));
 const targetedVisualRecoveryScript = fileURLToPath(new URL('./block-c-home-mobile-recovery.mjs', import.meta.url));
 const targetedVisualRecoveryTargets = Object.freeze(Object.keys(BLOCK_C_RECOVERY_TARGETS));
 const artifactsDir = fileURLToPath(new URL('./block-c-artifacts/', import.meta.url));
@@ -34,6 +35,7 @@ const hasLegacyTimeoutOverride = Number.isInteger(parsedLegacyTimeoutMs) && pars
 const legacyTimeoutMs = hasLegacyTimeoutOverride ? parsedLegacyTimeoutMs : null;
 const DEFAULT_CORE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_RECOVERY_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_CLINIC_MEDIA_TIMEOUT_MS = 5 * 60 * 1000;
 // BLOCK_C_SUBPROCESS_TIMEOUT_MS is the historical global subprocess budget. For
 // compatibility it remains the core fallback when explicitly set, and recovery
 // must never exceed that global ceiling unless BLOCK_C_RECOVERY_TIMEOUT_MS is
@@ -42,9 +44,13 @@ const coreFallbackTimeoutMs = hasLegacyTimeoutOverride ? legacyTimeoutMs : DEFAU
 const recoveryFallbackTimeoutMs = hasLegacyTimeoutOverride
   ? Math.min(DEFAULT_RECOVERY_TIMEOUT_MS, legacyTimeoutMs)
   : DEFAULT_RECOVERY_TIMEOUT_MS;
+const clinicMediaFallbackTimeoutMs = hasLegacyTimeoutOverride
+  ? Math.min(DEFAULT_CLINIC_MEDIA_TIMEOUT_MS, legacyTimeoutMs)
+  : DEFAULT_CLINIC_MEDIA_TIMEOUT_MS;
 const SUBPROCESS_CONFIG = Object.freeze({
   coreTimeoutMs: positiveIntegerEnv('BLOCK_C_CORE_TIMEOUT_MS', coreFallbackTimeoutMs),
   recoveryTimeoutMs: positiveIntegerEnv('BLOCK_C_RECOVERY_TIMEOUT_MS', recoveryFallbackTimeoutMs),
+  clinicMediaTimeoutMs: positiveIntegerEnv('CLINIC_MEDIA_RUNTIME_TIMEOUT_MS', clinicMediaFallbackTimeoutMs),
   hardKillGraceMs: positiveIntegerEnv('BLOCK_C_SUBPROCESS_KILL_GRACE_MS', 5000),
 });
 
@@ -112,6 +118,18 @@ async function runCore() {
   } catch (error) {
     if (error instanceof ProcessSignalError) {
       console.error(`BLOCK_C_CORE=TRANSIENT_SIGNAL signal=${error.signal}`);
+      return EX_TEMPFAIL;
+    }
+    throw error;
+  }
+}
+
+async function runClinicMediaRuntime() {
+  try {
+    return await runProcess(clinicMediaRuntimeScript, process.env, SUBPROCESS_CONFIG.clinicMediaTimeoutMs);
+  } catch (error) {
+    if (error instanceof ProcessSignalError) {
+      console.error(`CLINIC_MEDIA_RUNTIME=TRANSIENT_SIGNAL signal=${error.signal}`);
       return EX_TEMPFAIL;
     }
     throw error;
@@ -296,6 +314,19 @@ try {
         console.error('BLOCK_C_RESILIENT=FAIL_TRANSIENT_EXHAUSTED fallback=public-browser-and-origin-verification-unavailable-or-inapplicable');
         process.exitCode = EX_TEMPFAIL;
       }
+    }
+  }
+
+  if (process.exitCode === 0) {
+    const clinicMediaCode = await runClinicMediaRuntime();
+    if (clinicMediaCode === 0) {
+      console.log('BLOCK_C_CLINIC_MEDIA_RUNTIME=PASS');
+    } else if (clinicMediaCode === EX_TEMPFAIL) {
+      console.error('BLOCK_C_CLINIC_MEDIA_RUNTIME=TRANSIENT wrapper_exit=75');
+      process.exitCode = EX_TEMPFAIL;
+    } else {
+      console.error(`BLOCK_C_CLINIC_MEDIA_RUNTIME=FAIL_REAL wrapper_exit=${clinicMediaCode}`);
+      process.exitCode = clinicMediaCode;
     }
   }
 } catch (error) {
