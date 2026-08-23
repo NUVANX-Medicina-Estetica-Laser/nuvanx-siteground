@@ -18,6 +18,11 @@ if (!/^[0-9a-f]{40}$/.test(expectedSha)) {
   process.exit(1);
 }
 
+const performanceRoutes = [
+  { key: 'home', path: '/' },
+  { key: 'clinics-hub', path: '/clinicas-de-medicina-estetica-nuvanx/' },
+];
+
 const clinicRoutes = [
   { key: 'chamberi', path: '/medicina-estetica-chamberi/' },
   { key: 'goya', path: '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' },
@@ -95,6 +100,42 @@ async function installPerformanceObservers(page) {
   });
 }
 
+async function navigateForMeasurement(page, route, viewport) {
+  const expectedUrl = `${baseUrl}${route.path}`;
+  let response;
+  try {
+    response = await page.goto(expectedUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
+  } catch (error) {
+    if (isSiteGroundCaptchaInterruption(error, page.url())) {
+      console.error(`CLINIC_MEDIA_RUNTIME=TRANSIENT route=${route.path} viewport=${viewport.key} reason=navigation_captcha`);
+      return { transient: true, response: null };
+    }
+    throw error;
+  }
+
+  if (!response) {
+    console.error(`CLINIC_MEDIA_RUNTIME=TRANSIENT route=${route.path} viewport=${viewport.key} reason=no_http_response`);
+    return { transient: true, response: null };
+  }
+
+  const responseHeaders = response.headers();
+  if (isSiteGroundTransientResponse(response.status(), responseHeaders, page.url()) || page.url().includes(SITEGROUND_CAPTCHA_PATH)) {
+    console.error(`CLINIC_MEDIA_RUNTIME=TRANSIENT route=${route.path} viewport=${viewport.key} http=${response.status()}`);
+    return { transient: true, response };
+  }
+  if (response.status() !== 200) fail(`route_http_${response.status()}:${route.key}:${viewport.key}`);
+  if (!sameCanonicalPath(page.url(), route.path)) fail(`canonical_path_mismatch:${route.key}:${viewport.key}:${page.url()}`);
+
+  await page.waitForLoadState('load', { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(1800);
+  return { transient: false, response };
+}
+
+function assertInitialPerf(perf, route, viewport) {
+  if (!perf?.lcp) fail(`lcp_unavailable:${route.key}:${viewport.key}`);
+  if (typeof perf.cls !== 'number' || !Number.isFinite(perf.cls)) fail(`cls_unavailable:${route.key}:${viewport.key}`);
+}
+
 async function loadSelectedBodyBytes(page, url) {
   return page.evaluate(async (selectedUrl) => {
     const response = await fetch(selectedUrl, { cache: 'reload', credentials: 'same-origin' });
@@ -109,6 +150,38 @@ async function loadSelectedBodyBytes(page, url) {
   }, url);
 }
 
+async function inspectInitialRoute(browser, route, viewport) {
+  const context = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+    ignoreHTTPSErrors: true,
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+  });
+  const page = await context.newPage();
+  await installPerformanceObservers(page);
+
+  try {
+    const navigation = await navigateForMeasurement(page, route, viewport);
+    if (navigation.transient) return { transient: true };
+
+    const perf = await page.evaluate(() => window.__nvxClinicPerf);
+    assertInitialPerf(perf, route, viewport);
+
+    return {
+      transient: false,
+      kind: 'performance',
+      routeKey: route.key,
+      route: route.path,
+      viewport,
+      finalUrl: page.url(),
+      initialLcp: perf.lcp,
+      initialCls: perf.cls,
+      initialClsEntries: perf.clsEntries,
+    };
+  } finally {
+    await context.close();
+  }
+}
+
 async function inspectClinic(browser, clinic, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -119,32 +192,8 @@ async function inspectClinic(browser, clinic, viewport) {
   await installPerformanceObservers(page);
 
   try {
-    const expectedUrl = `${baseUrl}${clinic.path}`;
-    let response;
-    try {
-      response = await page.goto(expectedUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
-    } catch (error) {
-      if (isSiteGroundCaptchaInterruption(error, page.url())) {
-        console.error(`CLINIC_MEDIA_RUNTIME=TRANSIENT route=${clinic.path} viewport=${viewport.key} reason=navigation_captcha`);
-        return { transient: true };
-      }
-      throw error;
-    }
-    if (!response) {
-      console.error(`CLINIC_MEDIA_RUNTIME=TRANSIENT route=${clinic.path} viewport=${viewport.key} reason=no_http_response`);
-      return { transient: true };
-    }
-
-    const responseHeaders = response.headers();
-    if (isSiteGroundTransientResponse(response.status(), responseHeaders, page.url()) || page.url().includes(SITEGROUND_CAPTCHA_PATH)) {
-      console.error(`CLINIC_MEDIA_RUNTIME=TRANSIENT route=${clinic.path} viewport=${viewport.key} http=${response.status()}`);
-      return { transient: true };
-    }
-    if (response.status() !== 200) fail(`route_http_${response.status()}:${clinic.key}:${viewport.key}`);
-    if (!sameCanonicalPath(page.url(), clinic.path)) fail(`canonical_path_mismatch:${clinic.key}:${viewport.key}:${page.url()}`);
-
-    await page.waitForLoadState('load', { timeout: 15000 }).catch(() => {});
-    await page.waitForTimeout(1800);
+    const navigation = await navigateForMeasurement(page, clinic, viewport);
+    if (navigation.transient) return { transient: true };
 
     const initial = await page.evaluate(() => {
       const gallery = document.querySelector('.nvx-clinic-gallery');
@@ -162,9 +211,8 @@ async function inspectClinic(browser, clinic, viewport) {
 
     if (!initial.gallery) fail(`gallery_missing:${clinic.key}:${viewport.key}`);
     if (initial.gallery.imageCount !== 4) fail(`gallery_image_count:${clinic.key}:${viewport.key}:${initial.gallery.imageCount}`);
-    if (!initial.perf?.lcp) fail(`lcp_unavailable:${clinic.key}:${viewport.key}`);
+    assertInitialPerf(initial.perf, clinic, viewport);
     if (initial.perf.lcp.element?.inClinicGallery) fail(`gallery_is_initial_lcp:${clinic.key}:${viewport.key}`);
-    if (typeof initial.perf.cls !== 'number' || !Number.isFinite(initial.perf.cls)) fail(`cls_unavailable:${clinic.key}:${viewport.key}`);
 
     const gallery = page.locator('.nvx-clinic-gallery');
     await gallery.scrollIntoViewIfNeeded();
@@ -224,9 +272,11 @@ async function inspectClinic(browser, clinic, viewport) {
 
     return {
       transient: false,
+      kind: 'clinic',
       clinic: clinic.key,
       route: clinic.path,
       viewport,
+      finalUrl: page.url(),
       initialLcp: initial.perf.lcp,
       initialCls: initial.perf.cls,
       initialClsEntries: initial.perf.clsEntries,
@@ -247,6 +297,22 @@ const results = [];
 let transient = false;
 
 try {
+  for (const route of performanceRoutes) {
+    for (const viewport of viewports) {
+      const result = await inspectInitialRoute(browser, route, viewport);
+      if (result.transient) {
+        transient = true;
+        continue;
+      }
+      results.push(result);
+      console.log(
+        `CLINIC_MEDIA_RUNTIME_CASE=PASS kind=performance route=${route.key} viewport=${viewport.key}`
+        + ` lcp_tag=${result.initialLcp.element?.tagName || 'unknown'}`
+        + ` cls=${result.initialCls.toFixed(4)}`
+      );
+    }
+  }
+
   for (const clinic of clinicRoutes) {
     for (const viewport of viewports) {
       const result = await inspectClinic(browser, clinic, viewport);
@@ -256,7 +322,7 @@ try {
       }
       results.push(result);
       console.log(
-        `CLINIC_MEDIA_RUNTIME_CASE=PASS clinic=${clinic.key} viewport=${viewport.key}`
+        `CLINIC_MEDIA_RUNTIME_CASE=PASS kind=clinic clinic=${clinic.key} viewport=${viewport.key}`
         + ` lcp_tag=${result.initialLcp.element?.tagName || 'unknown'}`
         + ` lcp_gallery=${result.initialLcp.element?.inClinicGallery ? 1 : 0}`
         + ` cls=${result.initialCls.toFixed(4)}`
@@ -269,11 +335,12 @@ try {
   await browser.close();
 }
 
-await fs.writeFile(outputPath, `${JSON.stringify({ schema: 1, expectedSha, cases: results }, null, 2)}\n`, 'utf8');
+const expectedCases = (performanceRoutes.length + clinicRoutes.length) * viewports.length;
+await fs.writeFile(outputPath, `${JSON.stringify({ schema: 2, expectedSha, cases: results }, null, 2)}\n`, 'utf8');
 
 if (transient) process.exit(75);
-if (results.length !== clinicRoutes.length * viewports.length) {
-  console.error(`CLINIC_MEDIA_RUNTIME=FAIL reason=incomplete_cases actual=${results.length} expected=${clinicRoutes.length * viewports.length}`);
+if (results.length !== expectedCases) {
+  console.error(`CLINIC_MEDIA_RUNTIME=FAIL reason=incomplete_cases actual=${results.length} expected=${expectedCases}`);
   process.exit(1);
 }
 
