@@ -156,12 +156,12 @@ function nvx_clinic_html_contains_vendor_packshot( string $html ): bool {
  * as a manufacturer packshot.
  */
 function nvx_public_vendor_image_url_regex(): string {
-	return '~(?:^|/)[^/?#,\\s]*(?:deka|btl[_-]|btl-exilite|btl-exion|eufoton|endolift-lasemar|endolift-iso9001|lasemar-1500|smartlipo®|exilite)[^/?#,\\s]*\\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#][^,\\s]*)?(?=\\s*(?:\\d+(?:\\.\\d+)?[wx])?(?:,|$))~iu';
+	return '~(?:^|/)[^/?#,\\s]*(?:deka|btl[_-]|btl-exilite|btl-exion|eufoton|endolift-lasemar|endolift-iso9001|lasemar-1500|smartlipo®|exilite|btl(?=\.)|exion(?=\.)|endolift(?=\.))[^/?#,\\s]*\\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#][^,\\s]*)?(?=\\s*(?:\\d+(?:\\.\\d+)?[wx])?(?:,|$))~iu';
 }
 
 /** Vendor brand tokens in image alt text (logo, equipment or packshot). */
 function nvx_public_vendor_image_alt_regex(): string {
-	return '/\\b(?:deka|btl|exion|eufoton|Endolift®|lasemar|Smartlipo®|exilite)\\b/iu';
+	return '/\\b(?:deka|btl|exion|eufoton|Endolift®|lasemar|Smartlipo®|exilite|btl(?=\.)|exion(?=\.)|endolift(?=\.))\\b/iu';
 }
 
 /**
@@ -422,6 +422,7 @@ function nvx_gbp_review_email_subject( string $clinic_key ): string {
 	$profile = nvx_gbp_clinic_profile( $clinic_key );
 	$name    = (string) ( $profile['name'] ?? 'NUVANX' );
 	return sprintf(
+		/* translators: %s: clinic name */
 		__( 'Tu visita a %s', 'nuvanx-medical' ),
 		$name
 	);
@@ -433,6 +434,7 @@ function nvx_gbp_review_email_body( string $name, string $clinic_key ): string {
 	$url     = nvx_gbp_review_url( $clinic_key );
 	$first   = trim( $name );
 	$hello   = '' !== $first
+			/* translators: %s: first name */
 		? sprintf( __( 'Hola %s,', 'nuvanx-medical' ), $first )
 		: __( 'Hola,', 'nuvanx-medical' );
 
@@ -440,6 +442,7 @@ function nvx_gbp_review_email_body( string $name, string $clinic_key ): string {
 	$lines[] = $hello;
 	$lines[] = '';
 	$lines[] = sprintf(
+			/* translators: %s: clinic name */
 		__( 'Han pasado unos días desde tu visita a %s. Si quieres dejar tu opinión en Google, este es el enlace directo al perfil de la sede:', 'nuvanx-medical' ),
 		$clinic
 	);
