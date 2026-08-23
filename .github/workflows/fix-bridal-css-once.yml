@@ -1,9 +1,12 @@
 name: Fix Bridal CSS Once
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/seo-contacto-catalog-parity-20260823
+      - master
+    types:
+      - opened
+      - synchronize
     paths:
       - tools/.trigger-bridal-css
 
@@ -12,6 +15,7 @@ permissions:
 
 jobs:
   restore:
+    if: github.head_ref == 'fix/seo-contacto-catalog-parity-20260823'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
