@@ -33,9 +33,7 @@ const DIMENSION_PROPERTIES = /^(?:width|height|min-width|max-width|min-height|ma
 const MOTION_PROPERTIES = /^(?:transition(?:-duration)?|animation-duration)$/;
 const TYPOGRAPHY_PROPERTIES = /^(?:line-height|letter-spacing|font-weight)$/;
 const POSITION_PROPERTIES = /^(?:top|right|bottom|left|inset|inset-inline|inset-block)$/;
-
-const CANONICAL_PX = new Set([8, 16, 20, 24, 32, 36, 40, 48, 56, 60, 64, 72, 80, 96, 120, 152, 168, 200, 224, 256, 320]);
-const CANONICAL_MS = new Set([80, 160, 240, 320, 480]);
+const DECLARATION_PATTERN = /([a-zA-Z-]+)\s*:\s*([^;{}]+)(?:;|(?=}|$))/g;
 
 function stripCommentsPreserveLines(input) {
   return input.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '));
@@ -49,12 +47,63 @@ function lineNumberAt(source, index) {
   return line;
 }
 
-function extractScalarLiterals(value) {
-  const literals = [];
-  for (const match of value.matchAll(/(?<![\w.-])(-?\d*\.?\d+)(px|rem|em|ms)(?![\w-])/g)) {
-    literals.push({ raw: match[0], number: Number(match[1]), unit: match[2] });
+/**
+ * Remove complete var(--nvx-...) expressions, including their fallback values,
+ * while leaving any literals elsewhere in the declaration available to audit.
+ * This distinguishes an adopted fallback such as var(--nvx-space-2, 16px)
+ * from a mixed residual literal such as var(--nvx-space-2) 12px.
+ */
+function stripNvxVarExpressions(value) {
+  let output = '';
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    const remainder = value.slice(cursor);
+    const startMatch = remainder.match(/^var\(\s*--nvx-[\w-]+/);
+    if (!startMatch) {
+      output += value[cursor];
+      cursor += 1;
+      continue;
+    }
+
+    let depth = 0;
+    let end = cursor;
+    let closed = false;
+    for (; end < value.length; end += 1) {
+      const char = value[end];
+      if (char === '(') depth += 1;
+      if (char === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          end += 1;
+          closed = true;
+          break;
+        }
+      }
+    }
+
+    if (!closed) {
+      // Malformed CSS is not silently erased; leave it for other syntax/style
+      // checks and continue scanning from the current character.
+      output += value[cursor];
+      cursor += 1;
+      continue;
+    }
+
+    output += ' ';
+    cursor = end;
   }
-  return literals;
+
+  return output;
+}
+
+function extractScalarLiterals(value) {
+  const literals = new Map();
+  for (const match of value.matchAll(/(?<![\w.-])(-?\d*\.?\d+)(px|rem|em|ms)(?![\w-])/g)) {
+    const literal = { raw: match[0], number: Number(match[1]), unit: match[2] };
+    literals.set(`${literal.number}|${literal.unit}`, literal);
+  }
+  return [...literals.values()];
 }
 
 async function collectTokenDefinitions() {
@@ -68,26 +117,32 @@ async function collectTokenDefinitions() {
   return definitions;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function tokenCandidatesForLiteral(definitions, literal) {
   const exact = [];
   const contains = [];
+  const escaped = escapeRegExp(literal);
   for (const [name, value] of definitions.entries()) {
     if (value === literal) {
       exact.push(name);
-    } else if (new RegExp(`(^|[^0-9.])${literal.replace('.', '\\.')}(?![0-9])`).test(value)) {
+    } else if (new RegExp(`(^|[^0-9.])${escaped}(?![0-9])`).test(value)) {
       contains.push(name);
     }
   }
   return { exact, contains: contains.slice(0, 6) };
 }
 
-function classifyDeclaration(property, value, literals) {
+function classifyDeclaration(property, originalValue) {
   const findings = [];
-  const hasNvxVar = /var\(\s*--nvx-/.test(value);
+  const residualValue = stripNvxVarExpressions(originalValue).trim();
+  const literals = extractScalarLiterals(residualValue);
 
   if (SPACING_PROPERTIES.test(property)) {
     for (const literal of literals) {
-      if (literal.unit === 'px' && literal.number !== 0 && CANONICAL_PX.has(Math.abs(literal.number))) {
+      if (literal.unit === 'px' && literal.number !== 0) {
         findings.push({ category: 'spacing', literal: literal.raw });
       }
     }
@@ -95,7 +150,7 @@ function classifyDeclaration(property, value, literals) {
 
   if (DIMENSION_PROPERTIES.test(property)) {
     for (const literal of literals) {
-      if (literal.unit === 'px' && literal.number > 0 && CANONICAL_PX.has(literal.number)) {
+      if (literal.unit === 'px' && literal.number > 0) {
         findings.push({ category: 'dimension-review', literal: literal.raw });
       }
     }
@@ -103,7 +158,7 @@ function classifyDeclaration(property, value, literals) {
 
   if (POSITION_PROPERTIES.test(property)) {
     for (const literal of literals) {
-      if (literal.unit === 'px' && literal.number !== 0 && CANONICAL_PX.has(Math.abs(literal.number))) {
+      if (literal.unit === 'px' && literal.number !== 0) {
         findings.push({ category: 'position-review', literal: literal.raw });
       }
     }
@@ -111,13 +166,13 @@ function classifyDeclaration(property, value, literals) {
 
   if (MOTION_PROPERTIES.test(property)) {
     for (const literal of literals) {
-      if (literal.unit === 'ms' && literal.number > 0 && CANONICAL_MS.has(literal.number)) {
+      if (literal.unit === 'ms' && literal.number > 0) {
         findings.push({ category: 'motion', literal: literal.raw });
       }
     }
   }
 
-  if (property === 'border-radius' && !hasNvxVar) {
+  if (property === 'border-radius') {
     for (const literal of literals) {
       if ((literal.unit === 'px' || literal.unit === 'rem') && literal.number > 0) {
         findings.push({ category: 'radius', literal: literal.raw });
@@ -125,26 +180,63 @@ function classifyDeclaration(property, value, literals) {
     }
   }
 
-  if (property === 'box-shadow' && value.trim() !== 'none' && !hasNvxVar) {
-    findings.push({ category: 'shadow', literal: value.trim() });
+  if (property === 'box-shadow' && residualValue !== '' && residualValue !== 'none') {
+    findings.push({ category: 'shadow', literal: residualValue });
   }
 
-  if (property === 'z-index' && !hasNvxVar && /^-?\d+$/.test(value.trim()) && Number(value.trim()) !== 0) {
-    findings.push({ category: 'z-index', literal: value.trim() });
+  if (property === 'z-index' && /^-?\d+$/.test(residualValue) && Number(residualValue) !== 0) {
+    findings.push({ category: 'z-index', literal: residualValue });
   }
 
-  if (TYPOGRAPHY_PROPERTIES.test(property) && !hasNvxVar) {
-    const normalized = value.trim();
+  if (TYPOGRAPHY_PROPERTIES.test(property)) {
+    const normalized = residualValue;
     if (property === 'font-weight' && /^(?:400|500|600|700)$/.test(normalized)) {
       findings.push({ category: 'typography-metric', literal: normalized });
-    } else if (property === 'line-height' && /^(?:\d*\.\d+|\d+)$/.test(normalized) && normalized !== '1') {
+    } else if (
+      property === 'line-height'
+      && /^(?:\d*\.\d+|\d+)$/.test(normalized)
+      && normalized !== '0'
+      && normalized !== '1'
+    ) {
       findings.push({ category: 'typography-metric', literal: normalized });
-    } else if (property === 'letter-spacing' && /-?\d*\.?\d+(?:em|rem|px)/.test(normalized)) {
+    } else if (property === 'letter-spacing' && /^-?\d*\.?\d+(?:em|rem|px)$/.test(normalized)) {
       findings.push({ category: 'typography-metric', literal: normalized });
     }
   }
 
   return findings;
+}
+
+function auditParserSelfTest() {
+  const fixture = '.a{padding:var(--nvx-space-2, 16px) 12px}.b{margin:8px}.c{width:var(--nvx-touch-target-min,48px)}';
+  const declarations = [...fixture.matchAll(DECLARATION_PATTERN)].map((match) => ({
+    property: match[1],
+    value: match[2].trim(),
+  }));
+
+  const padding = declarations.find((item) => item.property === 'padding');
+  const margin = declarations.find((item) => item.property === 'margin');
+  const width = declarations.find((item) => item.property === 'width');
+  if (!padding || !margin || !width) {
+    throw new Error('parser_self_test_missing_semicolonless_declaration');
+  }
+
+  const paddingFindings = classifyDeclaration(padding.property, padding.value);
+  if (!paddingFindings.some((item) => item.category === 'spacing' && item.literal === '12px')) {
+    throw new Error('parser_self_test_mixed_literal_not_reported');
+  }
+  if (paddingFindings.some((item) => item.literal === '16px')) {
+    throw new Error('parser_self_test_token_fallback_reported');
+  }
+
+  const marginFindings = classifyDeclaration(margin.property, margin.value);
+  if (!marginFindings.some((item) => item.category === 'spacing' && item.literal === '8px')) {
+    throw new Error('parser_self_test_final_declaration_not_reported');
+  }
+
+  if (classifyDeclaration(width.property, width.value).length !== 0) {
+    throw new Error('parser_self_test_adopted_dimension_reported');
+  }
 }
 
 async function cssFiles() {
@@ -156,16 +248,17 @@ async function cssFiles() {
 }
 
 async function main() {
+  auditParserSelfTest();
   const definitions = await collectTokenDefinitions();
+  const files = await cssFiles();
   const findings = [];
 
-  for (const file of await cssFiles()) {
+  for (const file of files) {
     const original = await fs.readFile(file, 'utf8');
     const source = stripCommentsPreserveLines(original);
     const originalLines = original.split('\n');
-    const declarationPattern = /([a-zA-Z-]+)\s*:\s*([^;{}]+);/g;
 
-    for (const match of source.matchAll(declarationPattern)) {
+    for (const match of source.matchAll(DECLARATION_PATTERN)) {
       const property = match[1].toLowerCase();
       if (property.startsWith('--')) continue;
 
@@ -174,8 +267,7 @@ async function main() {
       const originalLine = originalLines[line - 1] ?? '';
       if (originalLine.includes('nvx-token-exception')) continue;
 
-      const literals = extractScalarLiterals(value);
-      for (const finding of classifyDeclaration(property, value, literals)) {
+      for (const finding of classifyDeclaration(property, value)) {
         const candidates = tokenCandidatesForLiteral(definitions, finding.literal);
         findings.push({
           category: finding.category,
@@ -196,7 +288,7 @@ async function main() {
     return acc;
   }, {});
 
-  console.log(`DESIGN_TOKEN_ADOPTION_AUDIT=REPORT files=${(await cssFiles()).length} findings=${findings.length} strict=${strict}`);
+  console.log(`DESIGN_TOKEN_ADOPTION_AUDIT=REPORT files=${files.length} findings=${findings.length} strict=${strict}`);
   console.log(`DESIGN_TOKEN_ADOPTION_COUNTS=${JSON.stringify(counts)}`);
 
   for (const finding of findings.slice(0, MAX_PRINT)) {
