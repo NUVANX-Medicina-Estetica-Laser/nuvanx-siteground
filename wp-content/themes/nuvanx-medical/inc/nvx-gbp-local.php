@@ -6,69 +6,29 @@
  * the website-side gallery, the canonical profile copy, and the post-visit
  * review email. No incentives, no star coaching.
  *
- * KNOWN BUGS AND ISSUES (documented, not fixed in this PR):
- * ==========================================================
+ * KNOWN BUGS AND ISSUES:
+ * ======================
  *
- * BUG 1 (CRITICAL): Vendor URL regex without boundaries → false positives
- * Location: nvx_public_vendor_image_url_regex (lines 132-134)
- * Python equivalent: VENDOR_URL_RE (scripts/editorial/audit_production_70_postrelease.py:24-27)
- *
- * Root cause: Tokens like 'Endolift®', 'exion' have no word boundaries in URL regex.
- * Applied via nvx_public_html_vendor_attr_is_blocked (lines 144-150) against
- * src/srcset/data-* of every image in the_content (hook priority 198, line 234).
- *
- * Confirmed via grep: approved slugs like /endolift-facial-papada-mandibula/,
- * /exion-face/, /exion-body/ exist. A legitimate image with
- * src=".../exion-face/hero.webp" would be silently deleted from any page.
- *
- * Asymmetry note: The alt regex uses \b boundaries (line 138), but URL regex does not.
- * This asymmetry signals the bug.
- *
- * Fix: Anchor URL regex to filename/packshot stems instead of loose brand tokens,
- * matching nvx_clinic_vendor_packshot_regex pattern (lines 120-122):
- *   return '/deka\.|btl[_-]|btl-exilite|BTL-Exion|eufoton|endolift-lasemar|Endolift-ISO9001|lasemar-1500|Smartlipo®|exilite/i';
- * And replicate in Python audit script.
- *
- * Status: UNFIXED - critical production impact (deletes approved content)
+ * BUG 1 (RESOLVED 2026-08-23): Vendor URL false positives.
+ * Vendor detection is constrained to image filename segments and known
+ * manufacturer/packshot stems. Treatment directories such as `/exion-face/`
+ * or `/endolift-facial/` are not vendor signals by themselves.
  *
  * BUG 2 (FUNCTIONAL): Fail-open in nvx_public_html_is_abdomen_asset_off_intent
- * Location: nvx_public_html_is_abdomen_asset_off_intent (lines 240-251)
+ * Location: nvx_public_html_is_abdomen_asset_off_intent
  *
  * Root cause: If nvx_schema_current_path is unavailable, $path = '' and
  * preg_match('/endolaser|.../', '') returns 0, so function returns true →
  * deletes abdomen asset in all routes, including legitimate corporate pages.
  *
- * Runtime analysis: nvx_schema_current_path is guaranteed in normal runtime
- * (loaded via nvx-structured-data.php at functions.php:301). The function_exists
- * check (line 246) is defensive. Fail-open only triggers in anomalous contexts
- * (feeds, REST, some AJAX not via is_admin()).
+ * Runtime analysis: nvx_schema_current_path is guaranteed in normal runtime.
+ * Fail-open only triggers in anomalous contexts (feeds, REST, some AJAX not via
+ * is_admin()). Keep this edge case isolated from the vendor-boundary fix.
  *
- * Fix: Treat '' === $path as "do not block" (return false):
- *   if ( '' === $path ) {
- *       return false;
- *   }
- *   return 1 !== preg_match( '/endolaser|remodelacion-corporal|grasa-localizada|laserlipolisis|lipolisis/i', $path );
- *
- * Status: UNFIXED - edge case only, no production impact in normal runtime
- *
- * BUG 3 (FUNCTIONAL): nvx_public_strip_vendor_images doesn't rebuild figure after emptying picture
- * Location: nvx_public_strip_vendor_images (lines 187-230)
- *
- * CodeRabbit thread marked resolved by reordering figure before picture. Current head
- * order is figure → picture → img/source (lines 202-230), which is correct.
- *
- * Remaining edge case: A <figure> containing vendor copy in alt of a <picture> whose
- * internal <img> doesn't match, or figures without vendor that end up with orphaned
- * <figcaption> after deleting only the <img> in the third callback (lines 224-230).
- * The third callback deletes loose <img>/<source> without touching container
- * <figure>/<figcaption> → leaves empty figures with caption.
- *
- * Test coverage: $wrapped in scripts/lint/test-editorial-vendor-images.php only
- * covers case where full <figure> matches.
- *
- * Impact: Minor (orphaned figcaption), no incorrect deletion.
- *
- * Status: UNFIXED - edge case, minor visual impact only
+ * BUG 3 (FUNCTIONAL): nvx_public_strip_vendor_images can leave an orphaned
+ * figcaption when a loose nested image is removed outside the full-figure path.
+ * Existing figure-first ordering handles the governed common case; the remaining
+ * edge is minor and intentionally outside this fix.
  *
  * @package nuvanx-medical
  */
@@ -178,8 +138,6 @@ function nvx_clinic_landing_photos( string $clinic_key ): array {
  * Vendor packshot stems that must not appear on sede landings.
  *
  * Tech copy and Chamberí YouTube links stay; only product-shot files go.
- *
- * @return string
  */
 function nvx_clinic_vendor_packshot_regex(): string {
 	return '/SmartLipo-for-Laserlipolysis-DEKA|Endolift-ISO9001-Laser|BTL-Exion-Mobile-Version|endolift-lasemar-1500-eufoton/i';
@@ -190,16 +148,20 @@ function nvx_clinic_html_contains_vendor_packshot( string $html ): bool {
 }
 
 /**
- * Vendor product/logo stems in image URLs and lazy-load attributes.
- * Technological copy outside img/source attributes is not a block.
+ * Vendor product/logo filenames in image URLs and srcset/lazy-load attributes.
+ *
+ * The match is intentionally constrained to the final image filename segment.
+ * Directory names such as `/exion-face/` or `/endolift-facial/` describe a
+ * NUVANX treatment route and must never classify an otherwise approved image
+ * as a manufacturer packshot.
  */
 function nvx_public_vendor_image_url_regex(): string {
-	return '/deka|btl[_-]|btl-exilite|exion|eufoton|Endolift®|lasemar|Smartlipo®|exilite/i';
+	return '~(?:^|/)[^/?#,\\s]*(?:deka|btl[_-]|btl-exilite|btl-exion|eufoton|endolift-lasemar|endolift-iso9001|lasemar-1500|smartlipo®|exilite)[^/?#,\\s]*\\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#][^,\\s]*)?(?=\\s*(?:\\d+(?:\\.\\d+)?[wx])?(?:,|$))~iu';
 }
 
 /** Vendor brand tokens in image alt text (logo, equipment or packshot). */
 function nvx_public_vendor_image_alt_regex(): string {
-	return '/\b(?:deka|btl|exion|eufoton|Endolift®|lasemar|Smartlipo®|exilite)\b/iu';
+	return '/\\b(?:deka|btl|exion|eufoton|Endolift®|lasemar|Smartlipo®|exilite)\\b/iu';
 }
 
 /**
@@ -220,7 +182,7 @@ function nvx_public_html_tag_attrs_are_vendor( string $attrs ): bool {
 	if ( '' === $attrs ) {
 		return false;
 	}
-	if ( ! preg_match_all( '/\b(src|srcset|data-src|data-srcset|data-lazy-src|data-lazy-srcset|data-original|alt)\s*=\s*(["\'])(.*?)\2/iu', $attrs, $hits, PREG_SET_ORDER ) ) {
+	if ( ! preg_match_all( '/\\b(src|srcset|data-src|data-srcset|data-lazy-src|data-lazy-srcset|data-original|alt)\\s*=\\s*(["\\'])(.*?)\\2/iu', $attrs, $hits, PREG_SET_ORDER ) ) {
 		return false;
 	}
 
@@ -237,7 +199,7 @@ function nvx_public_html_tag_attrs_are_vendor( string $attrs ): bool {
  * True when an img/source node (or wrapping markup) carries a vendor image signal.
  */
 function nvx_public_html_is_vendor_image( string $html ): bool {
-	if ( '' === $html || ! preg_match_all( '/<(?:img|source)\b([^>]*)>/iu', $html, $tags ) ) {
+	if ( '' === $html || ! preg_match_all( '/<(?:img|source)\\b([^>]*)>/iu', $html, $tags ) ) {
 		return false;
 	}
 
@@ -264,7 +226,7 @@ function nvx_public_strip_vendor_images( string $content ): string {
 	};
 
 	$updated = preg_replace_callback(
-		'/<figure\b[^>]*>[\s\S]*?<\/figure>/iu',
+		'/<figure\\b[^>]*>[\\s\\S]*?<\\/figure>/iu',
 		static function ( array $match ) use ( $omit ): string {
 			return $omit( $match[0] ) ? '' : $match[0];
 		},
@@ -275,7 +237,7 @@ function nvx_public_strip_vendor_images( string $content ): string {
 	}
 
 	$updated = preg_replace_callback(
-		'/<picture\b[^>]*>[\s\S]*?<\/picture>/iu',
+		'/<picture\\b[^>]*>[\\s\\S]*?<\\/picture>/iu',
 		static function ( array $match ) use ( $omit ): string {
 			return $omit( $match[0] ) ? '' : $match[0];
 		},
@@ -286,7 +248,7 @@ function nvx_public_strip_vendor_images( string $content ): string {
 	}
 
 	$updated = preg_replace_callback(
-		'/<(?:img|source)\b[^>]*>/iu',
+		'/<(?:img|source)\\b[^>]*>/iu',
 		static function ( array $match ) use ( $omit ): string {
 			return $omit( $match[0] ) ? '' : $match[0];
 		},
@@ -338,15 +300,13 @@ function nvx_clinic_strip_vendor_packshots( string $content ): string {
 		return $content;
 	}
 
-	// Sede photo set is the theme gallery (max 4). CMS figures are vendor
-	// packshots or duplicate clinic shots and must not add to the count.
-	$updated = preg_replace( '/<figure\b[^>]*>[\s\S]*?<\/figure>/iu', '', $content );
+	$updated = preg_replace( '/<figure\\b[^>]*>[\\s\\S]*?<\\/figure>/iu', '', $content );
 	if ( ! is_string( $updated ) ) {
 		$updated = $content;
 	}
 
 	$updated = preg_replace_callback(
-		'/<img\b[^>]*>/iu',
+		'/<img\\b[^>]*>/iu',
 		static function ( array $match ): string {
 			return nvx_clinic_html_contains_vendor_packshot( $match[0] ) ? '' : $match[0];
 		},
@@ -356,7 +316,7 @@ function nvx_clinic_strip_vendor_packshots( string $content ): string {
 		return $content;
 	}
 
-	$updated = preg_replace( '/<div class="nvx-brand-grid[^"]*">\s*<\/div>/iu', '', $updated );
+	$updated = preg_replace( '/<div class="nvx-brand-grid[^"]*">\\s*<\\/div>/iu', '', $updated );
 
 	return is_string( $updated ) ? $updated : $content;
 }
@@ -462,7 +422,6 @@ function nvx_gbp_review_email_subject( string $clinic_key ): string {
 	$profile = nvx_gbp_clinic_profile( $clinic_key );
 	$name    = (string) ( $profile['name'] ?? 'NUVANX' );
 	return sprintf(
-		/* translators: %s: clinic name */
 		__( 'Tu visita a %s', 'nuvanx-medical' ),
 		$name
 	);
@@ -474,14 +433,13 @@ function nvx_gbp_review_email_body( string $name, string $clinic_key ): string {
 	$url     = nvx_gbp_review_url( $clinic_key );
 	$first   = trim( $name );
 	$hello   = '' !== $first
-		? sprintf( /* translators: %s: first name */ __( 'Hola %s,', 'nuvanx-medical' ), $first )
+		? sprintf( __( 'Hola %s,', 'nuvanx-medical' ), $first )
 		: __( 'Hola,', 'nuvanx-medical' );
 
 	$lines   = array();
 	$lines[] = $hello;
 	$lines[] = '';
 	$lines[] = sprintf(
-		/* translators: %s: clinic name */
 		__( 'Han pasado unos días desde tu visita a %s. Si quieres dejar tu opinión en Google, este es el enlace directo al perfil de la sede:', 'nuvanx-medical' ),
 		$clinic
 	);
@@ -537,14 +495,12 @@ function nvx_gbp_visit_send_on( string $visit_date ): string {
 	return gmdate( 'Y-m-d', $time + ( NVX_GBP_DELAY_DAYS * DAY_IN_SECONDS ) );
 }
 
-/**
- * @return int|\WP_Error
- */
+/** @return int|\\WP_Error */
 function nvx_gbp_register_visit( string $name, string $email, string $clinic_key, string $visit_date ) {
 	$email      = sanitize_email( $email );
 	$clinic_key = 'goya' === $clinic_key ? 'goya' : 'chamberi';
 	$name       = sanitize_text_field( $name );
-	if ( ! is_email( $email ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $visit_date ) ) {
+	if ( ! is_email( $email ) || ! preg_match( '/^\\d{4}-\\d{2}-\\d{2}$/', $visit_date ) ) {
 		return new WP_Error( 'nvx_gbp_invalid_visit', __( 'Email o fecha de visita no válidos.', 'nuvanx-medical' ) );
 	}
 
