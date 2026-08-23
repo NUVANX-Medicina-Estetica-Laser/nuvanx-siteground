@@ -42,7 +42,7 @@
   display: inline-flex;
   flex-direction: column;
   gap: var(--nvx-space-1);
-  transition: opacity 160ms ease;
+  transition: opacity var(--nvx-duration-fast) ease;
 }
 
 .nvx-footer__brand .nvx-logo:hover {
@@ -148,7 +148,7 @@
   font-weight: var(--nvx-fw-regular);
   line-height: var(--nvx-lh-body);
   color: var(--nvx-on-dark-72);
-  transition: color 160ms ease;
+  transition: color var(--nvx-duration-fast) ease;
 }
 
 .nvx-footer__links a:hover,
@@ -234,7 +234,7 @@
   align-items: center;
   justify-content: center;
   color: var(--nvx-on-dark-72);
-  transition: color 160ms ease, opacity 160ms ease;
+  transition: color var(--nvx-duration-fast) ease, opacity var(--nvx-duration-fast) ease;
 }
 
 .nvx-footer__social-link:hover,
