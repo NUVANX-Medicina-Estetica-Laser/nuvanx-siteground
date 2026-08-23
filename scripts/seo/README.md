@@ -11,8 +11,8 @@ The repository currently keeps exactly three canonical workflows: `gemini-pr-rev
 Current contract:
 
 - the required `Static quality and repository integrity` gate reaches `scripts/ci/test-release-regression-contract.sh` through `scripts/ci/test-mutation-fifo-contract.sh`; that release contract syntax-checks every top-level `scripts/seo/*.js` file with `node --check`;
-- the same release contract runs `npm audit --audit-level=high` for `scripts/seo` on the weekly Staging schedule and when a governed dependency lock changes;
-- dependency changes must update `scripts/seo/package-lock.json` with npm;
+- the same release contract runs `npm audit --audit-level=high` for `scripts/seo` on the weekly Staging schedule and when any governed repository dependency lock changes;
+- dependency changes to this package must update `scripts/seo/package-lock.json` with npm;
 - credentialed mutating Google/GTM helpers are never run automatically;
 - `index-pages.js` is different: Production separately syntax-checks it, installs the `scripts/seo` package with `npm ci --ignore-scripts`, and owns its execution for Search Console URL Inspection when the production post-audit path and GSC authentication are enabled;
 - no SEO-specific GitHub Actions workflow should be added while repository hygiene requires the three canonical workflows above.
