@@ -245,11 +245,16 @@
 --nvx-section-tight-width: 800px;
 
 /* ========== MOTION & TRANSITIONS ========== */
+--nvx-duration-instant: 80ms;
 --nvx-duration-fast: 160ms;
+--nvx-duration-normal: 240ms;
+--nvx-duration-slow: 320ms;
+--nvx-duration-slower: 480ms;
 
 --nvx-ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
 --nvx-transition-fast: var(--nvx-duration-fast) var(--nvx-ease-standard);
+--nvx-transition-normal: var(--nvx-duration-normal) var(--nvx-ease-standard);
 
   /* Alias para variables huérfanas (Audit 4.5) */
   --nvx-color-soft: var(--nvx-surface-soft);
