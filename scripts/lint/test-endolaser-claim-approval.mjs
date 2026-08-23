@@ -641,9 +641,13 @@ async function run() {
     ...ENDOLASER_SCHEMA_FILES,
   ];
   const changedGovernedFiles = changed.filter((file) => governedFiles.includes(file));
+  const filesToLoad = new Set(changedGovernedFiles);
+  if (ENDOLASER_SCHEMA_FILES.some((file) => changed.includes(file))) {
+    ENDOLASER_SCHEMA_FILES.forEach((file) => filesToLoad.add(file));
+  }
   const baseFiles = {};
   const headFiles = {};
-  for (const file of changedGovernedFiles) {
+  for (const file of filesToLoad) {
     baseFiles[file] = fileAtRef(base, file);
     headFiles[file] = await headFile(file);
   }
