@@ -69,7 +69,7 @@ run_shell_check() {
 
 scan_high_signal_secrets() {
   if command -v gitleaks >/dev/null 2>&1; then
-    gitleaks detect --source . --no-banner --redact --exit-code 1
+    gitleaks dir . --no-banner --redact --exit-code 1
     return
   fi
 
