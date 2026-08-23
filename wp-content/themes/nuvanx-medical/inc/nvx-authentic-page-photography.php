@@ -287,3 +287,118 @@ function nvx_append_authentic_page_photography( string $content ): string {
 	return $content . nvx_authentic_page_photo_markup( $data );
 }
 add_filter( 'the_content', 'nvx_append_authentic_page_photography', 175 );
+
+/**
+ * Attachment IDs used by NUVANX public editorial photography.
+ *
+ * The list is derived at runtime from the canonical registry so new approved
+ * page photography automatically inherits the responsive delivery contract.
+ * Clinic-only and Goya-team IDs are included explicitly because those renderers
+ * live outside this registry.
+ *
+ * @return int[]
+ */
+function nvx_governed_public_image_ids(): array {
+	$ids = array( 2892, 2877, 3100, 3101 );
+
+	foreach ( nvx_authentic_page_photo_registry() as $entry ) {
+		foreach ( $entry['images'] ?? array() as $image ) {
+			$id = (int) ( $image['id'] ?? 0 );
+			if ( $id > 0 ) {
+				$ids[] = $id;
+			}
+	}
+	}
+
+	return array_values( array_unique( $ids ) );
+}
+
+/** Maximum responsive candidate width for a governed attachment. */
+function nvx_governed_public_srcset_cap( int $attachment_id ): int {
+	if ( 2381 === $attachment_id ) {
+		return 768;
+	}
+	if ( in_array( $attachment_id, array( 1630, 1632, 1840 ), true ) ) {
+		return 1024;
+	}
+	return 1280;
+}
+
+/**
+ * Never use a multi-megabyte source as the fallback `src` when a governed
+ * editorial renderer asks WordPress for `full`.
+ *
+ * @param mixed        $downsize Existing short-circuit value.
+ * @param int          $attachment_id Attachment ID.
+ * @param string|int[] $size Requested image size.
+ * @return mixed
+ */
+function nvx_governed_public_image_downsize( $downsize, int $attachment_id, $size ) {
+	if ( false !== $downsize || ( function_exists( 'is_admin' ) && is_admin() ) || 'full' !== $size ) {
+		return $downsize;
+	}
+	if ( ! in_array( $attachment_id, nvx_governed_public_image_ids(), true ) ) {
+		return $downsize;
+	}
+
+	$large = wp_get_attachment_image_src( $attachment_id, 'large' );
+	if ( ! is_array( $large ) || empty( $large[0] ) ) {
+		return $downsize;
+	}
+
+	return array( $large[0], (int) $large[1], (int) $large[2], true );
+}
+add_filter( 'image_downsize', 'nvx_governed_public_image_downsize', 10, 3 );
+
+/**
+ * Remove oversized srcset candidates so high-DPR clients cannot silently pick
+ * the original 1.8–7 MB source for a 1/2/3-column editorial slot.
+ *
+ * @param array<int,array{url:string,descriptor:string,value:int}> $sources Sources.
+ * @return array<int,array{url:string,descriptor:string,value:int}>
+ */
+function nvx_governed_public_srcset_sources( array $sources, array $size_array, string $image_src, array $image_meta, int $attachment_id ): array {
+	unset( $size_array, $image_src, $image_meta );
+	if ( ( function_exists( 'is_admin' ) && is_admin() ) || ! in_array( $attachment_id, nvx_governed_public_image_ids(), true ) ) {
+		return $sources;
+	}
+
+	$cap      = nvx_governed_public_srcset_cap( $attachment_id );
+	$filtered = $sources;
+	foreach ( array_keys( $filtered ) as $width ) {
+		if ( (int) $width > $cap ) {
+			unset( $filtered[ $width ] );
+		}
+	}
+
+	return ! empty( $filtered ) ? $filtered : $sources;
+}
+add_filter( 'wp_calculate_image_srcset', 'nvx_governed_public_srcset_sources', 10, 5 );
+
+/**
+ * Match the real CSS width of the director portrait instead of the historic
+ * 28vw hint, which could make browsers select the 1.9 MB 2381 source.
+ */
+function nvx_governed_public_image_attributes( array $attr, $attachment, $size ): array {
+	unset( $size );
+	$attachment_id = isset( $attachment->ID ) ? (int) $attachment->ID : 0;
+	if ( 2381 === $attachment_id ) {
+		$attr['sizes'] = '(min-width: 769px) 224px, 92vw';
+	}
+	return $attr;
+}
+add_filter( 'wp_get_attachment_image_attributes', 'nvx_governed_public_image_attributes', 10, 3 );
+
+/**
+ * Front-end/Schema alias for the legacy 2 MB consultation original. The Media
+ * Library object remains untouched for rollback; public references resolve to
+ * the verified 214 KB equivalent (attachment 2877, same 1672×941 composition).
+ */
+function nvx_governed_public_attachment_url( string $url, int $attachment_id ): string {
+	if ( 2892 !== $attachment_id || ( function_exists( 'is_admin' ) && is_admin() ) ) {
+		return $url;
+	}
+	$replacement = wp_get_attachment_url( 2877 );
+	return is_string( $replacement ) && '' !== $replacement ? $replacement : $url;
+}
+add_filter( 'wp_get_attachment_url', 'nvx_governed_public_attachment_url', 10, 2 );
