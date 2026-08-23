@@ -158,4 +158,14 @@ if ( 'https://staging2.nuvanx.com/media/2086.webp' !== $untouched ) {
 	$fail( 'unrelated_attachment_url_changed' );
 }
 
-echo 'PUBLIC_MEDIA_DELIVERY=PASS cases=16' . PHP_EOL;
+$untouched_sources = nvx_governed_public_srcset_sources( $sources, array(), '', array(), 2086 );
+if ( $sources !== $untouched_sources ) {
+	$fail( 'unrelated_attachment_srcset_changed' );
+}
+
+$untouched_attrs = nvx_governed_public_image_attributes( array( 'sizes' => '28vw' ), (object) array( 'ID' => 2086 ), 'full' );
+if ( array( 'sizes' => '28vw' ) !== $untouched_attrs ) {
+	$fail( 'unrelated_attachment_image_attributes_changed' );
+}
+
+echo 'PUBLIC_MEDIA_DELIVERY=PASS cases=18' . PHP_EOL;
