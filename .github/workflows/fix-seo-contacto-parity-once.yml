@@ -1,0 +1,65 @@
+name: Fix Contacto SEO Parity Once
+
+on:
+  push:
+    branches:
+      - fix/seo-contacto-catalog-parity-20260823
+    paths:
+      - .github/workflows/fix-seo-contacto-parity-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/seo-contacto-catalog-parity-20260823
+          fetch-depth: 1
+
+      - name: Restore canonical contacto SEO metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          path = Path('wp-content/themes/nuvanx-medical/inc/data/seo-metadata.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          contacto = data.get('contacto')
+          if not isinstance(contacto, dict):
+              raise SystemExit('Missing contacto SEO record')
+
+          expected_old_title = 'Clínicas NUVANX Madrid: Contacto, Teléfonos y Sedes | Chambe...'
+          expected_old_description = 'Contacto NUVANX Madrid: direcciones, teléfonos, WhatsApp y horarios de las clínicas Chamberí (CS20144) y Salamanca–Goya (CS20073). Valoración médica pre...'
+          if contacto.get('title') != expected_old_title:
+              raise SystemExit(f'Unexpected contacto title: {contacto.get("title")!r}')
+          if contacto.get('description') != expected_old_description:
+              raise SystemExit(f'Unexpected contacto description: {contacto.get("description")!r}')
+
+          contacto['title'] = 'Clínicas NUVANX Madrid: Contacto, Teléfonos y Sedes | Chamberí y Salamanca–Goya'
+          contacto['description'] = 'Contacto NUVANX Madrid: direcciones, teléfonos, WhatsApp y horarios de las clínicas Chamberí (CS20144) y Salamanca–Goya (CS20073). Valoración médica presencial para medicina estética láser.'
+
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+          php scripts/lint/test-seo-catalog-ownership.php
+          node -e "JSON.parse(require('fs').readFileSync('wp-content/themes/nuvanx-medical/inc/data/seo-metadata.json','utf8')); console.log('SEO_JSON=PASS')"
+          git diff --check
+
+      - name: Commit validated parity fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/fix-seo-contacto-parity-once.yml
+          git config user.name "Nuvanx Bot"
+          git config user.email "bot@nuvanx.com"
+          git add wp-content/themes/nuvanx-medical/inc/data/seo-metadata.json .github/workflows/fix-seo-contacto-parity-once.yml
+          git diff --cached --check
+          git commit -m "fix(seo): restore contacto catalog parity"
+          git push origin HEAD:fix/seo-contacto-catalog-parity-20260823
