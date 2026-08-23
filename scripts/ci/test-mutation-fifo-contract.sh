@@ -181,6 +181,10 @@ php "$ROOT/scripts/lint/test-document-buffer-retirement.php"
 # treatment-directory names such as /exion-face/ and /endolift-facial/.
 php "$ROOT/scripts/lint/test-vendor-image-url-boundary.php"
 
+# Theme-owned clinic photography has a 500 KiB regression budget. Existing
+# oversized legacy files are capped exceptions and cannot grow or multiply.
+php "$ROOT/scripts/lint/test-clinic-media-budget.php"
+
 # Sonar configuration must describe only supported scanner behavior. Remote
 # Quality Gate conditions stay server-owned, and coverage is never fabricated.
 bash "$ROOT/scripts/ci/test-sonar-project-contract.sh"
