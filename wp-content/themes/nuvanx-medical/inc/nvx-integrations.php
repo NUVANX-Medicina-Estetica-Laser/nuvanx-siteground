@@ -147,21 +147,6 @@ add_action(
 	1
 );
 
-/* Security headers */
-add_action(
-	'send_headers',
-	function (): void {
-		if ( headers_sent() ) {
-			return;
-		}
-		header( 'X-Content-Type-Options: nosniff' );
-		header( 'X-Frame-Options: SAMEORIGIN' );
-		header( 'Referrer-Policy: strict-origin-when-cross-origin' );
-		header( 'Permissions-Policy: camera=(), microphone=(), geolocation=()' );
-		header( 'Strict-Transport-Security: max-age=31536000; includeSubDomains' );
-	}
-);
-
 /**
  * Whether a script src/handle is an eager HubSpot forms embed that must not download.
  *

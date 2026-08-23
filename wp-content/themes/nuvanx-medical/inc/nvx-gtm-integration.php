@@ -140,11 +140,39 @@ function nvx_attribution_qa_context(): array {
 }
 
 /**
+ * Whether the current public request contains a canonical valoración form.
+ *
+ * The full valoración landing owns the form directly. Most other public pages
+ * own it through the site-wide valoración modal. Contacto and post-conversion
+ * pages intentionally remain form-free. If the modal module is unavailable,
+ * fail open to the previous global behavior rather than dropping attribution.
+ */
+function nvx_attribution_browser_runtime_required(): bool {
+	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || is_feed() ) {
+		return false;
+	}
+
+	if ( function_exists( 'nvx_theme_is_valoracion_form_page' ) && nvx_theme_is_valoracion_form_page() ) {
+		return true;
+	}
+
+	if ( function_exists( 'nvx_theme_is_valoracion_landing' ) && nvx_theme_is_valoracion_landing() ) {
+		return true;
+	}
+
+	if ( function_exists( 'nvx_valoracion_modal_enabled' ) ) {
+		return nvx_valoracion_modal_enabled();
+	}
+
+	return true;
+}
+
+/**
  * Enqueue the attribution contract runtime before conversion events.
  * Priority 9 ensures it loads before the conversion relay at priority 10.
  */
 function nvx_gtm_enqueue_attribution_contract(): void {
-	if ( is_admin() ) {
+	if ( ! nvx_attribution_browser_runtime_required() ) {
 		return;
 	}
 
@@ -160,6 +188,23 @@ function nvx_gtm_enqueue_attribution_contract(): void {
 	);
 }
 add_action( 'wp_enqueue_scripts', 'nvx_gtm_enqueue_attribution_contract', 9 );
+
+/**
+ * Keep the HubSpot attribution synchronizer off pages without any form surface.
+ *
+ * The synchronizer is registered by nvx-attribution-integration.php at the same
+ * enqueue priority. A later dequeue makes the ownership explicit and avoids an
+ * unresolved dependency when the contract itself was intentionally not loaded.
+ */
+function nvx_gtm_scope_attribution_form_assets(): void {
+	if ( nvx_attribution_browser_runtime_required() ) {
+		return;
+	}
+
+	wp_dequeue_script( 'nvx-hubspot-attribution-sync' );
+	wp_dequeue_script( 'nvx-attribution-contract' );
+}
+add_action( 'wp_enqueue_scripts', 'nvx_gtm_scope_attribution_form_assets', 99 );
 
 /**
  * Push NUVANX business context before Site Kit executes the GTM container.

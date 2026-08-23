@@ -36,9 +36,21 @@ function nvx_add_security_headers( $headers ) {
 	// Basic Referrer-Policy
 	$headers['Referrer-Policy'] = 'strict-origin-when-cross-origin';
 
-	// Basic CSP (just upgrade insecure requests and frame ancestors).
-	// A strict script-src CSP would break GTM/HubSpot without an extensive nonce/hash audit.
-	$headers['Content-Security-Policy'] = "upgrade-insecure-requests; frame-ancestors 'self';";
+	// Estructurada en 8 directivas según auditoría (script-src excluido hasta audit de nonces para GTM).
+		$csp = array(
+		'upgrade-insecure-requests',
+		'block-all-mixed-content',
+		"frame-src 'self' https://*.hsforms.net https://*.hubspot.com https://www.google.com https://www.youtube.com https://www.facebook.com https://www.instagram.com https://*.doctoralia.es",
+		"form-action 'self' https://*.hsforms.com https://*.hubspot.com",
+		"img-src 'self' data: https:",
+		"font-src 'self' data: https://fonts.gstatic.com",
+		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+		"connect-src 'self' https://*.hsforms.com https://*.hubspot.com https://*.google-analytics.com https://*.analytics.google.com https://stats.g.doubleclick.net https://*.klaviyo.com https://*.supabase.co"
+	);
+	$headers['Content-Security-Policy'] = implode( '; ', $csp ) . ';';
+
+	// Permissions-Policy expanded to 12 directives
+	$headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), ambient-light-sensor=(), autoplay=(), display-capture=(), fullscreen=()';
 
 	return $headers;
 }

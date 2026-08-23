@@ -16,9 +16,28 @@
     "gbp_live_upload": false,
     "wp_live_blocks_chamberi_goya": "keep"
   },
+  "deduplication": {
+    "verified_at": "2026-08-23",
+    "verification": "git_blob_sha_identity",
+    "canonical_directory": "chamberi",
+    "unique_goya_asset": "goya/01-fachada.jpg",
+    "removed_goya_duplicates": [
+      "goya/02-sala.jpg",
+      "goya/03-consulta-rivera.jpg",
+      "goya/04-endolift.jpg",
+      "goya/05-laser-detalle.jpg",
+      "goya/06-retrato-rivera.jpg",
+      "goya/07-sala-vertical.jpg",
+      "goya/08-lifestyle.jpg",
+      "goya/09-retrato-corporativo.jpg",
+      "goya/10-laser-piel.jpg"
+    ],
+    "removed_bytes": 2327711,
+    "note": "The removed Goya files were byte-identical to the same-numbered Chamberí files. They remain logical aliases only and must not be used as evidence that the scene belongs to Goya."
+  },
   "notes": [
     "No ZIP/WebP from the local-SEO pack is loaded here. Theme JPEGs only.",
-    "Hashes show most Goya files are copies of Chamberí/PMAX assets. Not location-verified.",
+    "Hashes show most former Goya files were copies of Chamberí/PMAX assets. The duplicate physical files were removed; only goya/01-fachada.jpg remains in the Goya theme directory.",
     "BTL EXION® promotional PNG and manufacturer packshots are rejected for GBP and sede landings.",
     "GBP derivatives must be JPG sRGB; web may use WebP/AVIF later. Do not upload WebP to GBP."
   ],
@@ -69,7 +88,7 @@
       "location_verified": true,
       "approved_for_landing": false,
       "approved_for_gbp": false,
-      "note": "Confirmed Chamberí waiting room (chamberi-sala.jpg / Sala-Nuvanx equivalent). goya/02-sala.jpg is the same file: do not use as Goya local proof.",
+      "note": "Confirmed Chamberí waiting room (chamberi-sala.jpg / Sala-Nuvanx equivalent). Former goya/02-sala.jpg was the same file and was removed; do not use it as Goya local proof.",
       "aliases": ["chamberi-sala.jpg", "goya/02-sala.jpg"]
     },
     {
@@ -98,7 +117,7 @@
       "location_verified": false,
       "approved_for_landing": false,
       "approved_for_gbp": false,
-      "note": "Duplicated under goya/04-endolift.jpg. Not a sede-specific in-room shot."
+      "note": "Formerly duplicated under goya/04-endolift.jpg; duplicate removed. Not a sede-specific in-room shot."
     },
     {
       "sede": "goya",
