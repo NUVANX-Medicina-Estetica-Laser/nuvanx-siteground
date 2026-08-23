@@ -469,7 +469,7 @@ add_action( 'init', 'nvx_gbp_schedule_cron' );
 function nvx_gbp_unschedule_cron(): void {
 	$timestamp = wp_next_scheduled( NVX_GBP_CRON_HOOK );
 	if ( $timestamp ) {
-		wp_unschedule_event( NVX_GBP_CRON_HOOK, $timestamp );
+		wp_unschedule_event( $timestamp, NVX_GBP_CRON_HOOK );
 	}
 }
 add_action( 'switch_theme', 'nvx_gbp_unschedule_cron' );
@@ -639,8 +639,7 @@ function nvx_gbp_admin_register_form(): void {
 					</select>
 				</label>
 				<label><?php esc_html_e( 'Fecha de visita', 'nuvanx-medical' ); ?> <input type="date" name="nvx_gbp_visit_date" required value="<?php echo esc_attr( current_time( 'Y-m-d' ) ); ?>" /></label>
-				<button class="button button-primary" type="submit"><?php esc_html_e( 'Programar email T+7', 'nuvanx-medical' ); ?>
-				</button>
+				<button class="button button-primary" type="submit"><?php esc_html_e( 'Programar email T+7', 'nuvanx-medical' ); ?></button>
 			</p>
 		</form>
 	</div>
