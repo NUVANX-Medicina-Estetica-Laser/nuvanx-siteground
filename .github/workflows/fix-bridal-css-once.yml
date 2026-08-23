@@ -1,0 +1,153 @@
+name: Fix Bridal CSS Once
+
+on:
+  push:
+    branches:
+      - fix/seo-contacto-catalog-parity-20260823
+    paths:
+      - tools/.trigger-bridal-css
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/seo-contacto-catalog-parity-20260823
+          fetch-depth: 1
+
+      - name: Restore canonical Bridal studio CSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          css='wp-content/themes/nuvanx-medical/assets/css/nvx-components.css'
+          php='wp-content/themes/nuvanx-medical/inc/nvx-bridal-page.php'
+
+          test -f tools/.trigger-bridal-css
+          grep -Fq 'nvx-bridal-studio__spread' "$php"
+          grep -Fq 'nvx-bridal-studio__pair' "$php"
+          if grep -Fq '.nvx-bridal-studio__spread' "$css"; then
+            echo 'Bridal CSS already present; refusing duplicate append.' >&2
+            exit 1
+          fi
+
+          cat >> "$css" <<'CSS'
+
+/* Bridal editorial studio — canonical matched-spread contract. */
+.nvx-bridal-studio {
+  overflow: hidden;
+}
+
+.nvx-bridal-studio__intro {
+  padding-bottom: var(--nvx-space-6);
+}
+
+.nvx-bridal-studio__plate {
+  margin: 0;
+  background: transparent;
+}
+
+.nvx-bridal-studio__plate figcaption {
+  margin-top: var(--nvx-space-2);
+  padding-inline: 0;
+  font-size: var(--nvx-type-caption);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nvx-text-muted);
+}
+
+.nvx-bridal-studio img.nvx-bridal-studio__img,
+.nvx-bridal-studio img.nvx-media--body {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: cover;
+  border-radius: var(--nvx-radius-image);
+}
+
+.nvx-bridal-studio__spread {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--nvx-space-6);
+  align-items: center;
+  margin-bottom: var(--nvx-space-7);
+}
+
+.nvx-bridal-studio__copy {
+  max-width: 36rem;
+}
+
+.nvx-bridal-studio__plate--mood img,
+.nvx-bridal-studio__plate--consult img,
+.nvx-bridal-studio__plate--brazos img,
+.nvx-bridal-studio__plate--espalda img {
+  aspect-ratio: 4 / 5;
+}
+
+.nvx-bridal-studio__plate--mood img {
+  object-position: center top;
+}
+
+.nvx-bridal-studio__plate--consult img {
+  object-position: center 45%;
+}
+
+.nvx-bridal-studio__plate--papada {
+  margin: 0 auto var(--nvx-space-7);
+}
+
+.nvx-bridal-studio__plate--papada img {
+  aspect-ratio: 2 / 1;
+  object-position: center;
+}
+
+.nvx-bridal-studio__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--nvx-space-6);
+  align-items: start;
+  padding-bottom: var(--nvx-space-4);
+}
+
+.nvx-bridal-studio__plate--brazos img {
+  object-position: center 14%;
+}
+
+.nvx-bridal-studio__plate--espalda img {
+  object-position: center 28%;
+}
+
+@media (max-width: 56rem) {
+  .nvx-bridal-studio__spread,
+  .nvx-bridal-studio__pair {
+    grid-template-columns: 1fr;
+    gap: var(--nvx-space-4);
+    margin-bottom: var(--nvx-space-6);
+  }
+
+  .nvx-bridal-studio__plate--papada {
+    margin-bottom: var(--nvx-space-6);
+  }
+}
+CSS
+
+          node scripts/lint/test-lcp-css-delivery.mjs
+          node scripts/lint/no-hardcoded-colors.mjs --strict
+          git diff --check
+
+      - name: Commit CSS and remove one-shot artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Nuvanx Bot'
+          git config user.email 'bot@nuvanx.com'
+          git rm .github/workflows/fix-bridal-css-once.yml tools/.trigger-bridal-css
+          git add wp-content/themes/nuvanx-medical/assets/css/nvx-components.css
+          git diff --cached --check
+          git commit -m 'fix(css): restore canonical Bridal studio layout'
+          git push origin HEAD:fix/seo-contacto-catalog-parity-20260823
