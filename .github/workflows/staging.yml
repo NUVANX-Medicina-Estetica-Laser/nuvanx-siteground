@@ -158,6 +158,7 @@ jobs:
           bash -n tools/remote-compare.sh
           bash scripts/ci/test-mutation-fifo-contract.sh
           find scripts/staging2 -maxdepth 1 -name '*.mjs' -type f -print0 | xargs -0 -r -n1 node --check
+          npm audit --prefix scripts/seo --audit-level=high >/dev/null
           echo 'STATIC_GATES=PASS'
 
       - name: Run deep PHP quality gates
