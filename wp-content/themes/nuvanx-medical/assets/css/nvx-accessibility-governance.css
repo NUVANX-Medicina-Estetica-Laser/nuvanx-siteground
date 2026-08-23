@@ -146,7 +146,7 @@
   color: var(--nvx-ink);
   border: var(--nvx-border-hairline) solid var(--nvx-ink);
   text-decoration: none;
-  transition: top 0.15s ease;
+  transition: top var(--nvx-duration-fast) ease;
   outline: none;
 }
 .nvx-skip-link:focus {
@@ -163,9 +163,9 @@
 /* Global prefers-reduced-motion override (CSS-2) */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important; /* nvx-token-exception: reduced-motion override */
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important; /* nvx-token-exception: reduced-motion override */
     scroll-behavior: auto !important;
   }
   .nvx-brand-btn:hover,
