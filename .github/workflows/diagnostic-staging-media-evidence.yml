@@ -1,0 +1,116 @@
+name: Diagnostic · Staging media evidence
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  inspect:
+    name: Read exact-master Staging evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TARGET_SHA: 39c2ed20e2982605d1232c047b43e39e952ac199
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Locate exact-master push run and artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+          run_json=''
+          for attempt in $(seq 1 30); do
+            runs="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/staging.yml/runs?event=push&branch=master&per_page=30")"
+            run_json="$(printf '%s' "$runs" | jq -c --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.id) | last // empty')"
+            if [[ -n "$run_json" ]]; then
+              status="$(printf '%s' "$run_json" | jq -r '.status // ""')"
+              if [[ "$status" == 'completed' ]]; then
+                break
+              fi
+              echo "DIAG_STAGING_RUN=WAIT attempt=$attempt status=$status"
+            else
+              echo "DIAG_STAGING_RUN=WAIT attempt=$attempt status=not_found"
+            fi
+            sleep 10
+          done
+
+          if [[ -z "$run_json" ]]; then
+            echo "DIAG_STAGING_RUN=NOT_FOUND sha=$TARGET_SHA"
+            exit 0
+          fi
+
+          run_id="$(printf '%s' "$run_json" | jq -r '.id')"
+          status="$(printf '%s' "$run_json" | jq -r '.status')"
+          conclusion="$(printf '%s' "$run_json" | jq -r '.conclusion // ""')"
+          event="$(printf '%s' "$run_json" | jq -r '.event // ""')"
+          head_sha="$(printf '%s' "$run_json" | jq -r '.head_sha // ""')"
+          html_url="$(printf '%s' "$run_json" | jq -r '.html_url // ""')"
+          echo "DIAG_STAGING_RUN=FOUND run_id=$run_id status=$status conclusion=$conclusion event=$event head_sha=$head_sha"
+          echo "DIAG_STAGING_RUN_URL=$html_url"
+
+          echo 'DIAG_STAGING_JOBS_BEGIN'
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" \
+            --jq '.jobs[] | [.id,.name,.status,(.conclusion // "")] | @tsv'
+          echo 'DIAG_STAGING_JOBS_END'
+
+          artifact_name="staging2-block-c-${TARGET_SHA}"
+          artifacts="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100")"
+          echo 'DIAG_STAGING_ARTIFACTS_BEGIN'
+          printf '%s' "$artifacts" | jq -r '.artifacts[] | [.id,.name,(.expired|tostring),(.size_in_bytes|tostring)] | @tsv'
+          echo 'DIAG_STAGING_ARTIFACTS_END'
+
+          artifact_id="$(printf '%s' "$artifacts" | jq -r --arg name "$artifact_name" '[.artifacts[] | select(.name == $name and .expired == false)] | first | .id // empty')"
+          if [[ -z "$artifact_id" ]]; then
+            echo "DIAG_STAGING_ARTIFACT=MISSING expected=$artifact_name run_id=$run_id conclusion=$conclusion"
+            exit 0
+          fi
+
+          mkdir -p "$RUNNER_TEMP/staging-evidence"
+          if ! gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "$artifact_name" --dir "$RUNNER_TEMP/staging-evidence"; then
+            echo "DIAG_STAGING_ARTIFACT=DOWNLOAD_FAILED id=$artifact_id name=$artifact_name"
+            exit 0
+          fi
+
+          echo "DIAG_STAGING_ARTIFACT=FOUND id=$artifact_id name=$artifact_name"
+          find "$RUNNER_TEMP/staging-evidence" -type f -printf 'DIAG_FILE=%P\n' | sort
+
+          manifest="$(find "$RUNNER_TEMP/staging-evidence" -type f -name 'acceptance-manifest.json' -print -quit)"
+          media="$(find "$RUNNER_TEMP/staging-evidence" -type f -name 'clinic-media-runtime.json' -print -quit)"
+
+          if [[ -n "$manifest" ]]; then
+            echo 'DIAG_ACCEPTANCE_MANIFEST_BEGIN'
+            jq -c '.' "$manifest"
+            echo 'DIAG_ACCEPTANCE_MANIFEST_END'
+            candidate_sha="$(jq -r '.candidate_sha // ""' "$manifest")"
+            [[ "$candidate_sha" == "$TARGET_SHA" ]] \
+              && echo "DIAG_ACCEPTANCE_SHA=PASS sha=$candidate_sha" \
+              || echo "DIAG_ACCEPTANCE_SHA=FAIL expected=$TARGET_SHA actual=$candidate_sha"
+          else
+            echo 'DIAG_ACCEPTANCE_MANIFEST=MISSING'
+          fi
+
+          if [[ -n "$media" ]]; then
+            echo 'DIAG_CLINIC_MEDIA_SUMMARY_BEGIN'
+            jq -r '
+              "schema=" + ((.schema // 0)|tostring),
+              "expectedSha=" + (.expectedSha // ""),
+              "cases=" + ((.cases|length)|tostring),
+              (.cases[] | [(.kind // ""),(.routeKey // .clinic // ""),(.route // ""),(.viewport.key // ""),((.initialLcp.startTime // 0)|tostring),((.initialCls // 0)|tostring),((.totalSelectedBodyBytes // 0)|tostring),((.selectedOver500KiB // 0)|tostring)] | @tsv)
+            ' "$media"
+            echo 'DIAG_CLINIC_MEDIA_SUMMARY_END'
+            media_sha="$(jq -r '.expectedSha // ""' "$media")"
+            case_count="$(jq -r '.cases | length' "$media")"
+            [[ "$media_sha" == "$TARGET_SHA" ]] \
+              && echo "DIAG_MEDIA_SHA=PASS sha=$media_sha" \
+              || echo "DIAG_MEDIA_SHA=FAIL expected=$TARGET_SHA actual=$media_sha"
+            [[ "$case_count" == '8' ]] \
+              && echo 'DIAG_MEDIA_CASES=PASS cases=8' \
+              || echo "DIAG_MEDIA_CASES=FAIL actual=$case_count expected=8"
+          else
+            echo 'DIAG_CLINIC_MEDIA=MISSING'
+          fi
