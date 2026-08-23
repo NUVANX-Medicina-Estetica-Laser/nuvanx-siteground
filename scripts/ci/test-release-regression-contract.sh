@@ -21,10 +21,11 @@ DEPLOY_STAMP="$ROOT/wp-content/themes/nuvanx-medical/inc/nvx-deploy-stamp.php"
 LCP_CSS_CONTRACT="$ROOT/scripts/lint/test-lcp-css-delivery.mjs"
 META_BROWSER_OWNER_CONTRACT="$ROOT/scripts/lint/test-meta-browser-owner-retirement.php"
 SEO_OWNERSHIP_CONTRACT="$ROOT/scripts/lint/test-seo-catalog-ownership.php"
+PREMERGE_CONTRACT="$ROOT/scripts/ci/test-pre-merge-protection-contract.sh"
 SEO_TOOLING_DIR="$ROOT/scripts/seo"
 THEME_DIR="$ROOT/wp-content/themes/nuvanx-medical"
 
-for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock"; do
+for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$PREMERGE_CONTRACT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock"; do
   [[ -s "$required" ]] || fail "missing_file:$required"
 done
 
@@ -35,6 +36,9 @@ if grep -RInE '^[[:space:]]*(<<<<<<<|=======|>>>>>>>)' "$ROOT/.github/workflows"
   fail 'workflow_conflict_marker_present'
 fi
 pass_assert 'workflow-no-conflict-markers'
+
+bash "$PREMERGE_CONTRACT" || fail 'pre_merge_protection_execution_contract'
+pass_assert 'pre-merge-protection-execution'
 
 # Bridal retirement must remain an AND condition. This assertion is textual
 # because the source depends on WordPress runtime state, but it tolerates
