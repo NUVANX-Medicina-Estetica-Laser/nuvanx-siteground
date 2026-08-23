@@ -1110,7 +1110,7 @@ body .joinchat__qr canvas {
   color:var(--nvx-ink);
 }
 .nvx-valoracion-modal__lead{
-  margin:0 0 var(--nvx-space-3, calc(var(--nvx-space-1) * 2.5)) 0 0;
+  margin:0 0 var(--nvx-space-3, calc(var(--nvx-space-1) * 2.5));
   font-family:var(--nvx-sans);
   font-size:var(--nvx-type-body);
   line-height:var(--nvx-lh-body);
