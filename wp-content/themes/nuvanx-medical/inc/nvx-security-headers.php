@@ -41,6 +41,7 @@ function nvx_add_security_headers( $headers ) {
 		'upgrade-insecure-requests',
 		'block-all-mixed-content',
 		"frame-src 'self' https://*.hsforms.net https://*.hubspot.com https://www.google.com https://www.youtube.com https://www.facebook.com https://www.instagram.com https://*.doctoralia.es",
+		"frame-ancestors 'self'",
 		"form-action 'self' https://*.hsforms.com https://*.hubspot.com",
 		"img-src 'self' data: https:",
 		"font-src 'self' data: https://fonts.gstatic.com",
