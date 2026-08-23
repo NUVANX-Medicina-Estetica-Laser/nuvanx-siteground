@@ -5,28 +5,8 @@ run-name: >-
 on:
   push:
     branches: [master]
-    paths:
-      - 'wp-content/**'
-      - 'scripts/**'
-      - 'tools/**'
-      - '.github/workflows/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'composer.json'
-      - '.gitleaks.toml'
-      - '.gitleaksignore'
   pull_request:
     branches: [master]
-    paths:
-      - 'wp-content/**'
-      - 'scripts/**'
-      - 'tools/**'
-      - '.github/workflows/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'composer.json'
-      - '.gitleaks.toml'
-      - '.gitleaksignore'
   pull_request_target:
     branches: [master]
     types: [labeled]
