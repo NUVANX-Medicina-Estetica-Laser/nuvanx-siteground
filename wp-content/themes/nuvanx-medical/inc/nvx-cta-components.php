@@ -9,10 +9,6 @@
 
 defined( 'ABSPATH' ) || exit;
 
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
-
 // Backwards compatibility: define constants if not already set (fallback to config)
 if ( ! defined( 'NVX_DIRECTOR_COLEGIADO' ) ) {
 	define( 'NVX_DIRECTOR_COLEGIADO', nvx_medical_colegiado( 'director' ) ?: '282864786' );
