@@ -197,3 +197,7 @@ bash "$ROOT/scripts/ci/test-sonar-project-contract.sh"
 # with their own diagnostics. Keep this call as the current static-gate
 # aggregation point until the workflow exposes a dedicated release-test step.
 bash "$ROOT/scripts/ci/test-release-regression-contract.sh"
+
+# Design-token adoption is report-only while the existing CSS baseline is
+# classified. The script becomes blocking only when invoked with --strict.
+node "$ROOT/scripts/lint/audit-design-token-adoption.mjs"
