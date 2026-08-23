@@ -54,52 +54,6 @@
 		return output;
 	}
 
-	var adsClickSendTo = 'AW-18236597403/qut3CLWflOAcEJvJ8fdD';
-
-	function pushAdsConversion(sendTo, extra) {
-		var payload = Object.assign({ send_to: sendTo }, extra || {});
-		if (typeof window.gtag === 'function') {
-			window.gtag('event', 'conversion', payload);
-		} else {
-			window.dataLayer = window.dataLayer || [];
-			window.dataLayer.push(Object.assign({ event: 'conversion' }, payload));
-		}
-	}
-
-	function whenGtagReady(callback) {
-		if (typeof window.gtag === 'function') {
-			callback();
-			return;
-		}
-		var started = Date.now();
-		var timer = window.setInterval(function () {
-			if (typeof window.gtag === 'function' || Date.now() - started > 2000) {
-				window.clearInterval(timer);
-				callback();
-			}
-		}, 50);
-	}
-
-	function reportPhoneWhatsAppConversion(url, options) {
-		var newTab = Boolean(options && options.newTab);
-		var navigatesAway = Boolean(url) && !newTab;
-		var finished = false;
-		var finish = function () {
-			if (finished || !navigatesAway) return;
-			finished = true;
-			window.location = url; // NOSONAR - intentional post-conversion navigation; url is a validated WhatsApp/phone href from the DOM element
-		};
-
-		whenGtagReady(function () {
-			pushAdsConversion(adsClickSendTo, navigatesAway ? { event_callback: finish } : {});
-		});
-
-		if (navigatesAway) {
-			window.setTimeout(finish, 1500);
-			return true;
-		}
-		return false;
-	}
 
 	function isWhatsAppHref(href) {
 		return /(?:wa\.me|api\.whatsapp\.com|web\.whatsapp\.com)/i.test(href || '');
@@ -150,9 +104,6 @@
 		}
 		if (isWhatsApp) {
 			emit('whatsapp_click', Object.assign({ contact_method: 'whatsapp' }, common));
-			if (reportPhoneWhatsAppConversion(href || undefined, {
-				newTab: target.getAttribute('target') === '_blank' || isJoinchatTarget(target) || !href,
-			})) event.preventDefault();
 			return;
 		}
 		if (isPhone) {
@@ -161,9 +112,6 @@
 				cta_region: regionFor(target),
 				cta_marker: dataEvent || 'tel_link',
 			});
-			if (reportPhoneWhatsAppConversion(href || undefined, { newTab: false })) {
-				event.preventDefault();
-			}
 			return;
 		}
 	}
