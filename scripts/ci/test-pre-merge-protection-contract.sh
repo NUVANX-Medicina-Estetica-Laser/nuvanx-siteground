@@ -17,7 +17,10 @@ grep -Fq 'if output=$("$@" 2>&1); then' "$GATE" || fail 'argv_execution_contract
 grep -Fq 'run_check "$check_name" bash -o pipefail -c "$script"' "$GATE" || fail 'shell_pipeline_wrapper_missing'
 grep -Fq 'merge|promotion)' "$GATE" || fail 'environment_allowlist_missing'
 grep -Fq 'THEME_DIR="$PROJECT_ROOT/wp-content/themes/nuvanx-medical"' "$GATE" || fail 'theme_root_missing'
-grep -Fq 'gitleaks detect --source . --no-banner --redact --exit-code 1' "$GATE" || fail 'gitleaks_preferred_scanner_missing'
+grep -Fq 'gitleaks dir . --no-banner --redact --exit-code 1' "$GATE" || fail 'gitleaks_current_tree_scanner_missing'
+if grep -Fq 'gitleaks detect --source .' "$GATE"; then
+  fail 'gitleaks_history_scope_forbidden'
+fi
 
 if grep -Eq 'run_check[[:space:]]+"[^"]+"[[:space:]]+"[^"[:space:]]+[[:space:]][^"]+"' "$GATE"; then
   fail 'quoted_command_string_reintroduced'
@@ -29,4 +32,4 @@ if grep -Fq 'if \"$@\"' "$GATE"; then
   fail 'literal_argv_execution_reintroduced'
 fi
 
-echo 'PRE_MERGE_PROTECTION_CONTRACT=PASS argv=direct shell_pipeline=explicit root=canonical secrets=high_signal'
+echo 'PRE_MERGE_PROTECTION_CONTRACT=PASS argv=direct shell_pipeline=explicit root=canonical secrets=current_tree_high_signal'
