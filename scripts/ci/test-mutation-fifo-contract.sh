@@ -181,6 +181,10 @@ php "$ROOT/scripts/lint/test-document-buffer-retirement.php"
 # treatment-directory names such as /exion-face/ and /endolift-facial/.
 php "$ROOT/scripts/lint/test-vendor-image-url-boundary.php"
 
+# Public image hygiene must fail safe when route context is unavailable and
+# must never leave a vendor figure/caption behind.
+php "$ROOT/scripts/lint/test-gbp-image-hygiene-edge.php"
+
 # Theme-owned clinic photography has a 500 KiB regression budget. Existing
 # oversized legacy files are capped exceptions and cannot grow or multiply.
 php "$ROOT/scripts/lint/test-clinic-media-budget.php"
