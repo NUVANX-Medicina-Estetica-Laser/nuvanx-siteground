@@ -30,7 +30,7 @@ const STRICT_CATEGORIES = new Set([
 
 const SPACING_PROPERTIES = /^(?:margin(?:-(?:top|right|bottom|left|inline|inline-start|inline-end|block|block-start|block-end))?|padding(?:-(?:top|right|bottom|left|inline|inline-start|inline-end|block|block-start|block-end))?|gap|row-gap|column-gap)$/;
 const DIMENSION_PROPERTIES = /^(?:width|height|min-width|max-width|min-height|max-height)$/;
-const MOTION_PROPERTIES = /^(?:transition(?:-duration)?|animation-duration)$/;
+const MOTION_PROPERTIES = /^(?:transition(?:-duration)?|animation(?:-duration)?)$/;
 const TYPOGRAPHY_PROPERTIES = /^(?:line-height|letter-spacing|font-weight)$/;
 const POSITION_PROPERTIES = /^(?:top|right|bottom|left|inset|inset-inline|inset-block)$/;
 const DECLARATION_PATTERN = /([a-zA-Z-]+)\s*:\s*([^;{}]+)(?:;|(?=}|$))/g;
@@ -83,8 +83,6 @@ function stripNvxVarExpressions(value) {
     }
 
     if (!closed) {
-      // Malformed CSS is not silently erased; leave it for other syntax/style
-      // checks and continue scanning from the current character.
       output += value[cursor];
       cursor += 1;
       continue;
@@ -99,7 +97,7 @@ function stripNvxVarExpressions(value) {
 
 function extractScalarLiterals(value) {
   const literals = new Map();
-  for (const match of value.matchAll(/(?<![\w.-])(-?\d*\.?\d+)(px|rem|em|ms)(?![\w-])/g)) {
+  for (const match of value.matchAll(/(?<![\w.-])(-?\d*\.?\d+)(px|rem|em|ms|s)(?![\w-])/g)) {
     const literal = { raw: match[0], number: Number(match[1]), unit: match[2] };
     literals.set(`${literal.number}|${literal.unit}`, literal);
   }
@@ -166,7 +164,7 @@ function classifyDeclaration(property, originalValue) {
 
   if (MOTION_PROPERTIES.test(property)) {
     for (const literal of literals) {
-      if (literal.unit === 'ms' && literal.number > 0) {
+      if ((literal.unit === 'ms' || literal.unit === 's') && literal.number > 0) {
         findings.push({ category: 'motion', literal: literal.raw });
       }
     }
@@ -208,7 +206,7 @@ function classifyDeclaration(property, originalValue) {
 }
 
 function auditParserSelfTest() {
-  const fixture = '.a{padding:var(--nvx-space-2, 16px) 12px}.b{margin:8px}.c{width:var(--nvx-touch-target-min,48px)}';
+  const fixture = '.a{padding:var(--nvx-space-2, 16px) 12px}.b{margin:8px}.c{width:var(--nvx-touch-target-min,48px)}.d{transition:color .15s ease}.e{animation:slideIn 300ms ease}';
   const declarations = [...fixture.matchAll(DECLARATION_PATTERN)].map((match) => ({
     property: match[1],
     value: match[2].trim(),
@@ -217,7 +215,9 @@ function auditParserSelfTest() {
   const padding = declarations.find((item) => item.property === 'padding');
   const margin = declarations.find((item) => item.property === 'margin');
   const width = declarations.find((item) => item.property === 'width');
-  if (!padding || !margin || !width) {
+  const transition = declarations.find((item) => item.property === 'transition');
+  const animation = declarations.find((item) => item.property === 'animation');
+  if (!padding || !margin || !width || !transition || !animation) {
     throw new Error('parser_self_test_missing_semicolonless_declaration');
   }
 
@@ -236,6 +236,12 @@ function auditParserSelfTest() {
 
   if (classifyDeclaration(width.property, width.value).length !== 0) {
     throw new Error('parser_self_test_adopted_dimension_reported');
+  }
+  if (!classifyDeclaration(transition.property, transition.value).some((item) => item.category === 'motion' && item.literal === '.15s')) {
+    throw new Error('parser_self_test_seconds_motion_not_reported');
+  }
+  if (!classifyDeclaration(animation.property, animation.value).some((item) => item.category === 'motion' && item.literal === '300ms')) {
+    throw new Error('parser_self_test_animation_shorthand_not_reported');
   }
 }
 
