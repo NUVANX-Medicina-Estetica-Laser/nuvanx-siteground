@@ -36,12 +36,12 @@ function nvx_add_security_headers( $headers ) {
 	// Basic Referrer-Policy
 	$headers['Referrer-Policy'] = 'strict-origin-when-cross-origin';
 
-	// Estructurada en 11 directivas según auditoría.
+	// Estructurada en 11 directivas según auditoría (unsafe-inline requerido por GTM y HubSpot hasta audit de nonces).
 	$csp = array(
 		'upgrade-insecure-requests',
 		'block-all-mixed-content',
 		"default-src 'self'",
-		"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com https://*.google-analytics.com https://*.hubspot.com https://*.hsforms.net https://*.hsforms.com https://*.hs-scripts.com https://*.hs-analytics.net https://*.hs-banner.com https://*.facebook.net https://*.klaviyo.com",
+		"script-src 'self' 'unsafe-inline' https://*.googletagmanager.com https://*.google-analytics.com https://*.hubspot.com https://*.hsforms.net https://*.hsforms.com https://*.hs-scripts.com https://*.hs-analytics.net https://*.hs-banner.com https://*.facebook.net https://*.klaviyo.com",
 		"frame-src 'self' https://*.hsforms.net https://*.hsforms.com https://*.hubspot.com https://www.google.com https://www.youtube.com https://www.facebook.com https://www.instagram.com https://*.doctoralia.es",
 		"frame-ancestors 'self'",
 		"form-action 'self' https://*.hsforms.com https://*.hubspot.com",
