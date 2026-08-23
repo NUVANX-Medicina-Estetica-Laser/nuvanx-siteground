@@ -111,8 +111,8 @@ function nvx_authentic_page_photo_registry(): array {
 			'eyebrow' => 'Endoláser corporal',
 			'title'   => 'Tratamiento corporal con indicación médica',
 			'images'  => array(
-				array( 'id' => 2115, 'alt' => 'Procedimiento corporal láser realizado en NUVANX', 'caption' => 'Procedimiento corporal' ),
-				array( 'id' => 2109, 'alt' => 'Tecnología corporal utilizada en una sesión NUVANX', 'caption' => 'Tecnología en uso' ),
+				array( 'id' => 3068, 'alt' => 'Endoláser corporal para grasa localizada en NUVANX Madrid', 'caption' => 'Endoláser corporal' ),
+				array( 'id' => 2093, 'alt' => 'Resultado clínico de laserlipólisis y endoláser corporal en NUVANX Madrid', 'caption' => 'Resultado clínico' ),
 				array( 'id' => 2471, 'alt' => 'Valoración corporal personalizada previa a un tratamiento', 'caption' => NVX_AUTHENTIC_PHOTO_CAPTION_VALORACION ),
 			),
 		),
@@ -120,8 +120,8 @@ function nvx_authentic_page_photo_registry(): array {
 			'eyebrow' => 'Remodelación corporal',
 			'title'   => 'Tratamos una indicación, no una imagen genérica',
 			'images'  => array(
-				array( 'id' => 2115, 'alt' => 'Tratamiento corporal con láser en NUVANX', 'caption' => 'Procedimiento corporal' ),
-				array( 'id' => 2109, 'alt' => 'Tecnología corporal NUVANX durante una sesión', 'caption' => 'Tecnología aplicada' ),
+				array( 'id' => 2446, 'alt' => 'Remodelación corporal personalizada en NUVANX Madrid', 'caption' => 'Remodelación corporal' ),
+				array( 'id' => 2894, 'alt' => 'Tratamiento facial y corporal en consulta NUVANX Madrid', 'caption' => 'Tratamiento integral' ),
 			),
 		),
 		'tratamiento-postparto-abdomen-contorno-corporal-madrid' => array(
