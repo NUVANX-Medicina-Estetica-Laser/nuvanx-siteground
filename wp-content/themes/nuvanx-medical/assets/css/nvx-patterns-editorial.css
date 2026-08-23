@@ -1330,7 +1330,7 @@ body:not(.home) .nvx-page-hero__copy h1,
   color: var(--nvx-text-body);
   border: var(--nvx-border-hairline) solid var(--nvx-color-line);
   border-radius: var(--nvx-radius-pill);
-  transition: all 160ms ease;
+  transition: all var(--nvx-duration-fast) ease;
 }
 
 .nvx-blog-filters__item a:hover,
