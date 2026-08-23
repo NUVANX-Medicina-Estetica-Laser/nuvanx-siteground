@@ -64,5 +64,3 @@ if ( 1 === preg_match( $regex, $srcset ) ) {
 }
 
 echo "VENDOR_IMAGE_URL_BOUNDARY=PASS blocked=" . count( $blocked ) . ' allowed=' . count( $allowed ) . PHP_EOL;
-
-require __DIR__ . '/test-public-media-delivery.php';
