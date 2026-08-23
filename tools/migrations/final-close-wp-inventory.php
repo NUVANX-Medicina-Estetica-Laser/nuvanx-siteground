@@ -217,8 +217,26 @@ if ( null !== $cronRaw ) {
     } elseif ( preg_match( '/(?:^|[;{}])(?:[OCRr]:[0-9]+:)/', $cronRaw ) ) {
         nvx_final_close_failure( $report, 'cron', 'cron_option_contains_objects_or_references' );
     } else {
-        $cron = unserialize( $cronRaw, ['allowed_classes' => false] );
-        if ( is_array( $cron ) ) {
+        $cronUnserializeWarning = false;
+        set_error_handler(
+            static function ( $severity ) use ( &$cronUnserializeWarning ) {
+                if ( E_WARNING === $severity || E_NOTICE === $severity ) {
+                    $cronUnserializeWarning = true;
+                    return true;
+                }
+                return false;
+            },
+            E_WARNING | E_NOTICE
+        );
+        try {
+            $cron = unserialize( $cronRaw, ['allowed_classes' => false] );
+        } finally {
+            restore_error_handler();
+        }
+
+        if ( $cronUnserializeWarning || ! is_array( $cron ) ) {
+            nvx_final_close_failure( $report, 'cron', 'cron_option_not_serialized_array' );
+        } else {
             foreach ( $cron as $timestamp => $hooks ) {
                 if ( ! is_array( $hooks ) || ! ctype_digit( (string) $timestamp ) ) {
                     continue;
@@ -232,8 +250,6 @@ if ( null !== $cronRaw ) {
                     );
                 }
             }
-        } else {
-            nvx_final_close_failure( $report, 'cron', 'cron_option_not_serialized_array' );
         }
     }
 }
