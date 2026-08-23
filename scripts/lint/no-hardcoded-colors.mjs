@@ -13,7 +13,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import '../../tools/audit/deep-forensic-audit.mjs';
+import '../../tools/forensics/deep-forensic-scan.mjs';
 import { scanDirectory } from './file-scan-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
