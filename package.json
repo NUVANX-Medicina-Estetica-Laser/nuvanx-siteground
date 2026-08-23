@@ -12,8 +12,7 @@
     "lint:complianz": "node scripts/lint/test-complianz-a11y-sanitizer.mjs",
     "lint:schema": "node scripts/lint/test-schema-semantic-contract.mjs",
     "lint:endolaser-approval": "node scripts/lint/test-endolaser-claim-approval.mjs",
-    "lint": "npm run lint:colors && npm run lint:fontsize && npm run lint:styles && npm run lint:routes && npm run lint:contrast && npm run lint:complianz && npm run lint:schema && npm run lint:endolaser-approval",
-    "seo:nap-audit": "node scripts/seo/google-business-profile-audit.js"
+    "lint": "npm run lint:colors && npm run lint:fontsize && npm run lint:styles && npm run lint:routes && npm run lint:contrast && npm run lint:complianz && npm run lint:schema && npm run lint:endolaser-approval"
   },
   "engines": {
     "node": ">=18"
