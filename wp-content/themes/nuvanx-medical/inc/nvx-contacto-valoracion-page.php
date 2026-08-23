@@ -478,7 +478,7 @@ function nvx_filter_contacto_schema_graph( $graph, $context ) {
 
 	return nvx_contacto_merge_org_clinic_refs( $graph, $org_index, $clinic_refs );
 }
-add_filter( 'wpseo_schema_graph', 'nvx_filter_contacto_schema_graph', 2 );
+nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_filter_contacto_schema_graph', 2 );
 
 /**
  * Map retired template path to the single contact template file.

@@ -1996,7 +1996,7 @@ function nvx_extend_yoast_schema_graph( $graph ) {
 
 	return $graph;
 }
-add_filter( 'wpseo_schema_graph', 'nvx_extend_yoast_schema_graph' );
+nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_extend_yoast_schema_graph' );
 
 /**
  * Gate filter to enforce that FAQPage structured data is never emitted on
@@ -2067,7 +2067,7 @@ function nvx_schema_gate_faq_emission( $graph ) {
 
 	return array_values( $graph );
 }
-add_filter( 'wpseo_schema_graph', 'nvx_schema_gate_faq_emission' );
+nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_schema_gate_faq_emission' );
 
 /**
  * Deduplicate Schema.org @id entries across the graph.
@@ -2094,4 +2094,4 @@ function nvx_schema_deduplicate_ids( $graph ) {
 
 	return array_values( $graph );
 }
-add_filter( 'wpseo_schema_graph', 'nvx_schema_deduplicate_ids' );
+nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_schema_deduplicate_ids' );

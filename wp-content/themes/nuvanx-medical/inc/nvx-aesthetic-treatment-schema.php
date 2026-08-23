@@ -216,4 +216,4 @@ function nvx_aesthetic_treatment_extend_yoast_graph( $graph, $context = null ) {
 
 	return array_values( $graph );
 }
-add_filter( 'wpseo_schema_graph', 'nvx_aesthetic_treatment_extend_yoast_graph', 2 );
+nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_aesthetic_treatment_extend_yoast_graph', 2 );

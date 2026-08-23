@@ -326,4 +326,4 @@ function nvx_valoracion_schema_graph( $graph ) {
 
 	return $graph;
 }
-add_filter( 'wpseo_schema_graph', 'nvx_valoracion_schema_graph' );
+nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_valoracion_schema_graph' );

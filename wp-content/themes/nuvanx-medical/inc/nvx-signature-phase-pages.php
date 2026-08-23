@@ -1038,7 +1038,7 @@ function nvx_papada_hub_schema_graph( $graph ) {
 
 	return $graph;
 }
-add_filter( 'wpseo_schema_graph', 'nvx_papada_hub_schema_graph' );
+nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_papada_hub_schema_graph' );
 
 /**
  * Resolve the Signature catalog key for the current page (for schema/FAQ look-up).

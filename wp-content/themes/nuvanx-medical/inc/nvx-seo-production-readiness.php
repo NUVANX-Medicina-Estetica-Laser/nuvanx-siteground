@@ -424,4 +424,4 @@ function nvx_seo_production_readiness_schema_graph( $graph, $context = null ) {
 
 	return array_values( $graph );
 }
-add_filter( 'wpseo_schema_graph', 'nvx_seo_production_readiness_schema_graph', 2 );
+nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_seo_production_readiness_schema_graph', 2 );

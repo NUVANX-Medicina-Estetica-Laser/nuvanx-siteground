@@ -171,7 +171,7 @@ function nvx_schema_merge_canonical_website_nodes( $graph ) {
 
 	return array_values( $graph );
 }
-add_filter( 'wpseo_schema_graph', 'nvx_schema_merge_canonical_website_nodes' );
+nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_schema_merge_canonical_website_nodes' );
 
 /**
  * Add SiteLinksSearchBox to the canonical WebSite schema.
