@@ -42,9 +42,11 @@ if [[ "${1:-}" == --paginate ]]; then
   scenario="${TEST_SCENARIO:-pass}"
   case "$scenario" in
     pass)
+      # No older active mutation runs
       exit 0
       ;;
     blocked)
+      # Older run 41 in_progress on staging
       printf '%s\t%s\t%s\t%s\t%s\n' '41' 'in_progress' 'push' '.github/workflows/staging.yml' '0123456789abcdef0123456789abcdef01234567'
       exit 0
       ;;
@@ -63,7 +65,9 @@ if [[ "${1:-}" == --paginate ]]; then
       fi
       exit 0
       ;;
-    *) exit 0 ;;
+    *)
+      exit 0
+      ;;
   esac
 fi
 case "${1:-}" in
@@ -110,11 +114,13 @@ common_env=(
   "MUTATION_WAIT_MAX_SECONDS=60"
 )
 
+# Case 1: Happy path
 pass_log="$TMP/pass.log"
 env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 TEST_SCENARIO=pass bash "$SUBJECT" >"$pass_log" 2>&1
 grep -Fq 'MUTATION_FIFO=PASS' "$pass_log"
 grep -Fq 'attempt=1' "$pass_log"
 
+# Case 2: Re-run rejection
 after_rerun="$TMP/rerun.log"
 set +e
 env "${common_env[@]}" GITHUB_RUN_ATTEMPT=2 TEST_SCENARIO=pass bash "$SUBJECT" >"$after_rerun" 2>&1
@@ -124,6 +130,7 @@ set -e
 grep -Fq 'reason=rerun_forbidden' "$after_rerun"
 grep -Fq 'action=start_new_run' "$after_rerun"
 
+# Case 3: Blocker timeout detection
 blocked_log="$TMP/blocked.log"
 set +e
 env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 MUTATION_WAIT_MAX_SECONDS=1 TEST_SCENARIO=blocked bash "$SUBJECT" >"$blocked_log" 2>&1
@@ -133,12 +140,14 @@ set -e
 grep -Fq 'MUTATION_FIFO=FAIL reason=wait_timeout' "$blocked_log"
 grep -Fq 'MUTATION_FIFO_BLOCKER run_id=41' "$blocked_log"
 
+# Case 4: API failure recovery (retries rather than failing open)
 transient_log="$TMP/transient.log"
 rm -f "$TMP/failed_once"
 env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 TEST_SCENARIO=transient_api_fail bash "$SUBJECT" >"$transient_log" 2>&1
 grep -Fq 'MUTATION_FIFO=WARN reason=api_query_failed retrying=true' "$transient_log"
 grep -Fq 'MUTATION_FIFO=PASS' "$transient_log"
 
+# Case 5: Superseded push run rejection (exit 78)
 superseded_log="$TMP/superseded.log"
 set +e
 env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 MUTATION_ROLE=staging TEST_BRANCH_SCENARIO=superseded bash "$SUBJECT" >"$superseded_log" 2>&1
@@ -148,6 +157,7 @@ set -e
 grep -Fq 'MUTATION_FIFO=SUPERSEDED' "$superseded_log"
 grep -Fq 'mutation=forbidden' "$superseded_log"
 
+# Case 6: Latest staging push cancels only an older active staging push, then waits for completion.
 cancel_log="$TMP/cancel.log"
 rm -f "$TMP/cancelled_41"
 env "${common_env[@]}" \
@@ -163,11 +173,29 @@ grep -Fq 'MUTATION_FIFO=PASS role=staging run_id=42' "$cancel_log"
 
 echo 'MUTATION_FIFO_CONTRACT_TEST=PASS cases=6'
 
+# Trusted migration gate: it is explicitly pending until the theme runtime is
+# introduced, then becomes blocking automatically for every normal PR/push.
 php "$ROOT/scripts/lint/test-document-buffer-retirement.php"
+
+# Vendor media governance must distinguish packshot filenames from legitimate
+# treatment-directory names such as /exion-face/ and /endolift-facial/.
 php "$ROOT/scripts/lint/test-vendor-image-url-boundary.php"
+
+# Public image hygiene must fail safe when route context is unavailable and
+# must never leave a vendor figure/caption behind.
 php "$ROOT/scripts/lint/test-gbp-image-hygiene-edge.php"
+
+# Theme-owned clinic photography has a 500 KiB regression budget. Existing
+# oversized legacy files are capped exceptions and cannot grow or multiply.
 php "$ROOT/scripts/lint/test-clinic-media-budget.php"
+
+# Sonar configuration must describe only supported scanner behavior. Remote
+# Quality Gate conditions stay server-owned, and coverage is never fabricated.
 bash "$ROOT/scripts/ci/test-sonar-project-contract.sh"
+
+# Release and theme regressions are intentionally owned by a separate contract
+# with their own diagnostics. Keep this call as the current static-gate
+# aggregation point until the workflow exposes a dedicated release-test step.
 bash "$ROOT/scripts/ci/test-release-regression-contract.sh"
 
 # Design-token adoption is report-only while the existing CSS baseline is
