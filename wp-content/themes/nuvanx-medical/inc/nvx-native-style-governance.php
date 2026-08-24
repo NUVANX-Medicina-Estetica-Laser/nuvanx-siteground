@@ -124,6 +124,10 @@ function nvx_theme_critical_stylesheet_files(): array {
 		$files[] = 'assets/css/nvx-cases-holding.css';
 	}
 
+	if ( is_page( 'equipo-medico' ) ) {
+		$files[] = 'assets/css/nvx-equipo-medico.css';
+	}
+
 	return $files;
 }
 
@@ -148,6 +152,7 @@ function nvx_theme_local_style_handles(): array {
 		'nvx-posts',
 		'nvx-soluciones-medicas',
 		'nvx-cases-holding',
+		'nvx-equipo-medico',
 	);
 }
 
