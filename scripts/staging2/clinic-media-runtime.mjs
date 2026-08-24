@@ -28,8 +28,13 @@ const clinicRoutes = [
   { key: 'goya', path: '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' },
 ];
 
-const viewports = VIEWPORTS.filter(({ key }) => key === 'desktop-1440x1100' || key === 'mobile-390x844');
-if (viewports.length !== 2) {
+const requiredViewportKeys = new Set([
+  'desktop-1440x1100',
+  'tablet-1024x768',
+  'mobile-390x844',
+]);
+const viewports = VIEWPORTS.filter(({ key }) => requiredViewportKeys.has(key));
+if (viewports.length !== requiredViewportKeys.size || ![...requiredViewportKeys].every((key) => viewports.some((viewport) => viewport.key === key))) {
   console.error(`CLINIC_MEDIA_RUNTIME=FAIL reason=viewport_contract count=${viewports.length}`);
   process.exit(1);
 }
