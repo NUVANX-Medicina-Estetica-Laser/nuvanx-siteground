@@ -295,6 +295,11 @@ function nvx_strategy_investment_markup(): string {
 
 	$html .= '</article>';
 
+	// Enlaza la página de precios hacia los dueños técnicos de los tratamientos
+	if ( function_exists('nvx_semantic_graph_clinics') ) {
+		$html .= nvx_semantic_graph_clinics();
+	}
+
 	return $html;
 }
 

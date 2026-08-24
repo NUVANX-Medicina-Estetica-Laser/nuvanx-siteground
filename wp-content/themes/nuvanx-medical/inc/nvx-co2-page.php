@@ -166,6 +166,7 @@ function nvx_co2_editorial_body_markup(): string {
 	$html .= nvx_render_generic_brand_treatment_page_body( $data, 'nvx-co2', 'nvx_co2_process_icon' );
 	$html .= '</div>';
 
+	$html .= nvx_semantic_graph_co2();
 	return $html;
 }
 

@@ -386,12 +386,7 @@ function nvx_endolift_editorial_body_markup(): string {
 	$html .= '</div></section>';
 
 	// Closing valoración CTA: site-wide nvx-cta-banner in footer.php (not page-local).
-
-	$html .= '<div class="nvx-related-links"><p>';
-	$html .= esc_html__( 'Endolift® no es una laserlipólisis corporal. Para comparar longitudes de onda y protocolos, consulta', 'nuvanx-medical' ) . ' ';
-	$html .= '<a href="' . esc_url( home_url( '/smartlipo-laserlipolisis-endolift/' ) ) . '">' . esc_html__( 'Smartlipo®, laserlipólisis y Endolift®', 'nuvanx-medical' ) . '</a>.';
-	$html .= '</p></div>';
-
+	$html .= nvx_semantic_graph_endolift();
 	$html .= '</div>';
 
 	return $html;

@@ -203,6 +203,9 @@ function nvx_valoracion_managed_page_markup(): string {
 	// Dedicated conversion route: trigger the normal runtime and recover if an
 	// optimizer delayed or removed it. The bootstrap never creates a second frame
 	// or a second portal loader when the canonical owner is already present.
+	// Inyectar grafo semántico de valoración antes del script de HubSpot
+	$html .= nvx_semantic_graph_valoracion();
+
 	$html .= nvx_valoracion_hubspot_bootstrap_markup();
 	$html .= '</div>';
 

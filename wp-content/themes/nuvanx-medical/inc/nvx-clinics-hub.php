@@ -149,6 +149,7 @@ function nvx_clinics_hub_page_markup(): string {
 	$html .= '<a class="nvx-brand-btn nvx-brand-btn--secondary" href="' . esc_url( 'tel:' . $goya_phone ) . '">' . esc_html( sprintf( __( 'Goya · %s', 'nuvanx-medical' ), $goya_tel_disp ) ) . '</a>';
 	$html .= '</div></div></section>';
 
+	$html .= nvx_semantic_graph_clinics();
 	$html .= '</div>';
 
 	return $html;

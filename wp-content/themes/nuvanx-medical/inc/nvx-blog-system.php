@@ -569,11 +569,24 @@ function nvx_theme_inject_priority_treatment_links( string $content ): string {
 		return $content;
 	}
 
-	$block  = '<div class="nvx-related-links"><p>' . esc_html( (string) $item['intro'] ) . ' ';
-	$block .= '<a href="' . esc_url( (string) $item['url'] ) . '">' . esc_html( (string) $item['anchor'] ) . '</a>';
-	$block .= esc_html( (string) $item['suffix'] ) . '</p></div>';
+		// Inyectar el grafo semántico completo correspondiente en lugar de un solo enlace
+		$block = '';
+		if ( false !== strpos( $path, 'endolift' ) ) {
+			$block = function_exists('nvx_semantic_graph_endolift') ? nvx_semantic_graph_endolift() : '';
+		} elseif ( false !== strpos( $path, 'endolaser' ) ) {
+			$block = function_exists('nvx_semantic_graph_endolaser') ? nvx_semantic_graph_endolaser() : '';
+		} elseif ( false !== strpos( $path, 'laser-co2' ) ) {
+			$block = function_exists('nvx_semantic_graph_co2') ? nvx_semantic_graph_co2() : '';
+		}
 
-	return $content . $block;
+		// Fallback al enlace simple si no hay grafo específico
+		if ( empty( $block ) ) {
+			$block  = '<div class="nvx-related-links"><p>' . esc_html( (string) $item['intro'] ) . ' ';
+			$block .= '<a href="' . esc_url( (string) $item['url'] ) . '">' . esc_html( (string) $item['anchor'] ) . '</a>';
+			$block .= esc_html( (string) $item['suffix'] ) . '</p></div>';
+		}
+
+		return $content . $block;
 }
 add_filter( 'the_content', 'nvx_theme_inject_priority_treatment_links', 24 );
 

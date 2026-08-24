@@ -223,6 +223,7 @@ function nvx_endolaser_editorial_body_markup(): string {
 
 	// Closing valoración CTA: site-wide nvx-cta-banner in footer.php (not page-local).
 
+	$html .= nvx_semantic_graph_endolaser();
 	$html .= '</div>';
 
 	return $html;
