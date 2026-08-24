@@ -350,7 +350,7 @@
   margin: 0 0 var(--nvx-margin-lead);
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-lead);
-  line-height: 1.6;
+  line-height: var(--nvx-lh-lead);
   letter-spacing: 0.01em;
   color: var(--nvx-text-on-dark-82);
 }
@@ -387,7 +387,7 @@
 
 .nvx-blog-prose > p:first-child {
   font-size: var(--nvx-type-lead);
-  line-height: 1.6;
+  line-height: var(--nvx-lh-lead);
   color: var(--nvx-charcoal);
   margin-bottom: var(--nvx-space-4);
 }
