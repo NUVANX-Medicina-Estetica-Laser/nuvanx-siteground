@@ -127,6 +127,7 @@ if (!/6,15 a 3,89/.test(co2Rct?.summary ?? '') || !/5,72 a 3,56/.test(co2Rct?.su
 const co2Meta = treatments.laser_co2.evidence.find((row) => row.pmid === '42334669');
 if (!/RR 1,10/.test(co2Meta?.summary ?? '')) fail('co2_meta_categorical_success_missing');
 if (!/RR 3,04/.test(co2Meta?.summary ?? '')) fail('co2_meta_pih_risk_missing');
+if (!/frente a RF microneedling, el dolor fue menor con CO₂/iu.test(co2Meta?.summary ?? '')) fail('co2_meta_pain_comparison_missing');
 if (!/I² 97% y 92%/.test(co2Meta?.limitation ?? '')) fail('co2_meta_heterogeneity_missing');
 
 console.log(`CLINICAL_EVIDENCE_CONTRACT=PASS treatments=3 sources=6 balanced_evidence=1 public_copy_files=${publicCopyFiles.length} forbidden_claims=absent`);
