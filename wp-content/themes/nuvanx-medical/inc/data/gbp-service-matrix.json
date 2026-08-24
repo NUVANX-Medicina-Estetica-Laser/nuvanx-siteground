@@ -1,6 +1,6 @@
 {
   "version": "2026-08-23",
-  "status": "candidate_requires_gbp_admin_verification",
+  "status": "pending_manual_panel_sync",
   "rules": {
     "prefer_google_predefined_service": true,
     "custom_service_must_be_real": true,
@@ -15,8 +15,8 @@
       "candidate_name": "Valoración médica de medicina estética",
       "owner_url": "https://nuvanx.com/madrid/valoracion/",
       "query_cluster": ["valoración medicina estética Madrid", "consulta medicina estética Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -24,8 +24,8 @@
       "candidate_name": "Endolift facial",
       "owner_url": "https://nuvanx.com/endolift-facial-papada-mandibula/",
       "query_cluster": ["Endolift Madrid", "Endolift facial Madrid", "Endolift papada Madrid", "Endolift mandíbula Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -33,8 +33,8 @@
       "candidate_name": "Endoláser corporal",
       "owner_url": "https://nuvanx.com/endolaser-corporal-grasa-localizada/",
       "query_cluster": ["endoláser Madrid", "remodelación corporal láser Madrid", "grasa localizada láser Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -42,8 +42,8 @@
       "candidate_name": "Láser CO2 fraccionado",
       "owner_url": "https://nuvanx.com/laser-co2-fraccionado-madrid-textura-cicatrices-poro/",
       "query_cluster": ["láser CO2 Madrid", "láser CO2 fraccionado Madrid", "láser cicatrices acné Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -51,8 +51,8 @@
       "candidate_name": "EXION Face",
       "owner_url": "https://nuvanx.com/exion-face/",
       "query_cluster": ["EXION Face Madrid", "EXION Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -60,8 +60,8 @@
       "candidate_name": "EXION Body",
       "owner_url": "https://nuvanx.com/exion-body/",
       "query_cluster": ["EXION Body Madrid", "EXION Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -69,8 +69,8 @@
       "candidate_name": "EXION Fractional RF",
       "owner_url": "https://nuvanx.com/exion-fractional/",
       "query_cluster": ["EXION Fractional Madrid", "radiofrecuencia fraccionada Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -78,8 +78,8 @@
       "candidate_name": "IPL médico",
       "owner_url": "https://nuvanx.com/btl-exilite-ipl-madrid/",
       "query_cluster": ["IPL Madrid", "fotorejuvenecimiento IPL Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -87,8 +87,8 @@
       "candidate_name": "Neuromoduladores faciales",
       "owner_url": "https://nuvanx.com/neuromoduladores-faciales-madrid/",
       "query_cluster": ["neuromoduladores Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -96,8 +96,8 @@
       "candidate_name": "Ácido hialurónico en labios",
       "owner_url": "https://nuvanx.com/labios-acido-hialuronico-madrid/",
       "query_cluster": ["ácido hialurónico labios Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -105,8 +105,8 @@
       "candidate_name": "Rinomodelación sin cirugía",
       "owner_url": "https://nuvanx.com/rinomodelacion-sin-cirugia-madrid/",
       "query_cluster": ["rinomodelación Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -114,8 +114,8 @@
       "candidate_name": "Tratamiento de ojeras y surco lagrimal",
       "owner_url": "https://nuvanx.com/ojeras-surco-lagrimal-madrid/",
       "query_cluster": ["tratamiento ojeras Madrid", "surco lagrimal Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -123,8 +123,8 @@
       "candidate_name": "Bioestimuladores de colágeno",
       "owner_url": "https://nuvanx.com/bioestimuladores-colageno-madrid/",
       "query_cluster": ["bioestimuladores colágeno Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     },
     {
@@ -132,8 +132,8 @@
       "candidate_name": "Profhilo",
       "owner_url": "https://nuvanx.com/profhilo-madrid/",
       "query_cluster": ["Profhilo Madrid"],
-      "chamberi": "verify_in_gbp_admin",
-      "goya": "verify_in_gbp_admin",
+      "chamberi": "pending_manual_sync",
+      "goya": "pending_manual_sync",
       "google_service_type": "verify_predefined_first"
     }
   ]
