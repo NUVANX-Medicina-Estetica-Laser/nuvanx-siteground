@@ -57,7 +57,7 @@ ob_start();
 					if ( 'chamberi' === $clinic_key ) {
 						esc_html_e( 'Medicina estética en Chamberí, Madrid — clínica NUVANX', 'nuvanx-medical' );
 					} else {
-						echo esc_html( $clinic_name );
+						esc_html_e( 'Medicina estética en Goya y Barrio de Salamanca — clínica NUVANX', 'nuvanx-medical' );
 					}
 					?>
 				</h1>
@@ -78,7 +78,14 @@ ob_start();
 							)
 						);
 					} else {
-						esc_html_e( 'Centro sanitario autorizado por la Consejería de Sanidad de la Comunidad de Madrid. Medicina estética avanzada con criterio clínico único.', 'nuvanx-medical' );
+						echo esc_html(
+							sprintf(
+								/* translators: 1: street address, 2: phone */
+								__( 'Clínica de medicina estética láser en Goya, Barrio de Salamanca: %1$s. Teléfono %2$s. Centro sanitario CS20073. Valoración médica presencial antes de cualquier tratamiento.', 'nuvanx-medical' ),
+								$clinic_address !== '' ? $clinic_address : __( 'Calle de Fernán González, 26, 28009 Madrid', 'nuvanx-medical' ),
+								$phone_display !== '' ? $phone_display : '647 505 107'
+							)
+						);
 					}
 					?>
 				</p>

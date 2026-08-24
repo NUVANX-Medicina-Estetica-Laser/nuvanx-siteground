@@ -535,15 +535,9 @@ function nvx_schema_clinics() {
 			'openingHoursSpecification' => ! empty( $ch_opening_hours ) ? $ch_opening_hours : array(
 				array(
 					'@type'     => 'OpeningHoursSpecification',
-					'dayOfWeek' => array( 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday' ),
-					'opens'     => '12:00',
-					'closes'    => '20:00',
-				),
-				array(
-					'@type'     => 'OpeningHoursSpecification',
-					'dayOfWeek' => 'Saturday',
+					'dayOfWeek' => array( 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' ),
 					'opens'     => '10:00',
-					'closes'    => '18:00',
+					'closes'    => '20:00',
 				),
 			),
 			'priceRange'                => '€€€',
@@ -587,7 +581,7 @@ function nvx_schema_clinics() {
 			'openingHoursSpecification' => ! empty( $go_opening_hours ) ? $go_opening_hours : array(
 				array(
 					'@type'     => 'OpeningHoursSpecification',
-					'dayOfWeek' => array( 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday' ),
+					'dayOfWeek' => array( 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' ),
 					'opens'     => '11:00',
 					'closes'    => '20:00',
 				),

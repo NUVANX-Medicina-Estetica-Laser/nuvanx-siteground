@@ -80,6 +80,19 @@ if (
     $failures[] = 'contacto_catalog_parity_missing';
 }
 
+// Local intent and business hours are one governed SEO/entity contract. Run the
+// dedicated source-level test from this already-blocking CI entry point.
+$local_contract = __DIR__ . '/test-local-seo-ownership.php';
+if ( ! is_file( $local_contract ) ) {
+    $failures[] = 'local_seo_ownership_contract_missing';
+} else {
+    $command = 'php ' . escapeshellarg( $local_contract );
+    passthru( $command, $local_status );
+    if ( 0 !== $local_status ) {
+        $failures[] = 'local_seo_ownership_contract_failed exit=' . $local_status;
+    }
+}
+
 // Search Analytics is a production telemetry contract, but its code/auth/privacy
 // guarantees are static and must block CI before a candidate can reach master.
 $gsc_contract = __DIR__ . '/test-gsc-search-analytics-contract.mjs';

@@ -26,17 +26,12 @@ function nvx_get_clinics_config(): array {
 			'locality'      => 'Madrid',
 			'phone'         => '669 319 836',
 			'phone_href'    => '+34669319836',
-			'hours'         => 'lunes a viernes, 12:00–20:00; sábados, 10:00–18:00',
+			'hours'         => 'lunes a sábado, 10:00–20:00',
 			'opening_hours' => array(
 				array(
-					'days'   => array( 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday' ),
-					'opens'  => '12:00',
-					'closes' => '20:00',
-				),
-				array(
-					'days'   => array( 'Saturday' ),
+					'days'   => array( 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' ),
 					'opens'  => '10:00',
-					'closes' => '18:00',
+					'closes' => '20:00',
 				),
 			),
 			'days'          => 'Martes y jueves',
@@ -51,10 +46,10 @@ function nvx_get_clinics_config(): array {
 			'locality'      => 'Madrid',
 			'phone'         => '647 505 107',
 			'phone_href'    => '+34647505107',
-			'hours'         => 'lunes a viernes, 11:00–20:00',
+			'hours'         => 'lunes a sábado, 11:00–20:00',
 			'opening_hours' => array(
 				array(
-					'days'   => array( 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday' ),
+					'days'   => array( 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' ),
 					'opens'  => '11:00',
 					'closes' => '20:00',
 				),
