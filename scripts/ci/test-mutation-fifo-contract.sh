@@ -197,3 +197,7 @@ bash "$ROOT/scripts/ci/test-sonar-project-contract.sh"
 # with their own diagnostics. Keep this call as the current static-gate
 # aggregation point until the workflow exposes a dedicated release-test step.
 bash "$ROOT/scripts/ci/test-release-regression-contract.sh"
+
+# Design-token adoption blocks the zero-baseline ratcheted categories by
+# default; --strict additionally blocks every category in STRICT_CATEGORIES.
+node "$ROOT/scripts/lint/audit-design-token-adoption.mjs"
