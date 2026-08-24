@@ -425,7 +425,7 @@ body:not(.home) .nvx-page-hero__copy h1,
   font-size: var(--nvx-type-h2);
   font-weight: var(--nvx-fw-regular);
   line-height: var(--nvx-lh-h2);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--nvx-track-h2);
   color: var(--nvx-ink);
 }
 
@@ -447,7 +447,7 @@ body:not(.home) .nvx-page-hero__copy h1,
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-kicker);
   font-weight: var(--nvx-fw-medium);
-  letter-spacing: 0.2em;
+  letter-spacing: var(--nvx-track-kicker);
   text-transform: uppercase;
   color: var(--nvx-charcoal);
 }
@@ -1148,7 +1148,7 @@ body:not(.home) .nvx-page-hero__copy h1,
   font-family: var(--nvx-sans);
   font-size: calc(var(--nvx-space-1) * 1.5);
   font-weight: var(--nvx-fw-medium);
-  letter-spacing: 0.14em;
+  letter-spacing: var(--nvx-track-button);
   text-transform: uppercase;
   text-decoration: underline;
   text-underline-offset: calc(var(--nvx-space-1) / 2);
