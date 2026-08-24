@@ -9,6 +9,8 @@
 const { google } = require('googleapis');
 const fs = require('node:fs');
 const path = require('node:path');
+const { resolveGscAuthOptions } = require('./gsc-auth-options');
+const { persistRedactedSearchAnalytics } = require('./gsc-report-retention');
 
 const args = process.argv.slice(2);
 let property = '';
@@ -146,18 +148,27 @@ function simplifyInspection(url, inspectionResult) {
 }
 
 function createSearchConsoleAuth() {
-  const credentialsPath = path.resolve(__dirname, 'credentials.json');
-  if (path.dirname(credentialsPath) !== __dirname) throw new Error('Invalid Search Console credential path');
-  const options = { scopes: ['https://www.googleapis.com/auth/webmasters.readonly'] };
-
-  if (fs.existsSync(credentialsPath)) {
-    options.credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
-    console.log('SEARCH_CONSOLE_AUTH=PRIVATE_JSON');
-  } else {
-    console.log('SEARCH_CONSOLE_AUTH=ADC');
-  }
-
+  const { options, source } = resolveGscAuthOptions(__dirname);
+  console.log(`SEARCH_CONSOLE_AUTH=${source}`);
   return new google.auth.GoogleAuth(options);
+}
+
+function safeProbeErrorCode(error) {
+  return String(error?.code || error?.status || 'GSC_API_ERROR').replace(/[^a-zA-Z0-9_]/g, '') || 'GSC_API_ERROR';
+}
+
+async function runSearchAnalyticsProbe(indexingResultsPath) {
+  try {
+    process.env.GSC_SITE_URL = property;
+    const { runFullGscAnalysis } = require('./gsc-full-analysis');
+    const { redacted } = await runFullGscAnalysis();
+    persistRedactedSearchAnalytics(indexingResultsPath, redacted);
+    console.log('GSC_SEARCH_ANALYTICS_REDACTED_RETENTION=PASS target=indexing-results.json public_raw=0');
+    console.log('GSC_SEARCH_ANALYTICS_PROBE=PASS mode=non_blocking public_raw=0');
+  } catch (error) {
+    console.warn(`::warning::GSC Search Analytics probe failed code=${safeProbeErrorCode(error)}; URL Inspection result remains authoritative for this release gate.`);
+    console.log('GSC_SEARCH_ANALYTICS_PROBE=FAIL mode=non_blocking public_raw=0');
+  }
 }
 
 async function inspectAllPages() {
@@ -202,9 +213,10 @@ async function inspectAllPages() {
   }
 
   const artifactsDir = path.join(__dirname, 'artifacts');
+  const indexingResultsPath = path.join(artifactsDir, 'indexing-results.json');
   fs.mkdirSync(artifactsDir, { recursive: true });
   fs.writeFileSync(
-    path.join(artifactsDir, 'indexing-results.json'),
+    indexingResultsPath,
     JSON.stringify({
       generatedAt: new Date().toISOString(),
       property,
@@ -225,6 +237,12 @@ async function inspectAllPages() {
   console.log(`API_ERRORS=${apiErrors}`);
   console.log(`API_ERROR_RATIO=${errorRatio.toFixed(3)}`);
   console.log('INSPECTION_COMPLETED=true');
+
+  // Search Analytics reuses the same already-authenticated WIF/ADC or private
+  // service-account fallback. It is deliberately observational/non-blocking:
+  // provider telemetry must not roll back an otherwise healthy production release.
+  await runSearchAnalyticsProbe(indexingResultsPath);
+
   if (apiErrors > 0 && errorRatio > maxErrorRatio) {
     console.error(`::error::API error ratio ${errorRatio.toFixed(3)} exceeds threshold ${maxErrorRatio.toFixed(3)}`);
     process.exitCode = 2;

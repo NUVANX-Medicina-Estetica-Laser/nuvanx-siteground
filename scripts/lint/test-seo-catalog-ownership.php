@@ -80,6 +80,19 @@ if (
     $failures[] = 'contacto_catalog_parity_missing';
 }
 
+// Search Analytics is a production telemetry contract, but its code/auth/privacy
+// guarantees are static and must block CI before a candidate can reach master.
+$gsc_contract = __DIR__ . '/test-gsc-search-analytics-contract.mjs';
+if ( ! is_file( $gsc_contract ) ) {
+    $failures[] = 'gsc_search_analytics_contract_missing';
+} else {
+    $command = 'node ' . escapeshellarg( $gsc_contract );
+    passthru( $command, $gsc_status );
+    if ( 0 !== $gsc_status ) {
+        $failures[] = 'gsc_search_analytics_contract_failed exit=' . $gsc_status;
+    }
+}
+
 if ( array() !== $failures ) {
     fwrite( STDERR, "SEO_CATALOG_OWNERSHIP_TEST=FAIL\n" . implode( "\n", $failures ) . "\n" );
     exit( 1 );

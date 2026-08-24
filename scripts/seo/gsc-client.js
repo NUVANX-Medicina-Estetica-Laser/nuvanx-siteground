@@ -1,6 +1,7 @@
 'use strict';
 
 const { google } = require('googleapis');
+const { resolveGscAuthOptions } = require('./gsc-auth-options');
 
 function formatDate(date) {
   return date.toISOString().split('T')[0];
@@ -29,9 +30,8 @@ function getGscDateRanges() {
 }
 
 function createGscClient() {
-  const auth = new google.auth.GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
-  });
+  const { options } = resolveGscAuthOptions(__dirname);
+  const auth = new google.auth.GoogleAuth(options);
   return google.searchconsole({ version: 'v1', auth });
 }
 
