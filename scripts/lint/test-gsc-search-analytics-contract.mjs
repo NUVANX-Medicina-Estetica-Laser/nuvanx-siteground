@@ -12,6 +12,7 @@ const clientPath = resolve(root, 'scripts/seo/gsc-client.js');
 const authPath = resolve(root, 'scripts/seo/gsc-auth-options.js');
 const inspectionPath = resolve(root, 'scripts/seo/index-pages.js');
 const workflowPath = resolve(root, '.github/workflows/production.yml');
+const runtimeContractPath = resolve(root, 'scripts/lint/test-gsc-search-analytics-runtime.mjs');
 
 const [analysis, client, auth, inspection, workflow] = await Promise.all([
   readFile(analysisPath, 'utf8'),
@@ -26,7 +27,7 @@ function fail(reason) {
   process.exit(1);
 }
 
-for (const scriptPath of [analysisPath, clientPath, authPath, inspectionPath]) {
+for (const scriptPath of [analysisPath, clientPath, authPath, inspectionPath, runtimeContractPath]) {
   const syntax = spawnSync(process.execPath, ['--check', scriptPath], { encoding: 'utf8' });
   if (syntax.status !== 0) fail(`node_syntax:${scriptPath.split('/').pop()}`);
 }
@@ -98,6 +99,8 @@ for (const marker of [
   'async function runSearchAnalyticsProbe(',
   "require('./gsc-full-analysis')",
   'await runFullGscAnalysis();',
+  'persistRedactedSearchAnalytics(indexingResultsPath, redacted);',
+  'GSC_SEARCH_ANALYTICS_REDACTED_RETENTION=PASS target=indexing-results.json public_raw=0',
   'GSC_SEARCH_ANALYTICS_PROBE=PASS mode=non_blocking public_raw=0',
   'GSC_SEARCH_ANALYTICS_PROBE=FAIL mode=non_blocking public_raw=0',
   'await runSearchAnalyticsProbe(indexingResultsPath);',
@@ -114,6 +117,7 @@ for (const marker of [
   'SEARCH_CONSOLE_AUTH=WIF_ADC',
   'SEARCH_CONSOLE_AUTH=SERVICE_ACCOUNT_JSON_FALLBACK',
   'node scripts/seo/index-pages.js --property "$SEARCH_CONSOLE_PROPERTY"',
+  'scripts/seo/artifacts/indexing-results.json',
 ]) {
   if (!workflow.includes(marker)) fail(`production_wif_contract_missing:${marker}`);
 }
@@ -128,4 +132,13 @@ for (const forbidden of [
   if (workflow.includes(forbidden)) fail(`workflow_private_data_forbidden:${forbidden}`);
 }
 
-console.log('GSC_SEARCH_ANALYTICS_CONTRACT=PASS api=first_party data_state=final row_limit=25000 auth=wif_or_private_json privacy=redacted generative=ui_separate syntax=checked');
+// Execute behavior, not only source markers. The runtime contract mocks Search
+// Console pagination and tests auth selection, redaction, retention into the
+// already-uploaded indexing evidence, and the private-output workspace boundary.
+const runtime = spawnSync(process.execPath, [runtimeContractPath], { encoding: 'utf8' });
+if (runtime.stdout) process.stdout.write(runtime.stdout);
+if (runtime.stderr) process.stderr.write(runtime.stderr);
+if (runtime.status !== 0) fail(`runtime_contract_exit:${runtime.status}`);
+if (!runtime.stdout.includes('GSC_SEARCH_ANALYTICS_RUNTIME=PASS')) fail('runtime_contract_pass_marker_missing');
+
+console.log('GSC_SEARCH_ANALYTICS_CONTRACT=PASS api=first_party data_state=final row_limit=25000 auth=wif_or_private_json privacy=redacted generative=ui_separate syntax=checked runtime=executed');
