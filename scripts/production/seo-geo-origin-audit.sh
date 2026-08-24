@@ -189,14 +189,15 @@ else
   fail 'ROBOTS_FETCH'
 fi
 
+info 'LLMS_GOOGLE_SEARCH_REQUIREMENT=OPTIONAL'
 if fetch_url "$BASE_URL/llms.txt" llms; then
   llms_bytes="$(wc -c < "$BODY" | tr -d ' ')"
-  if [[ "$HTTP_CODE" != '200' ]]; then fail "LLMS_HTTP status=$HTTP_CODE"
-  elif [[ "$llms_bytes" -lt 100 ]]; then fail "LLMS_TOO_SMALL bytes=$llms_bytes"
-  elif ! grep -Eiq 'NUVANX|Medicina Estética|Medicina Estetica' "$BODY"; then fail 'LLMS_IDENTITY_MISSING'
+  if [[ "$HTTP_CODE" != '200' ]]; then warn "LLMS_HTTP status=$HTTP_CODE"
+  elif [[ "$llms_bytes" -lt 100 ]]; then warn "LLMS_TOO_SMALL bytes=$llms_bytes"
+  elif ! grep -Eiq 'NUVANX|Medicina Estética|Medicina Estetica' "$BODY"; then warn 'LLMS_IDENTITY_MISSING'
   else pass "LLMS_DISCOVERY bytes=$llms_bytes"; fi
 else
-  fail 'LLMS_FETCH'
+  warn 'LLMS_FETCH'
 fi
 
 if ! fetch_url "$BASE_URL/sitemap_index.xml" sitemap-index; then echo 'SITEMAP_INDEX_FETCH=FAIL' >&2; exit 1; fi

@@ -23,10 +23,11 @@ LCP_CSS_CONTRACT="$ROOT/scripts/lint/test-lcp-css-delivery.mjs"
 META_BROWSER_OWNER_CONTRACT="$ROOT/scripts/lint/test-meta-browser-owner-retirement.php"
 SEO_OWNERSHIP_CONTRACT="$ROOT/scripts/lint/test-seo-catalog-ownership.php"
 WORDPRESS_SECURITY_CONTRACT="$ROOT/scripts/lint/test-wordpress-security-contract.php"
+SEO_GEO_AUDIT="$ROOT/scripts/production/seo-geo-origin-audit.sh"
 SEO_TOOLING_DIR="$ROOT/scripts/seo"
 THEME_DIR="$ROOT/wp-content/themes/nuvanx-medical"
 
-for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$PREMERGE_CONTRACT" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$WORDPRESS_SECURITY_CONTRACT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock" "$THEME_DIR/composer.json" "$THEME_DIR/phpcs.xml.dist"; do
+for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$PREMERGE_CONTRACT" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$WORDPRESS_SECURITY_CONTRACT" "$SEO_GEO_AUDIT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock" "$THEME_DIR/composer.json" "$THEME_DIR/phpcs.xml.dist"; do
   [[ -s "$required" ]] || fail "missing_file:$required"
 done
 
@@ -70,6 +71,30 @@ grep -Fq 'ORIGIN_SSH_ALIAS=nvx-prod-audit' "$WORKFLOW" || fail 'audit_origin_ali
 grep -Fq 'ORIGIN_SSH_ALIAS=nvx-prod-hubspot' "$WORKFLOW" || fail 'hubspot_origin_alias_not_wired'
 grep -Fq 'steps.production_identity.outcome' "$WORKFLOW" || fail 'identity_failure_not_compensated'
 pass_assert 'workflow-identity-wiring'
+
+# llms.txt remains an optional machine-readable discovery aid. Google Search
+# does not use it as a Search visibility/ranking requirement, so every LLMS_*
+# negative branch must be non-blocking while actual crawl/Search gates remain
+# release-blocking. Keep this as a static contract because it guards policy
+# classification, not the runtime reachability of the optional file.
+grep -Fq "info 'LLMS_GOOGLE_SEARCH_REQUIREMENT=OPTIONAL'" "$SEO_GEO_AUDIT" || fail 'llms_google_optional_marker_missing'
+llms_block="$(awk '
+  /LLMS_GOOGLE_SEARCH_REQUIREMENT=OPTIONAL/ { capture=1 }
+  capture { print }
+  capture && /^fi$/ { exit }
+' "$SEO_GEO_AUDIT")"
+[[ -n "$llms_block" ]] || fail 'llms_optional_block_missing'
+if grep -Eq '(^|[[:space:]])fail[[:space:]]' <<<"$llms_block"; then
+  fail 'llms_optional_branch_calls_fail'
+fi
+for marker in 'LLMS_HTTP' 'LLMS_TOO_SMALL' 'LLMS_IDENTITY_MISSING' 'LLMS_FETCH'; do
+  grep -Fq "warn \"$marker" <<<"$llms_block" \
+    || grep -Fq "warn '$marker" <<<"$llms_block" \
+    || fail "llms_negative_not_warning:$marker"
+done
+grep -Fq "fail 'ROBOTS_FETCH'" "$SEO_GEO_AUDIT" || fail 'robots_fetch_no_longer_blocking'
+grep -Fq 'fail "AI_SEARCH_CRAWLER_BLOCKED bot=$bot"' "$SEO_GEO_AUDIT" || fail 'ai_search_crawler_no_longer_blocking'
+pass_assert 'llms-google-search-optional'
 
 # Boundary must use the shared semantic parser/validator and explicit run ID.
 grep -Fq "from './deploy-identity-contract.mjs'" "$BOUNDARY" || fail 'boundary_shared_contract_missing'
