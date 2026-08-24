@@ -83,7 +83,7 @@ if ( preg_match( "/\\\$description\\s*=\\s*__\\(\\s*'(.*?)'\\s*,\\s*'nuvanx-medi
 	$valoracion_schema_desc = $desc_m[1];
 }
 
-if ( ! str_contains( $valoracion_php, 'Valoración médica estética en Madrid' )
+if ( ! str_contains( $valoracion_php, 'Valoración Médica: Endolift y Láser Estético en Madrid' )
 	|| ! str_contains( $valoracion_lead, 'Valoración médica en Madrid de 15 a 30 minutos' )
 	|| ! str_contains( $valoracion_lead, 'Sin Anestesia General' )
 	|| ! str_contains( $valoracion_lead, 'Recuperación en 48h' )
