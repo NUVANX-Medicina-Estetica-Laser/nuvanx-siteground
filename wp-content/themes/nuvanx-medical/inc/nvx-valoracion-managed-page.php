@@ -163,7 +163,8 @@ function nvx_valoracion_managed_page_markup(): string {
 	$html .= '<div class="nvx-brand-hero__inner">';
 	$html .= '<div class="nvx-brand-hero__copy">';
 	$html .= '<p class="nvx-brand-kicker">' . esc_html__( 'VALORACIÓN MÉDICA · MADRID', 'nuvanx-medical' ) . '</p>';
-	$html .= '<h1 id="nvx-valoracion-h1" class="nvx-brand-hero__title">' . esc_html__( 'Valoración médica estética en Madrid', 'nuvanx-medical' ) . '</h1>';
+	$html .= '<h1 id="nvx-valoracion-h1" class="nvx-brand-hero__title">' . esc_html__( 'Valoración Médica: Endolift y Láser Estético en Madrid', 'nuvanx-medical' ) . '</h1>';
+	$html .= '<h2 class="nvx-brand-hero__subtitle" style="font-size: 1.125rem; font-weight: 400; margin-top: 0.5rem; margin-bottom: 1.5rem; color: var(--nvx-color-text-muted, #666);">' . esc_html__( 'Especialistas en Endolift, lifting sin cirugía y tecnología láser Eufoton', 'nuvanx-medical' ) . '</h2>';
 	$html .= function_exists( 'nvx_clinical_authority_byline_markup' )
 		? nvx_clinical_authority_byline_markup()
 		: '';
@@ -309,7 +310,7 @@ function nvx_valoracion_schema_graph( $graph ) {
 			$graph[ $index ]['@type'] = array_values( array_unique( $types ) );
 		}
 
-		$graph[ $index ]['name']            = __( 'Valoración médica estética en Madrid', 'nuvanx-medical' );
+		$graph[ $index ]['name']            = __( 'Valoración Médica: Endolift y Láser Estético en Madrid', 'nuvanx-medical' );
 		$graph[ $index ]['description']     = $description;
 		$graph[ $index ]['url']             = $url;
 		$graph[ $index ]['inLanguage']      = 'es-ES';
