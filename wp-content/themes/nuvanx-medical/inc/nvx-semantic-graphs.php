@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
 function nvx_get_foundation_links_markup(): string {
 	$links = array(
 		'/madrid/valoracion/' => 'Valoración Médica Madrid',
-		'/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-chamberi/' => 'Clínica Medicina Estética Chamberí',
+		'/medicina-estetica-chamberi/' => 'Clínica Medicina Estética Chamberí',
 		'/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' => 'Clínica Medicina Estética Goya',
 		'/equipo-medico/' => 'Dr. Rivera Tejeda y Equipo',
 		'/precios-medicina-estetica-madrid/' => 'Precios de Tratamientos',
