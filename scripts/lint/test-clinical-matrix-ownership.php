@@ -40,7 +40,7 @@ foreach ( $treatments as $id => $t ) {
 }
 
 $evidence_contract = array(
-    'endolift_facial' => array( '38886198', '35083532' ),
+    'endolift_facial' => array( '38886198', '39827299', '35083532' ),
     'laser_co2'       => array( '22766970', '42334669' ),
     'exion_face'      => array( '40243133' ),
 );
@@ -111,7 +111,7 @@ if ( 'n=7 total; RF+TUS n=3' !== ( $exion_evidence['sample_size'] ?? '' ) ) {
     echo "ERROR: EXION evidence must expose the total and RF+TUS subgroup sizes.\n";
     $errors++;
 }
-if ( ! preg_match( '/endpoint histol[oó]gico/iu', (string) ( $exion_evidence['limitation'] ?? '' ) ) ) {
+if ( ! preg_match( '/endpoint histol[oó]gico/iu', (string) ( $exion_evidence['limitation'] ?? '' ) ) {
     echo "ERROR: EXION evidence must identify the mechanistic histology endpoint.\n";
     $errors++;
 }
@@ -120,28 +120,60 @@ if ( false === stripos( (string) ( $exion_evidence['limitation'] ?? '' ), 'BTL I
     $errors++;
 }
 
-$endolift_small = null;
+$endolift_critical = null;
+$endolift_small    = null;
 foreach ( (array) ( $treatments['endolift_facial']['evidence'] ?? array() ) as $row ) {
+    if ( '39827299' === ( $row['pmid'] ?? '' ) ) {
+        $endolift_critical = $row;
+    }
     if ( '35083532' === ( $row['pmid'] ?? '' ) ) {
         $endolift_small = $row;
-        break;
     }
+}
+if ( ! is_array( $endolift_critical ) || false === stripos( (string) ( $endolift_critical['summary'] ?? '' ), 'alto riesgo de sesgo' ) ) {
+    echo "ERROR: Endolift 2025 systematic review must retain the high-risk-of-bias finding.\n";
+    $errors++;
+}
+if ( ! is_array( $endolift_critical ) || false === stripos( (string) ( $endolift_critical['summary'] ?? '' ), 'falta de estandarización' ) ) {
+    echo "ERROR: Endolift 2025 systematic review must retain the parameter-standardization limitation.\n";
+    $errors++;
+}
+if ( ! is_array( $endolift_critical ) || false === stripos( (string) ( $endolift_critical['limitation'] ?? '' ), 'no demuestra por sí sola ausencia de efecto' ) ) {
+    echo "ERROR: Endolift 2025 evidence must remain balanced rather than being converted into a no-effect claim.\n";
+    $errors++;
 }
 if ( ! is_array( $endolift_small ) || false === stripos( (string) ( $endolift_small['limitation'] ?? '' ), 'Muestra muy pequeña' ) ) {
     echo "ERROR: Endolift n=9 evidence must carry the small-sample limitation.\n";
     $errors++;
 }
 
-$co2_rct = null;
+$co2_rct  = null;
+$co2_meta = null;
 foreach ( (array) ( $treatments['laser_co2']['evidence'] ?? array() ) as $row ) {
     if ( '22766970' === ( $row['pmid'] ?? '' ) ) {
         $co2_rct = $row;
-        break;
+    }
+    if ( '42334669' === ( $row['pmid'] ?? '' ) ) {
+        $co2_meta = $row;
     }
 }
 $co2_summary = is_array( $co2_rct ) ? (string) ( $co2_rct['summary'] ?? '' ) : '';
 if ( false === strpos( $co2_summary, '6,15 a 3,89' ) || false === strpos( $co2_summary, '5,72 a 3,56' ) ) {
     echo "ERROR: CO2 RCT must retain its exact published endpoint values.\n";
+    $errors++;
+}
+$co2_meta_summary = is_array( $co2_meta ) ? (string) ( $co2_meta['summary'] ?? '' ) : '';
+$co2_meta_limit   = is_array( $co2_meta ) ? (string) ( $co2_meta['limitation'] ?? '' ) : '';
+if ( false === strpos( $co2_meta_summary, 'RR 1,10' ) ) {
+    echo "ERROR: CO2 meta-analysis must retain categorical treatment-success evidence.\n";
+    $errors++;
+}
+if ( false === strpos( $co2_meta_summary, 'RR 3,04' ) ) {
+    echo "ERROR: CO2 meta-analysis must retain the PIH risk comparison.\n";
+    $errors++;
+}
+if ( false === strpos( $co2_meta_limit, 'I² 97% y 92%' ) ) {
+    echo "ERROR: CO2 meta-analysis must retain the high-heterogeneity limitation.\n";
     $errors++;
 }
 
@@ -165,5 +197,5 @@ if ( $errors > 0 ) {
     exit( 1 );
 }
 
-echo "OK: Clinical Matrix validation passed with source-traceable evidence contract.\n";
+echo "OK: Clinical Matrix validation passed with source-traceable balanced evidence contract.\n";
 exit( 0 );
