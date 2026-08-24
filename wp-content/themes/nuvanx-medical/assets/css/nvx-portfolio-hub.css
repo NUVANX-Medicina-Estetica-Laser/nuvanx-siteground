@@ -8,7 +8,7 @@
    SECCIÓN 02: MAPA ANATÓMICO (SEO)
    ========================================================= */
 .nvx-hub-map {
-  padding-block: clamp(120px, 12vw, 200px);
+  padding-block: var(--nvx-portfolio-stage-py);
   background: var(--nvx-surface-base);
 }
 
@@ -57,7 +57,7 @@
 .nvx-hub-region__name {
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-body);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   color: var(--nvx-ink);
   padding-bottom: var(--nvx-space-2);
   border-bottom: var(--nvx-border-hairline) solid var(--nvx-color-line);
@@ -105,7 +105,7 @@
   padding-inline: var(--nvx-gutter-inner);
   display: flex;
   flex-direction: column;
-  gap: clamp(96px, 12vw, 160px); /* Aún más espacio entre items */
+  gap: var(--nvx-portfolio-item-gap); /* Aún más espacio entre items */
 }
 
 .nvx-hub-catalog__item {
@@ -137,7 +137,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--nvx-ink);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   margin-bottom: var(--nvx-space-4);
 }
 
@@ -194,7 +194,7 @@
 .nvx-hub-trust__logo-text {
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-small);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -203,7 +203,7 @@
    SECCIÓN 05: LLAMADA A LA ACCIÓN (FINAL)
    ========================================================= */
 .nvx-hub-cta {
-  padding-block: clamp(120px, 12vw, 200px);
+  padding-block: var(--nvx-portfolio-stage-py);
   background: var(--nvx-ink);
   color: var(--nvx-light);
   text-align: center;
