@@ -32,17 +32,27 @@
       ],
       "follow_up": "Revisión a las 2 semanas, 3 meses y 6 meses.",
       "medical_responsible": "Dr. José Javier Rivera Tejeda (Col. 282864786)",
-      "scientific_review_date": "2026-08-01",
+      "scientific_review_date": "2026-08-24",
       "evidence": [
         {
           "study_type": "Revisión sistemática",
           "sample_size": "23 estudios incluidos",
           "title": "Endolift® / láser intralesional de 1470 nm: revisión sistemática 2024",
           "summary": "La revisión localizó 339 artículos e incluyó 23 estudios relevantes. Encontró resultados favorables en rejuvenecimiento, laxitud de cara/cuello y un perfil de seguridad favorable; también describe resultados prometedores sobre tejido adiposo en varias zonas.",
-          "limitation": "La revisión agrupa estudios heterogéneos. No establece un porcentaje universal de reducción de grasa ni predice el resultado de un paciente concreto.",
+          "limitation": "La revisión agrupa estudios heterogéneos. No establece un porcentaje universal de reducción de grasa ni predice el resultado de un paciente concreto; debe interpretarse junto con revisiones posteriores sobre la calidad de la evidencia.",
           "source_label": "PubMed · PMID 38886198",
           "source_url": "https://pubmed.ncbi.nlm.nih.gov/38886198/",
           "pmid": "38886198"
+        },
+        {
+          "study_type": "Revisión sistemática crítica",
+          "sample_size": "7 artículos seleccionados de 111 identificados",
+          "title": "Endolift®: revisión sistemática 2025 sobre calidad, parámetros y seguridad",
+          "summary": "Una revisión sistemática posterior encontró alto riesgo de sesgo, falta de estandarización de parámetros y evidencia de calidad insuficiente e inconsistente; concluyó que afirmar con solidez la eficacia y la seguridad de Endolift® sigue siendo difícil con la literatura disponible.",
+          "limitation": "Esta revisión cuestiona la robustez y generalización de la evidencia disponible; no demuestra por sí sola ausencia de efecto. Debe leerse junto con los estudios favorables y refuerza la necesidad de selección médica, parámetros individualizados y expectativas prudentes.",
+          "source_label": "PubMed · PMID 39827299",
+          "source_url": "https://pubmed.ncbi.nlm.nih.gov/39827299/",
+          "pmid": "39827299"
         },
         {
           "study_type": "Estudio clínico prospectivo pequeño",
@@ -57,6 +67,7 @@
       ],
       "clinical_sources": [
         "PubMed PMID 38886198 — systematic review of 1470 nm intralesional laser",
+        "PubMed PMID 39827299 — systematic review of Endolift evidence quality, parameters and safety",
         "PubMed PMID 35083532 — jowl fat clinical evaluation and biometric measurement",
         "Protocolo clínico oficial LASEmaR 1500 (Eufoton)"
       ]
@@ -106,8 +117,8 @@
           "study_type": "Revisión sistemática y metaanálisis comparativo",
           "sample_size": "17 estudios",
           "title": "CO₂ fraccionado frente a modalidades basadas en needling para cicatrices atróficas",
-          "summary": "Un metaanálisis de 17 estudios publicado en 2026 no encontró superioridad estadísticamente significativa del CO₂ fraccionado en la reducción media de puntuación de cicatriz ni en la reducción cuantitativa frente a modalidades basadas en needling; la heterogeneidad fue alta.",
-          "limitation": "La conclusión es comparativa y no implica equivalencia para todos los dispositivos, fototipos o tipos de cicatriz. Refuerza la necesidad de seleccionar técnica y parámetros por diagnóstico.",
+          "summary": "El metaanálisis de 2026 no encontró diferencias significativas en la reducción media de la puntuación de cicatriz ni en la reducción cuantitativa, con heterogeneidad alta. El éxito categórico favoreció modestamente al CO₂ (RR 1,10; IC 95% 1,01–1,20), mientras que la hiperpigmentación postinflamatoria fue más frecuente frente a microneedling estándar (RR 3,04; IC 95% 1,49–6,21); frente a RF microneedling, el dolor fue menor con CO₂ en el análisis agrupado.",
+          "limitation": "Los comparadores y endpoints no son uniformes y la heterogeneidad de los desenlaces continuos fue muy alta (I² 97% y 92%). Estos resultados no establecen superioridad o equivalencia universal y deben interpretarse según fototipo, tipo de cicatriz, dispositivo y perfil de riesgo.",
           "source_label": "PubMed · PMID 42334669",
           "source_url": "https://pubmed.ncbi.nlm.nih.gov/42334669/",
           "pmid": "42334669"
