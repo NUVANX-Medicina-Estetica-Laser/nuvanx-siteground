@@ -1,7 +1,10 @@
 {
   "primary_category": "Clínica de medicina estética",
   "primary_category_status": "proposed_pending_gbp_admin_inspection",
-  "secondary_categories": ["Médico", "Centro de láser"],
+  "secondary_categories": [
+    "Médico",
+    "Centro de láser"
+  ],
   "phones": {
     "chamberi_nap": "669 319 836",
     "goya_nap": "647 50 51 07",
@@ -11,26 +14,53 @@
   "review_policy": {
     "delay_days": 7,
     "incentives_forbidden": true,
-    "star_coaching_forbidden": true
+    "star_coaching_forbidden": true,
+    "status": "all_19_reviews_replied_via_windsor",
+    "last_replied_at": "2026-08-24T20:42:22.558Z"
   },
   "clinics": {
     "chamberi": {
       "name": "Centro Clínico NUVANX Chamberí",
       "reg": "CS20144",
-      "neighborhood_keywords": ["Chamberí", "Madrid"],
+      "neighborhood_keywords": [
+        "Chamberí",
+        "Madrid"
+      ],
       "place_id": "",
       "maps_query": "NUVANX Medicina Estética Láser Calle de Fernández de la Hoz 4 28010 Madrid",
       "description": "NUVANX Medicina Estética Láser Chamberí es un centro sanitario autorizado en Calle de Fernández de la Hoz 4, Bajo Derecha, Madrid. Realizamos valoración médica individualizada y tratamientos de medicina estética láser facial y corporal según indicación profesional. Atención con cita previa. Registro sanitario CS20144.",
-      "missing_photo_capture": ["fachada frontal", "fachada segundo ángulo", "portal o acceso", "recepción o sala", "consulta vacía", "señalética interior", "placa sanitaria CS20144", "equipo real en sede"]
+      "missing_photo_capture": [
+        "fachada frontal",
+        "fachada segundo ángulo",
+        "portal o acceso",
+        "recepción o sala",
+        "consulta vacía",
+        "señalética interior",
+        "placa sanitaria CS20144",
+        "equipo real en sede"
+      ]
     },
     "goya": {
       "name": "Centro Clínico NUVANX Salamanca–Goya",
       "reg": "CS20073",
-      "neighborhood_keywords": ["Salamanca", "Goya", "Madrid"],
+      "neighborhood_keywords": [
+        "Salamanca",
+        "Goya",
+        "Madrid"
+      ],
       "place_id": "",
       "maps_query": "NUVANX Medicina Estética Láser Calle de Fernán González 26 28009 Madrid",
       "description": "NUVANX Medicina Estética Láser Salamanca–Goya es un centro sanitario autorizado en Calle de Fernán González 26, Madrid. Realizamos valoración médica individualizada y tratamientos de medicina estética láser facial y corporal según indicación profesional. Atención con cita previa. Registro sanitario CS20073.",
-      "missing_photo_capture": ["fachada segundo ángulo", "portal o acceso", "recepción o sala verificada en Goya", "consulta vacía", "señalética interior", "placa sanitaria CS20073", "EXION® real en sede si está", "equipo Endolift® real en sede"]
+      "missing_photo_capture": [
+        "fachada segundo ángulo",
+        "portal o acceso",
+        "recepción o sala verificada en Goya",
+        "consulta vacía",
+        "señalética interior",
+        "placa sanitaria CS20073",
+        "EXION® real en sede si está",
+        "equipo Endolift® real en sede"
+      ]
     }
   }
 }
