@@ -92,9 +92,28 @@ for marker in 'LLMS_HTTP' 'LLMS_TOO_SMALL' 'LLMS_IDENTITY_MISSING' 'LLMS_FETCH';
     || grep -Fq "warn '$marker" <<<"$llms_block" \
     || fail "llms_negative_not_warning:$marker"
 done
+grep -Fq 'pass "LLMS_DISCOVERY bytes=$llms_bytes"' "$SEO_GEO_AUDIT" || fail 'llms_healthy_pass_missing'
+
+# Critical Search gates must remain blocking independently of llms.txt.
 grep -Fq "fail 'ROBOTS_FETCH'" "$SEO_GEO_AUDIT" || fail 'robots_fetch_no_longer_blocking'
 grep -Fq 'fail "AI_SEARCH_CRAWLER_BLOCKED bot=$bot"' "$SEO_GEO_AUDIT" || fail 'ai_search_crawler_no_longer_blocking'
-pass_assert 'llms-google-search-optional'
+grep -Fq "echo 'SITEMAP_INDEX_FETCH=FAIL' >&2; exit 1" "$SEO_GEO_AUDIT" || fail 'sitemap_fetch_no_longer_blocking'
+grep -Fq 'echo "SITEMAP_INDEX_HTTP=FAIL status=$HTTP_CODE" >&2; exit 1' "$SEO_GEO_AUDIT" || fail 'sitemap_http_no_longer_blocking'
+grep -Fq "\$issues[] = 'canonical-count-'" "$SEO_GEO_AUDIT" || fail 'canonical_count_issue_missing'
+grep -Fq "\$issues[] = 'canonical-mismatch:'" "$SEO_GEO_AUDIT" || fail 'canonical_mismatch_issue_missing'
+grep -Fq "\$issues[] = 'missing-h1'" "$SEO_GEO_AUDIT" || fail 'h1_issue_missing'
+grep -Fq "\$issues[] = 'missing-jsonld'" "$SEO_GEO_AUDIT" || fail 'jsonld_issue_missing'
+grep -Fq 'exit($issues ? 1 : 0);' "$SEO_GEO_AUDIT" || fail 'html_issue_exit_no_longer_blocking'
+grep -Fq 'fail "URL_SEO url=$url detail=$detail"' "$SEO_GEO_AUDIT" || fail 'url_seo_failure_no_longer_blocking'
+
+# Production identity is a hard boundary before the audit can report PASS.
+grep -Fq "[[ \"\$release_sha\" =~ ^[0-9a-f]{40}\$ ]] || { echo 'Invalid production deploy marker.' >&2; exit 1; }" "$SEO_GEO_AUDIT" || fail 'deploy_sha_identity_no_longer_blocking'
+grep -Fq '[[ "$(wp config get DB_NAME)" == "$PROD_DB_NAME" ]]' "$SEO_GEO_AUDIT" || fail 'production_db_identity_guard_missing'
+grep -Fq '[[ "$(wp option get home)" == "$BASE_URL" ]]' "$SEO_GEO_AUDIT" || fail 'production_home_identity_guard_missing'
+grep -Fq '[[ "$(wp option get siteurl)" == "$BASE_URL" ]]' "$SEO_GEO_AUDIT" || fail 'production_siteurl_identity_guard_missing'
+grep -Fq '[[ "$(wp option get blog_public)" == '\''1'\'' ]]' "$SEO_GEO_AUDIT" || fail 'production_indexability_identity_guard_missing'
+grep -Fq '[[ "$(wp theme list --status=active --field=name)" == '\''nuvanx-medical'\'' ]]' "$SEO_GEO_AUDIT" || fail 'production_theme_identity_guard_missing'
+pass_assert 'llms-google-search-optional-critical-gates-blocking'
 
 # Boundary must use the shared semantic parser/validator and explicit run ID.
 grep -Fq "from './deploy-identity-contract.mjs'" "$BOUNDARY" || fail 'boundary_shared_contract_missing'
