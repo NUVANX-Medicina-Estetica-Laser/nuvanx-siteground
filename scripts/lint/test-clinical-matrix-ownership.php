@@ -111,7 +111,7 @@ if ( 'n=7 total; RF+TUS n=3' !== ( $exion_evidence['sample_size'] ?? '' ) ) {
     echo "ERROR: EXION evidence must expose the total and RF+TUS subgroup sizes.\n";
     $errors++;
 }
-if ( ! preg_match( '/endpoint histol[oó]gico/iu', (string) ( $exion_evidence['limitation'] ?? '' ) ) {
+if ( ! preg_match( '/endpoint histol[oó]gico/iu', (string) ( $exion_evidence['limitation'] ?? '' ) ) ) {
     echo "ERROR: EXION evidence must identify the mechanistic histology endpoint.\n";
     $errors++;
 }
