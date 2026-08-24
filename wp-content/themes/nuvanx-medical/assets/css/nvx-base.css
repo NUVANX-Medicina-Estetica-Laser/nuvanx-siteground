@@ -208,7 +208,7 @@ html:root {
 /* Hero copy owns one gutter only; avoid reduced shell + inner padding stacking. */
 body:not(.home) .nvx-brand-hero__copy {
   width: 100%;
-  max-width: 1240px;
+  max-width: var(--nvx-shell-max);
   padding-inline: var(--nvx-gutter-inner);
 }
 
@@ -219,7 +219,7 @@ body:not(.home) .nvx-brand-hero__copy {
 
 .nvx-main .nvx-authentic-photo-grid__inner {
   width: 100%;
-  max-width: 1240px;
+  max-width: var(--nvx-shell-max);
   margin-inline: auto;
   padding-inline: var(--nvx-gutter-inner);
   box-sizing: border-box;
