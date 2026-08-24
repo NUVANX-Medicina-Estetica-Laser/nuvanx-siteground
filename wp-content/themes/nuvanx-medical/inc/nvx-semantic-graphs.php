@@ -54,7 +54,7 @@ function nvx_semantic_graph_co2(): string {
 	$html .= '<h3 class="nvx-semantic-graph__title">' . esc_html__( 'Láser CO₂ Fraccionado y Tratamientos de Piel', 'nuvanx-medical' ) . '</h3>';
 	$html .= '<ul class="nvx-semantic-list">';
 	$html .= '<li><a href="' . esc_url( home_url( '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/' ) ) . '">' . esc_html__( 'Láser CO2 Fraccionado: Información Completa', 'nuvanx-medical' ) . '</a></li>';
-	$html .= '<li><a href="' . esc_url( home_url( '/journal/' ) ) . '">' . esc_html__( 'Journal: Recuperación y Cuidados Post-Láser', 'nuvanx-medical' ) . '</a></li>';
+	$html .= '<li><a href="' . esc_url( home_url( '/blog/' ) ) . '">' . esc_html__( 'Journal: Recuperación y Cuidados Post-Láser', 'nuvanx-medical' ) . '</a></li';
 	$html .= '</ul>';
 	$html .= '<h4 class="nvx-semantic-graph__subtitle">' . esc_html__( 'Nodos Clínicos', 'nuvanx-medical' ) . '</h4>';
 	$html .= nvx_get_foundation_links_markup();
