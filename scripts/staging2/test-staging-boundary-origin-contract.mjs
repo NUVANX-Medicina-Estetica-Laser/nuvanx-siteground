@@ -25,14 +25,18 @@ for (const [label, source] of [
   requireSource(source, 'unexpected_remote_ip_$remote_ip', `${label}_loopback_remote_ip_guard_missing`);
   requireSource(source, "[[ \"$code\" == \\'200\\' ]]", `${label}_origin_http_200_guard_missing`);
   requireSource(source, 'deploy_sha_${deploy_sha:-missing}', `${label}_exact_deploy_sha_guard_missing`);
-  requireSource(source, 'sg_captcha_challenge', `${label}_origin_captcha_header_guard_missing`);
   forbidSource(source, 'base_url="http://localhost"', `${label}_legacy_http_localhost_fallback_present`);
   forbidSource(source, '"${base_url}${ROUTE}"', `${label}_legacy_http_localhost_request_present`);
 }
 
+requireSource(boundarySource, "^sg-captcha:[[:space:]]*challenge", 'boundary_origin_captcha_signature_missing');
+requireSource(boundarySource, 'sg_captcha_challenge', 'boundary_origin_captcha_diagnostic_missing');
 requireSource(boundarySource, 'missing_noindex', 'boundary_origin_noindex_guard_missing');
 requireSource(boundarySource, 'missing_nofollow', 'boundary_origin_nofollow_guard_missing');
 requireSource(boundarySource, 'ORIGIN_BOUNDARY_FAIL route=$ROUTE reason=$1', 'boundary_failure_diagnostic_missing');
+
+requireSource(sharedSource, "^sg-captcha:[[:space:]]*challenge", 'shared_origin_captcha_signature_missing');
+requireSource(sharedSource, 'captcha-header', 'shared_origin_captcha_diagnostic_missing');
 requireSource(sharedSource, 'missing-noindex', 'shared_origin_noindex_guard_missing');
 requireSource(sharedSource, 'missing-nofollow', 'shared_origin_nofollow_guard_missing');
 requireSource(sharedSource, 'ORIGIN_VERIFY_FAIL route=$ROUTE reason=$1', 'shared_verify_failure_diagnostic_missing');
@@ -43,4 +47,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('STAGING_BOUNDARY_ORIGIN_CONTRACT=PASS owners=boundary,shared transport=https-loopback host=sni-preserved status=200 sha=exact robots=noindex,nofollow diagnostic=explicit');
+console.log('STAGING_BOUNDARY_ORIGIN_CONTRACT=PASS owners=boundary,shared transport=https-loopback host=sni-preserved status=200 sha=exact robots=noindex,nofollow captcha=strict diagnostic=explicit');
