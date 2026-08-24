@@ -126,35 +126,43 @@ function sshAliasConfigured(alias) {
 }
 
 function verifyViaSiteGroundOrigin(route) {
-  // Keep shell parameter expansions in ordinary strings. String.raw is used only
-  // for backslash-heavy entries that contain no JavaScript interpolation.
+  // A challenged GitHub-runner request is revalidated against the exact HTTPS
+  // WordPress vhost from SiteGround itself. --resolve bypasses the public edge
+  // challenge while preserving the canonical HTTPS Host/SNI and route.
   const remoteScript = [
     'set -Eeuo pipefail',
-    'base_url="http://localhost"',
+    'origin_url="https://${EXPECTED_HOST}${ROUTE}"',
     'headers="$(mktemp)"',
     'body="$(mktemp)"',
     'cleanup() { rm -f "$headers" "$body"; }',
     'trap cleanup EXIT',
-    'result="$(curl -4 -sS --connect-timeout 10 --max-time 30 -A \'NUVANX-Staging-Origin-Boundary/1.3\' -H \'Accept: text/html,application/xhtml+xml\' -H "Host: ${EXPECTED_HOST}" -D "$headers" -o "$body" -w \'%{http_code}|%{url_effective}\' "${base_url}${ROUTE}")"',
-    'code="${result%%|*}"',
-    'effective="${result#*|}"',
-    'test "$code" = \'200\'',
-    'case "$effective" in "http://localhost/"*|"http://localhost") ;; *) echo "ORIGIN_BOUNDARY_FAIL route=$ROUTE final=$effective" >&2; exit 1 ;; esac',
-    '! grep -Fq \'${SITEGROUND_CAPTCHA_PATH}\' "$body"',
-    '! grep -Eiq \'^sg-captcha:[[:space:]]*challenge\' "$headers"',
+    'fail_origin() { echo "ORIGIN_BOUNDARY_FAIL route=$ROUTE reason=$1" >&2; exit 1; }',
+    'set +e',
+    'result="$(curl -4 -k -sS --connect-timeout 10 --max-time 30 --resolve "${EXPECTED_HOST}:443:127.0.0.1" --proto \'=https\' -A \'NUVANX-Staging-Origin-Boundary/1.4\' -H \'Accept: text/html,application/xhtml+xml\' -H \'Cache-Control: no-cache\' -D "$headers" -o "$body" -w \'%{http_code}|%{url_effective}|%{remote_ip}\' "$origin_url")"',
+    'curl_rc=$?',
+    'set -e',
+    '[[ "$curl_rc" -eq 0 ]] || fail_origin "curl_exit_$curl_rc"',
+    'code="$(printf \'%s\' "$result" | cut -d\'|\' -f1)"',
+    'effective="$(printf \'%s\' "$result" | cut -d\'|\' -f2)"',
+    'remote_ip="$(printf \'%s\' "$result" | cut -d\'|\' -f3)"',
+    '[[ "$code" == \'200\' ]] || fail_origin "http_code_$code"',
+    'case "$effective" in "https://${EXPECTED_HOST}/"*|"https://${EXPECTED_HOST}") ;; *) fail_origin "final_url_$effective" ;; esac',
+    '[[ "$remote_ip" == \'127.0.0.1\' || "$remote_ip" == \'::1\' ]] || fail_origin "unexpected_remote_ip_$remote_ip"',
+    '! grep -Fq \'${SITEGROUND_CAPTCHA_PATH}\' "$body" || fail_origin \'captcha_path_in_body\'',
+    '! grep -Eiq \'^sg-captcha:[[:space:]]*challenge\' "$headers" || fail_origin \'sg_captcha_challenge\'',
     'extract_meta_content() {',
     String.raw`  php -r '$html=file_get_contents($argv[1]); $wanted=strtolower($argv[2]); preg_match_all("/<meta\b[^>]*>/is", $html, $tags); foreach ($tags[0] as $tag) { if (!preg_match("/\bname\s*=\s*(?:\x22([^\x22]+)\x22|\x27([^\x27]+)\x27)/is", $tag, $name)) continue; $actual=strtolower(trim(html_entity_decode($name[1] !== "" ? $name[1] : $name[2], ENT_QUOTES | ENT_HTML5, "UTF-8"))); if ($actual !== $wanted) continue; if (preg_match("/\bcontent\s*=\s*(?:\x22([^\x22]*)\x22|\x27([^\x27]*)\x27)/is", $tag, $content)) echo trim(html_entity_decode($content[1] !== "" ? $content[1] : $content[2], ENT_QUOTES | ENT_HTML5, "UTF-8")); break; }' "$body" "$1"`,
     '}',
     'deploy_sha="$(extract_meta_content nvx-deploy-sha)"',
-    'test "$deploy_sha" = "$EXPECTED_SHA"',
+    '[[ "$deploy_sha" == "$EXPECTED_SHA" ]] || fail_origin "deploy_sha_${deploy_sha:-missing}"',
     'robots_meta="$(extract_meta_content robots)"',
     'xrobots="$(grep -Ei \'^x-robots-tag:\' "$headers" | tail -n 1 | sed -E \'s/^[Xx]-[Rr]obots-[Tt]ag:[[:space:]]*//\' || true)"',
     'combined="${robots_meta}${xrobots:+,${xrobots}}"',
-    'printf \'%s\' "$combined" | grep -Eiq \'noindex\'',
-    'printf \'%s\' "$combined" | grep -Eiq \'nofollow\'',
-    'if printf \'%s\' "$combined" | grep -Eiq \'(^|[^a-z])index[[:space:]]*,?[[:space:]]*follow([^a-z]|$)\'; then echo "ORIGIN_BOUNDARY_FAIL route=$ROUTE reason=index-follow" >&2; exit 1; fi',
+    'printf \'%s\' "$combined" | grep -Eiq \'noindex\' || fail_origin \'missing_noindex\'',
+    'printf \'%s\' "$combined" | grep -Eiq \'nofollow\' || fail_origin \'missing_nofollow\'',
+    'if printf \'%s\' "$combined" | grep -Eiq \'(^|[^a-z])index[[:space:]]*,?[[:space:]]*follow([^a-z]|$)\'; then fail_origin \'index_follow_present\'; fi',
     String.raw`robots_b64="$(printf '%s' "$combined" | base64 | tr -d '\n')"`,
-    'echo "ORIGIN_BOUNDARY=PASS route=$ROUTE status=$code final=$effective sha=$deploy_sha robots_b64=$robots_b64"',
+    'echo "ORIGIN_BOUNDARY=PASS route=$ROUTE status=$code final=$effective remote_ip=$remote_ip sha=$deploy_sha robots_b64=$robots_b64"',
     '',
   ].join('\n');
 
