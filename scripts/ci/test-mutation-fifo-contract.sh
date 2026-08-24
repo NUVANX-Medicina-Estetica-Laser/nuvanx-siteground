@@ -42,11 +42,9 @@ if [[ "${1:-}" == --paginate ]]; then
   scenario="${TEST_SCENARIO:-pass}"
   case "$scenario" in
     pass)
-      # No older active mutation runs
       exit 0
       ;;
     blocked)
-      # Older run 41 in_progress on staging
       printf '%s\t%s\t%s\t%s\t%s\n' '41' 'in_progress' 'push' '.github/workflows/staging.yml' '0123456789abcdef0123456789abcdef01234567'
       exit 0
       ;;
@@ -192,6 +190,11 @@ php "$ROOT/scripts/lint/test-clinic-media-budget.php"
 # Sonar configuration must describe only supported scanner behavior. Remote
 # Quality Gate conditions stay server-owned, and coverage is never fabricated.
 bash "$ROOT/scripts/ci/test-sonar-project-contract.sh"
+
+# The Staging boundary must bypass a SiteGround 202 challenge only through the
+# exact HTTPS vhost on loopback, preserving host/SNI, exact deploy SHA and the
+# strict noindex,nofollow contract. HTTP localhost fallback is forbidden.
+node "$ROOT/scripts/staging2/test-staging-boundary-origin-contract.mjs"
 
 # Release and theme regressions are intentionally owned by a separate contract
 # with their own diagnostics. Keep this call as the current static-gate
