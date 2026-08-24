@@ -41,7 +41,7 @@ async function collectPublicCopyFiles(dir) {
 }
 
 const required = {
-  endolift_facial: ['38886198', '35083532'],
+  endolift_facial: ['38886198', '39827299', '35083532'],
   laser_co2: ['22766970', '42334669'],
   exion_face: ['40243133'],
 };
@@ -110,7 +110,13 @@ if (!/n=7 total; RF\+TUS n=3/.test(exion.sample_size)) fail('exion_small_subgrou
 if (!/endpoint histol[oó]gico/iu.test(exion.limitation)) fail('exion_histology_limitation_missing');
 if (!/financiad[oa] por BTL Industries/iu.test(exion.limitation)) fail('exion_funding_disclosure_missing');
 
-const endoliftSmall = treatments.endolift_facial.evidence.find((row) => row.pmid === '35083532');
+const endoliftEvidence = treatments.endolift_facial.evidence;
+const endoliftCritical = endoliftEvidence.find((row) => row.pmid === '39827299');
+if (!/alto riesgo de sesgo/iu.test(endoliftCritical?.summary ?? '')) fail('endolift_2025_bias_finding_missing');
+if (!/falta de estandarizaci[oó]n/iu.test(endoliftCritical?.summary ?? '')) fail('endolift_2025_standardization_finding_missing');
+if (!/no demuestra por sí sola ausencia de efecto/iu.test(endoliftCritical?.limitation ?? '')) fail('endolift_2025_balance_qualifier_missing');
+
+const endoliftSmall = endoliftEvidence.find((row) => row.pmid === '35083532');
 if (!/Muestra muy pequeña/iu.test(endoliftSmall?.limitation ?? '')) fail('endolift_small_sample_limitation_missing');
 
 const co2Rct = treatments.laser_co2.evidence.find((row) => row.pmid === '22766970');
@@ -118,4 +124,9 @@ if (!/6,15 a 3,89/.test(co2Rct?.summary ?? '') || !/5,72 a 3,56/.test(co2Rct?.su
   fail('co2_rct_endpoint_values_missing');
 }
 
-console.log(`CLINICAL_EVIDENCE_CONTRACT=PASS treatments=3 sources=5 public_copy_files=${publicCopyFiles.length} forbidden_claims=absent`);
+const co2Meta = treatments.laser_co2.evidence.find((row) => row.pmid === '42334669');
+if (!/RR 1,10/.test(co2Meta?.summary ?? '')) fail('co2_meta_categorical_success_missing');
+if (!/RR 3,04/.test(co2Meta?.summary ?? '')) fail('co2_meta_pih_risk_missing');
+if (!/I² 97% y 92%/.test(co2Meta?.limitation ?? '')) fail('co2_meta_heterogeneity_missing');
+
+console.log(`CLINICAL_EVIDENCE_CONTRACT=PASS treatments=3 sources=6 balanced_evidence=1 public_copy_files=${publicCopyFiles.length} forbidden_claims=absent`);
