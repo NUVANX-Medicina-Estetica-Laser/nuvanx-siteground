@@ -172,6 +172,10 @@ if ( false === strpos( $co2_meta_summary, 'RR 3,04' ) ) {
     echo "ERROR: CO2 meta-analysis must retain the PIH risk comparison.\n";
     $errors++;
 }
+if ( false === stripos( $co2_meta_summary, 'frente a RF microneedling, el dolor fue menor con CO₂' ) ) {
+    echo "ERROR: CO2 meta-analysis must retain the lower-pain comparison against RF microneedling.\n";
+    $errors++;
+}
 if ( false === strpos( $co2_meta_limit, 'I² 97% y 92%' ) ) {
     echo "ERROR: CO2 meta-analysis must retain the high-heterogeneity limitation.\n";
     $errors++;
