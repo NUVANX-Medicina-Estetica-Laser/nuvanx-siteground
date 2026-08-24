@@ -22,7 +22,7 @@
 /* ── Inner: desktop 25/33/22/20 (brand + treatments + clinics + NUVANX) ─ */
 .nvx-footer__inner {
   width: 100%;
-  max-width: 1240px;
+  max-width: var(--nvx-shell-max);
   margin-inline: auto;
   padding: var(--nvx-space-7) var(--nvx-gutter-inner) 0;
   box-sizing: border-box;
@@ -256,7 +256,7 @@
 
 .nvx-footer__bottom-inner {
   width: 100%;
-  max-width: 1240px;
+  max-width: var(--nvx-shell-max);
   margin-inline: auto;
   padding: var(--nvx-space-6) var(--nvx-gutter-inner);
   box-sizing: border-box;
