@@ -81,7 +81,7 @@ grep -Fq "info 'LLMS_GOOGLE_SEARCH_REQUIREMENT=OPTIONAL'" "$SEO_GEO_AUDIT" || fa
 llms_block="$(awk '
   /LLMS_GOOGLE_SEARCH_REQUIREMENT=OPTIONAL/ { capture=1 }
   capture { print }
-  capture && /^fi$/ { exit }
+  capture && /^[[:space:]]*fi[[:space:]]*$/ { exit }
 ' "$SEO_GEO_AUDIT")"
 [[ -n "$llms_block" ]] || fail 'llms_optional_block_missing'
 if grep -Eq '(^|[[:space:]])fail[[:space:]]' <<<"$llms_block"; then
