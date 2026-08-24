@@ -172,7 +172,7 @@
   margin: 0 0 var(--nvx-margin-h3);
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-h3);
-  font-weight: 400;
+  font-weight: var(--nvx-fw-regular);
   line-height: var(--nvx-lh-h3);
   letter-spacing: var(--nvx-track-h3);
   color: var(--nvx-ink);
@@ -219,7 +219,7 @@
   border-bottom: var(--nvx-border-hairline) solid var(--nvx-ink);
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-button);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   letter-spacing: var(--nvx-track-button);
   text-transform: uppercase;
   text-decoration: none;
@@ -251,7 +251,7 @@
   margin: 0 0 var(--nvx-space-3);
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-h3);
-  font-weight: 400;
+  font-weight: var(--nvx-fw-regular);
   line-height: var(--nvx-lh-h3);
   color: var(--nvx-ink);
 }
@@ -458,7 +458,7 @@
 }
 
 .nvx-blog-prose strong {
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   color: var(--nvx-ink);
 }
 
@@ -478,7 +478,7 @@
 
 .nvx-blog-prose li::marker {
   color: var(--nvx-accent-muted);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
 }
 
 .nvx-blog-prose blockquote,
@@ -562,7 +562,7 @@
   border-radius: var(--nvx-radius-button);
   background: var(--nvx-ink);
   font-size: var(--nvx-type-button);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   letter-spacing: var(--nvx-track-button);
   text-transform: uppercase;
   text-decoration: none;
@@ -670,7 +670,7 @@
   margin-bottom: var(--nvx-space-2);
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-kicker);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   letter-spacing: var(--nvx-track-kicker);
   text-transform: uppercase;
   color: var(--nvx-accent-muted);
@@ -721,7 +721,7 @@
   margin: 0 0 var(--nvx-margin-h1);
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-h1);
-  font-weight: 400;
+  font-weight: var(--nvx-fw-regular);
   line-height: var(--nvx-lh-h1);
   letter-spacing: var(--nvx-track-h1);
   color: var(--nvx-text-on-dark);
@@ -742,7 +742,7 @@
   border-top: var(--nvx-border-hairline) solid var(--nvx-color-line);
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-h2);
-  font-weight: 400;
+  font-weight: var(--nvx-fw-regular);
   line-height: var(--nvx-lh-h2);
   letter-spacing: var(--nvx-track-h2);
   color: var(--nvx-ink);
@@ -754,7 +754,7 @@
   margin: var(--nvx-space-6) 0 var(--nvx-margin-h3);
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-h3);
-  font-weight: 400;
+  font-weight: var(--nvx-fw-regular);
   line-height: var(--nvx-lh-h3);
   letter-spacing: var(--nvx-track-h3);
   color: var(--nvx-ink);
