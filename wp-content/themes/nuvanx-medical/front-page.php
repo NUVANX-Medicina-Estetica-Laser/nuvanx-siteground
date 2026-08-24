@@ -46,6 +46,42 @@ ob_start();
 		</div>
 	</section>
 
+	<section class="nvx-home-data" aria-labelledby="nvx-home-data-title">
+		<div class="nvx-home-data__inner">
+			<h2 id="nvx-home-data-title" class="nvx-home-data__header">NUVANX EN CIFRAS &middot; DATOS INTERNOS VERIFICADOS</h2>
+			
+			<div class="nvx-home-data__grid">
+				<div class="nvx-home-data__stat">
+					<span class="nvx-home-data__number">+1.500</span>
+					<p class="nvx-home-data__label">Pacientes valorados médicamente desde 2024</p>
+				</div>
+				<div class="nvx-home-data__stat">
+					<span class="nvx-home-data__number">+2.000</span>
+					<p class="nvx-home-data__label">Tratamientos realizados en dos sedes desde apertura</p>
+				</div>
+				<div class="nvx-home-data__stat">
+					<span class="nvx-home-data__number">3</span>
+					<p class="nvx-home-data__label">Médicos especialistas con número de colegiación activo</p>
+				</div>
+			</div>
+
+			<div class="nvx-home-data__context">
+				<p>Cada paciente comienza con una valoración médica individual. Los datos anteriores reflejan la actividad clínica real de las sedes de Chamberí (CS20144) y Salamanca&ndash;Goya (CS20073) desde 2024, con equipo médico colegiado en el ICOMEM.</p>
+			</div>
+
+			<div class="nvx-home-data__badges">
+				<span class="nvx-home-data__badge">Endolift&reg; &mdash; desde 798,60 &euro;</span>
+				<span class="nvx-home-data__badge">CO<sub>2</sub> fraccionado &mdash; desde 330 &euro;</span>
+				<span class="nvx-home-data__badge">EXION&reg; BTL</span>
+				<span class="nvx-home-data__badge">2 sedes &middot; Madrid</span>
+			</div>
+
+			<footer class="nvx-home-data__footer">
+				<p>Datos internos NUVANX. Actividad acumulada desde apertura en 2024. Equipo médico: Dr. José Javier Rivera Tejeda (ICOMEM 282864786), Dra. Ivon Yamileth Rivera Deras (ICOMEM 284621525), Dr. Fabio Augusto Quiñónez Bareiro (ICOMEM 282877543).</p>
+			</footer>
+		</div>
+	</section>
+
 	<section class="nvx-home-standard" aria-labelledby="nvx-home-standard-title">
 		<header class="nvx-home-standard__header">
 			<h2 id="nvx-home-standard-title" class="nvx-home-standard__title">Intervención mínima. Planificación estructural.</h2>

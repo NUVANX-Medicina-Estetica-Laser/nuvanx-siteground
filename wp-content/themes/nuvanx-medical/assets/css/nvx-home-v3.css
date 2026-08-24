@@ -727,3 +727,97 @@
   content-visibility: auto;
   contain-intrinsic-size: 0 600px;
 }
+
+/* ==========================================================================
+   Home Data Block (NUVANX EN CIFRAS)
+   ========================================================================== */
+.nvx-home-data {
+	background: var(--nvx-light, #ffffff);
+	padding-block: var(--nvx-space-12) var(--nvx-space-12);
+}
+
+.nvx-home-data__inner {
+	max-width: var(--nvx-measure-wide, 1024px);
+	margin: 0 auto;
+	padding-inline: var(--nvx-gutter-inner);
+}
+
+.nvx-home-data__header {
+	font-family: var(--nvx-sans);
+	font-size: var(--nvx-type-caption);
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--nvx-text-muted);
+	margin-bottom: var(--nvx-space-8);
+}
+
+.nvx-home-data__grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: var(--nvx-space-8);
+	margin-bottom: var(--nvx-space-10);
+}
+
+@media (min-width: 48rem) {
+	.nvx-home-data__grid {
+		grid-template-columns: repeat(3, 1fr);
+		gap: var(--nvx-space-6);
+	}
+}
+
+.nvx-home-data__number {
+	display: block;
+	font-family: var(--nvx-sans);
+	font-size: var(--nvx-type-display, clamp(2.8rem, 5vw, 4.2rem));
+	font-weight: 400;
+	color: var(--nvx-text-base);
+	margin-bottom: var(--nvx-space-2);
+	line-height: 1.1;
+}
+
+.nvx-home-data__label {
+	font-family: var(--nvx-sans);
+	font-size: var(--nvx-type-body);
+	color: var(--nvx-text-muted);
+	line-height: 1.5;
+}
+
+.nvx-home-data__context {
+	font-family: var(--nvx-sans);
+	font-size: var(--nvx-type-body);
+	color: var(--nvx-text-muted);
+	line-height: 1.6;
+	border-left: 4px solid var(--nvx-border-soft, #cecece);
+	padding-left: var(--nvx-space-6);
+	margin-bottom: var(--nvx-space-8);
+	max-width: var(--nvx-measure);
+}
+
+.nvx-home-data__badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--nvx-space-3);
+	margin-bottom: var(--nvx-space-8);
+}
+
+.nvx-home-data__badge {
+	font-family: var(--nvx-sans);
+	font-size: var(--nvx-type-sm);
+	color: var(--nvx-text-muted);
+	border: 1px solid var(--nvx-border-soft, #cecece);
+	padding: var(--nvx-space-2) var(--nvx-space-4);
+	border-radius: 4px;
+	white-space: nowrap;
+}
+
+.nvx-home-data__footer {
+	font-family: var(--nvx-sans);
+	font-size: var(--nvx-type-xs);
+	color: var(--nvx-text-muted);
+	line-height: 1.5;
+}
+
+.nvx-home-data__stat {
+	border-top: 1px solid var(--nvx-border-soft, #cecece);
+	padding-top: var(--nvx-space-4);
+}
