@@ -57,7 +57,7 @@
   object-fit: cover;
   display: block;
   transform: scale(1);
-  transition: transform 400ms ease;
+  transition: transform var(--nvx-duration-slow) ease;
 }
 
 .nvx-blog-card:hover .nvx-blog-card__image,
@@ -289,7 +289,7 @@
 /* Single article hero - diseño elegante sin imágenes ni overlay */
 .nvx-blog-hero {
   background: var(--nvx-ink);
-  animation: fadeInUp 600ms ease;
+  animation: fadeInUp var(--nvx-duration-slower) ease;
 }
 
 @keyframes fadeInUp {
@@ -334,8 +334,8 @@
   text-decoration: none;
   color: var(--nvx-text-on-dark-72);
   transition:
-    color 160ms ease,
-    opacity 160ms ease;
+    color var(--nvx-duration-fast) ease,
+    opacity var(--nvx-duration-fast) ease;
 }
 
 .nvx-blog-hero__category:hover,
@@ -428,7 +428,7 @@
   margin-bottom: var(--nvx-space-2);
   line-height: 1.7;
   color: var(--nvx-text-body);
-  transition: color 160ms ease;
+  transition: color var(--nvx-duration-fast) ease;
 }
 
 .nvx-blog-prose li:hover {
@@ -447,8 +447,8 @@
   text-decoration-thickness: var(--nvx-border-hairline);
   text-underline-offset: calc(var(--nvx-space-1, 8px) / 2);
   transition:
-    color 160ms ease,
-    text-decoration-color 160ms ease;
+    color var(--nvx-duration-fast) ease,
+    text-decoration-color var(--nvx-duration-fast) ease;
 }
 
 .nvx-blog-prose a:hover,

@@ -58,6 +58,10 @@
   --nvx-shadow-button: 0 8px 24px rgba(26, 26, 26, 0.12);
   --nvx-shadow-button-hover: 0 16px 32px rgba(26, 26, 26, 0.14);
   --nvx-accent-glow: rgba(252, 251, 248, 0.18);
+  --nvx-shadow-focus-light: 0 0 0 2px var(--nvx-light);
+  --nvx-shadow-focus-glow: 0 0 0 3px var(--nvx-accent-glow);
+  --nvx-shadow-button-on-dark: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --nvx-shadow-button-on-dark-hover: 0 8px 24px rgba(0, 0, 0, 0.4);
 
   /* Escala de 8px */
   --nvx-space-1: 8px;
@@ -71,6 +75,20 @@
   --nvx-space-9: 72px;
   --nvx-space-10: 80px;
   --nvx-space-12: 96px;
+
+  /* Semantic spacing owners for non-scale responsive/layout values. */
+  --nvx-nav-mobile-pad-y: 12px;
+  --nvx-nav-gap: 2px;
+  --nvx-nav-gap-compact: 1px;
+  --nvx-factsheet-term-gap: 2px;
+  --nvx-visually-hidden-offset: -1px;
+  --nvx-home-philosophy-py: clamp(90px, 8vw, 140px);
+  --nvx-home-evidence-py: clamp(64px, 10vw, 120px);
+  --nvx-home-closure-py: clamp(70px, 7vw, 110px);
+  --nvx-portfolio-stage-py: clamp(120px, 12vw, 200px);
+  --nvx-portfolio-item-gap: clamp(96px, 12vw, 160px);
+  --nvx-legal-page-pad-start: clamp(48px, 6vw, 88px);
+  --nvx-legal-card-pad: clamp(28px, 4vw, 52px);
 
   --nvx-gap-base: clamp(16px, 2.5vw, 24px);
   --nvx-gap-wide: clamp(24px, 3vw, 40px);
@@ -133,6 +151,7 @@
   --nvx-radius-button: var(--nvx-radius-pill);
   --nvx-radius-card: 0;
   --nvx-radius-image: 0;
+  --nvx-radius-legal-card-mobile: 16px;
 
 
   --nvx-media-overlay: linear-gradient(
@@ -245,11 +264,16 @@
 --nvx-section-tight-width: 800px;
 
 /* ========== MOTION & TRANSITIONS ========== */
+--nvx-duration-instant: 80ms;
 --nvx-duration-fast: 160ms;
+--nvx-duration-normal: 240ms;
+--nvx-duration-slow: 320ms;
+--nvx-duration-slower: 480ms;
 
 --nvx-ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
 --nvx-transition-fast: var(--nvx-duration-fast) var(--nvx-ease-standard);
+--nvx-transition-normal: var(--nvx-duration-normal) var(--nvx-ease-standard);
 
   /* Alias para variables huérfanas (Audit 4.5) */
   --nvx-color-soft: var(--nvx-surface-soft);
@@ -262,10 +286,17 @@
 }
 /* Z-index system (CSS-1) */
 :root {
+  /* Reusable layers inside an isolated/local stacking context. */
+  --nvx-z-local-base: 1;
+  --nvx-z-local-overlay: 2;
+  --nvx-z-local-content: 3;
+  --nvx-z-local-control: 4;
+
   --nvx-z-base: 1;
   --nvx-z-raised: 10;
   --nvx-z-dropdown: 100;
   --nvx-z-sticky: 200;
+  --nvx-z-sticky-cta: 900;
   --nvx-z-header: 1000;
   --nvx-z-overlay: 2000;
   --nvx-z-modal: 3000;

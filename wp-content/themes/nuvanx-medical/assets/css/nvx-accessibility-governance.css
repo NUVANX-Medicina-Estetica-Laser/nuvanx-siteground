@@ -70,7 +70,59 @@
 /* Conversion-stage content must paint above its decorative background layers. */
 .nvx-form-stage > .nvx-brand-section__inner {
   position: relative;
-  z-index: 1;
+  z-index: var(--nvx-z-local-base);
+}
+
+/* The governance layer is concatenated after nvx-patterns-editorial.css.
+ * Keep the effective interior-hero stack on semantic tokens without rewriting
+ * the large legacy pattern source solely for its two local stacking constants. */
+.nvx-brand-hero__copy,
+.nvx-editorial-hero__copy,
+.nvx-page-hero__copy,
+.nvx-hero__copy {
+  z-index: var(--nvx-z-local-overlay);
+}
+
+.nvx-brand-hero__copy > *,
+.nvx-editorial-hero__copy > *,
+.nvx-page-hero__copy > *,
+.nvx-hero__copy > * {
+  z-index: var(--nvx-z-local-base);
+}
+
+/* Later governance owns reusable focus elevation and the mobile legal-card
+ * radius while preserving the exact values emitted by their legacy sources. */
+.nvx-hubspot-form-section .hs-input:focus,
+.nvx-hs-lead-form .hs-input:focus,
+.nvx-hubspot-form-section input:focus-visible {
+  box-shadow: var(--nvx-shadow-focus-glow);
+}
+
+@media (max-width: 600px) {
+  .nvx-legal-page > .nvx-legal-card {
+    border-radius: var(--nvx-radius-legal-card-mobile);
+  }
+}
+
+/* Large legacy components remain byte-stable; this later layer owns their
+ * effective spacing with semantic tokens while exact source literals stay
+ * fail-closed in the adoption auditor. */
+.nvx-footer {
+  padding-bottom: var(--nvx-space-10);
+}
+
+.nvx-hp {
+  margin: var(--nvx-visually-hidden-offset);
+}
+
+.nvx-clinical-factsheet__list dt {
+  margin-bottom: var(--nvx-factsheet-term-gap);
+}
+
+@media (min-width: 768px) {
+  .nvx-footer {
+    padding-bottom: 0;
+  }
 }
 
 /* Compact navigation contract: use the hamburger until a true wide desktop can fit the full menu. */
@@ -91,7 +143,7 @@
   }
 
   .nvx-mobile-nav__list a {
-    padding-block: max(var(--nvx-space-2, 16px), 12px);
+    padding-block: max(var(--nvx-space-2, 16px), var(--nvx-nav-mobile-pad-y));
   }
 }
 
@@ -146,7 +198,7 @@
   color: var(--nvx-ink);
   border: var(--nvx-border-hairline) solid var(--nvx-ink);
   text-decoration: none;
-  transition: top 0.15s ease;
+  transition: top var(--nvx-duration-fast) ease;
   outline: none;
 }
 .nvx-skip-link:focus {
@@ -154,7 +206,7 @@
   outline: 3px solid var(--nvx-ink);
   outline-offset: 2px;
   z-index: calc(var(--nvx-z-a11y) + 1);
-  box-shadow: 0 0 0 2px var(--nvx-light);
+  box-shadow: var(--nvx-shadow-focus-light);
 }
 @media (prefers-reduced-motion: reduce) {
   .nvx-skip-link { transition: none; }
@@ -163,9 +215,9 @@
 /* Global prefers-reduced-motion override (CSS-2) */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important; /* nvx-token-exception: reduced-motion override */
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important; /* nvx-token-exception: reduced-motion override */
     scroll-behavior: auto !important;
   }
   .nvx-brand-btn:hover,

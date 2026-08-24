@@ -330,7 +330,7 @@
    Give them an explicit editorial shell instead of leaving the 68ch wrapper pinned
    to the left edge of a 1240px desktop canvas. */
 .nvx-page.nvx-page--legal > .nvx-blog-article.nvx-brand-readable {
-  padding-block: clamp(48px, 6vw, 88px) var(--nvx-pad-section);
+  padding-block: var(--nvx-legal-page-pad-start) var(--nvx-pad-section);
 }
 
 .nvx-page.nvx-page--legal > .nvx-blog-article.nvx-brand-readable > .nvx-legal-page {
@@ -362,7 +362,7 @@
   width: 100%;
   max-width: 860px;
   margin: var(--nvx-space-6) auto 0;
-  padding: clamp(28px, 4vw, 52px);
+  padding: var(--nvx-legal-card-pad);
   border: 1px solid var(--nvx-color-line);
   border-radius: var(--nvx-radius-card);
   background: var(--nvx-light);
