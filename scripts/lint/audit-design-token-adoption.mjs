@@ -33,7 +33,7 @@ const STRICT_CATEGORIES = new Set([
 // Closed categories become default blocking ratchets even while the broader
 // adoption audit remains report-only. Add a category here only after CI has
 // demonstrated a zero baseline on protected master.
-const DEFAULT_BLOCKING_CATEGORIES = new Set(['motion']);
+const DEFAULT_BLOCKING_CATEGORIES = new Set(['motion', 'z-index', 'shadow', 'radius']);
 
 // Exact legacy literals whose effective runtime values are governed by a later
 // semantic owner, plus one structural inset hairline that is not elevation.
