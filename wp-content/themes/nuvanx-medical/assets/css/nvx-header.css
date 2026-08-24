@@ -58,7 +58,7 @@
   font-family: var(--nvx-sans);
   font-size: 0.56rem;
   font-weight: var(--nvx-fw-regular);
-  line-height: 1.2;
+  line-height: var(--nvx-lh-kicker);
   letter-spacing: 0.2em;
   color: var(--nvx-text-muted);
 }

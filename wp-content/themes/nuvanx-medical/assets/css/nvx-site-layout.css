@@ -352,7 +352,7 @@
   margin-bottom: var(--nvx-space-6);
   font-family: var(--nvx-serif);
   font-size: clamp(40px, 5vw, 64px);
-  font-weight: 400;
+  font-weight: var(--nvx-fw-regular);
   line-height: 1.06;
   color: var(--nvx-ink);
   text-wrap: balance;
@@ -385,7 +385,7 @@
   margin-bottom: var(--nvx-space-3);
   font-family: var(--nvx-serif);
   font-size: clamp(26px, 3vw, 36px);
-  font-weight: 400;
+  font-weight: var(--nvx-fw-regular);
   line-height: 1.16;
   color: var(--nvx-ink);
   text-wrap: balance;

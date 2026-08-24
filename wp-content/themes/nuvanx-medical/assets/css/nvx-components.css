@@ -1,8 +1,8 @@
 /* NUVANX components — type primitives, cards, values, forms, CTAs
    Long-form measure + body figures live in nvx-site-layout.css (not here).
    Body inherits type from nvx-base; component classes own explicit roles. */
-.nvx-brand-hero__title{margin:0 0 var(--nvx-margin-display);font-family:var(--nvx-serif);font-size:var(--nvx-type-display);font-weight:400;line-height:var(--nvx-lh-display);letter-spacing:var(--nvx-track-display);color:var(--nvx-ink)}
-.nvx-heading,h1{margin:0 0 var(--nvx-margin-h1);font-family:var(--nvx-serif);font-size:var(--nvx-type-h1);font-weight:400;line-height:var(--nvx-lh-h1);letter-spacing:var(--nvx-track-h1);color:var(--nvx-ink)}
+.nvx-brand-hero__title{margin:0 0 var(--nvx-margin-display);font-family:var(--nvx-serif);font-size:var(--nvx-type-display);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-display);letter-spacing:var(--nvx-track-display);color:var(--nvx-ink)}
+.nvx-heading,h1{margin:0 0 var(--nvx-margin-h1);font-family:var(--nvx-serif);font-size:var(--nvx-type-h1);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-h1);letter-spacing:var(--nvx-track-h1);color:var(--nvx-ink)}
 
 /* Improve H1 hierarchy on small screens to prevent excessive vertical space */
 @media (max-width: 640px) {
@@ -13,8 +13,8 @@
     line-height: 1.15;
   }
 }
-.nvx-brand-title,h2{margin:0 0 var(--nvx-margin-h2);font-family:var(--nvx-serif);font-size:var(--nvx-type-h2);font-weight:400;line-height:var(--nvx-lh-h2);letter-spacing:var(--nvx-track-h2);color:var(--nvx-ink)}
-.nvx-brand-subtitle,h3{margin:0 0 var(--nvx-margin-h3);font-family:var(--nvx-serif);font-size:var(--nvx-type-h3);font-weight:400;line-height:var(--nvx-lh-h3);letter-spacing:var(--nvx-track-h3);color:var(--nvx-ink)}
+.nvx-brand-title,h2{margin:0 0 var(--nvx-margin-h2);font-family:var(--nvx-serif);font-size:var(--nvx-type-h2);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-h2);letter-spacing:var(--nvx-track-h2);color:var(--nvx-ink)}
+.nvx-brand-subtitle,h3{margin:0 0 var(--nvx-margin-h3);font-family:var(--nvx-serif);font-size:var(--nvx-type-h3);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-h3);letter-spacing:var(--nvx-track-h3);color:var(--nvx-ink)}
 /* Global h2/h3 ink would vanish on near-black stages. Invert there. */
 .nvx-solutions-group--dark :is(h2, h3),
 .nvx-solutions-closure :is(h2, h3),
@@ -23,13 +23,13 @@
 }
 .nvx-eyebrow,.nvx-brand-kicker,.nvx-brand-card__kicker{margin:0 0 var(--nvx-margin-kicker);font-family:var(--nvx-sans);font-size:var(--nvx-type-kicker);font-weight:var(--nvx-fw-medium);line-height:var(--nvx-lh-kicker);letter-spacing:var(--nvx-track-kicker);text-transform:uppercase;color:var(--nvx-accent-muted)}
 /* Copy roles only — bare `p` inherits from body (base.css) to avoid fighting layout measure rules */
-.nvx-copy,.nvx-brand-body,.nvx-body{font-family:var(--nvx-sans);font-size:var(--nvx-type-body);font-weight:400;line-height:var(--nvx-lh-body);color:var(--nvx-text-body)}
+.nvx-copy,.nvx-brand-body,.nvx-body{font-family:var(--nvx-sans);font-size:var(--nvx-type-body);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-body);color:var(--nvx-text-body)}
 .nvx-body{margin:0 0 var(--nvx-margin-body)}
 .nvx-body--measure{max-width:var(--nvx-measure)}
 /* Editorial surface paragraph rhythm (components own type+margin; layout owns measure) */
 .nvx-copy p, .nvx-brand-body p, .nvx-prose p, .nvx-page__content p, .entry-content p, .nvx-section-intro p{margin:0 0 var(--nvx-margin-body)}
 .nvx-copy+p,.nvx-brand-body+p,.nvx-prose p+p{margin-top:0}
-.nvx-lead,.nvx-brand-hero__lead{max-width:var(--nvx-measure-lead);margin:0 0 var(--nvx-margin-lead);font-family:var(--nvx-sans);font-size:var(--nvx-type-lead);font-weight:400;line-height:var(--nvx-lh-lead);color:var(--nvx-text-body)}
+.nvx-lead,.nvx-brand-hero__lead{max-width:var(--nvx-measure-lead);margin:0 0 var(--nvx-margin-lead);font-family:var(--nvx-sans);font-size:var(--nvx-type-lead);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-lead);color:var(--nvx-text-body)}
 figcaption{margin-top:var(--nvx-space-2);font-family:var(--nvx-sans);font-size:var(--nvx-type-caption);font-weight:300;line-height:var(--nvx-lh-caption);color:var(--nvx-text-muted)}
 .nvx-text-link{color:var(--nvx-ink);text-decoration:underline;text-underline-offset:calc(var(--nvx-space-1) / 2);font-family:var(--nvx-sans)}
 .nvx-text-link:hover,.nvx-text-link:focus-visible{color:var(--nvx-accent-muted)}
@@ -496,7 +496,7 @@ body .joinchat__qr canvas {
 .nvx-brand-card--team .nvx-brand-card__kicker{
   margin-top:0;
 }
-.nvx-brand-card__title{margin:0 0 var(--nvx-space-2);font-family:var(--nvx-serif);font-size:var(--nvx-type-h3);font-weight:400;line-height:var(--nvx-lh-h3);color:var(--nvx-ink)}
+.nvx-brand-card__title{margin:0 0 var(--nvx-space-2);font-family:var(--nvx-serif);font-size:var(--nvx-type-h3);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-h3);color:var(--nvx-ink)}
 .nvx-brand-card__title a{color:inherit;text-decoration:none}
 .nvx-brand-card__title a:hover,.nvx-brand-card__title a:focus-visible{color:var(--nvx-accent-muted)}
 .nvx-brand-card__body{font-family:var(--nvx-sans);font-size:var(--nvx-type-body);line-height:var(--nvx-lh-body);color:var(--nvx-text-body)}
@@ -603,7 +603,7 @@ body .joinchat__qr canvas {
   padding: 0 0 var(--nvx-space-4);
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-body);
-  font-weight: 400;
+  font-weight: var(--nvx-fw-regular);
   line-height: var(--nvx-lh-body);
   color: var(--nvx-text-body);
 }
@@ -645,7 +645,7 @@ body .joinchat__qr canvas {
   text-align: center;
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-h2);
-  font-weight: 400;
+  font-weight: var(--nvx-fw-regular);
   line-height: var(--nvx-lh-h2);
   letter-spacing: var(--nvx-track-h2);
   color: var(--nvx-ink);
@@ -796,7 +796,7 @@ body .joinchat__qr canvas {
 .nvx-valoracion-hero__proof li {
   position: relative;
   padding-inline-start: 1.15em;
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   letter-spacing: 0.01em;
 }
 
@@ -1104,7 +1104,7 @@ body .joinchat__qr canvas {
   padding-right:var(--nvx-space-4);
   font-family:var(--nvx-serif);
   font-size:var(--nvx-type-h2);
-  font-weight:400;
+  font-weight:var(--nvx-fw-regular);
   line-height:var(--nvx-lh-h2);
   letter-spacing:var(--nvx-track-h2);
   color:var(--nvx-ink);
@@ -1159,11 +1159,11 @@ body.nvx-valoracion-modal-open{
    ═══════════════════════════════════════════════════════════ */
 .nvx-treatment-process{padding-block:var(--nvx-pad-section);background:var(--nvx-surface-soft)}
 .nvx-treatment-process__inner{max-width:var(--nvx-shell);margin-inline:auto;padding-inline:var(--nvx-gutter)}
-.nvx-treatment-process__kicker{font-family:var(--nvx-sans);font-size:var(--nvx-type-small);font-weight:600;letter-spacing:var(--nvx-track-button);text-transform:uppercase;color:var(--nvx-accent-muted);margin:0 0 var(--nvx-space-2)}
-.nvx-treatment-process__title{font-family:var(--nvx-serif);font-size:var(--nvx-type-h2);font-weight:400;line-height:var(--nvx-lh-h2);color:var(--nvx-ink);margin:0 0 var(--nvx-space-4);max-width:28ch}
+.nvx-treatment-process__kicker{font-family:var(--nvx-sans);font-size:var(--nvx-type-small);font-weight:var(--nvx-fw-medium);letter-spacing:var(--nvx-track-button);text-transform:uppercase;color:var(--nvx-accent-muted);margin:0 0 var(--nvx-space-2)}
+.nvx-treatment-process__title{font-family:var(--nvx-serif);font-size:var(--nvx-type-h2);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-h2);color:var(--nvx-ink);margin:0 0 var(--nvx-space-4);max-width:28ch}
 .nvx-treatment-process__step{counter-increment:nvx-steps;display:grid;gap:var(--nvx-space-2);padding:var(--nvx-space-4);background:var(--nvx-light);border:var(--nvx-border-hairline) solid var(--nvx-color-line);border-radius:var(--nvx-radius-card)}
 .nvx-treatment-process__step::before{content:counter(nvx-steps,decimal-leading-zero);font-family:var(--nvx-serif);font-size:var(--nvx-type-h3);color:var(--nvx-accent-muted);line-height:1}
-.nvx-treatment-process__step-title{font-family:var(--nvx-sans);font-size:var(--nvx-type-body);font-weight:700;color:var(--nvx-ink);margin:0}
+.nvx-treatment-process__step-title{font-family:var(--nvx-sans);font-size:var(--nvx-type-body);font-weight:var(--nvx-fw-bold);color:var(--nvx-ink);margin:0}
 .nvx-treatment-process__step-body{font-family:var(--nvx-sans);font-size:var(--nvx-type-body);line-height:var(--nvx-lh-body);color:var(--nvx-text-body);margin:0}
 
 
@@ -1173,8 +1173,8 @@ body.nvx-valoracion-modal-open{
    ═══════════════════════════════════════════════════════════ */
 .nvx-ba-teaser{padding-block:var(--nvx-pad-section-tight);background:var(--nvx-ink);color:var(--nvx-light)}
 .nvx-ba-teaser__copy{max-width:52ch}
-.nvx-ba-teaser__kicker{font-family:var(--nvx-sans);font-size:var(--nvx-type-small);font-weight:600;letter-spacing:var(--nvx-track-button);text-transform:uppercase;color:var(--nvx-accent-muted);margin:0 0 var(--nvx-space-1)}
-.nvx-ba-teaser__title{font-family:var(--nvx-serif);font-size:var(--nvx-type-h2);font-weight:400;line-height:var(--nvx-lh-h2);color:var(--nvx-light);margin:0 0 var(--nvx-space-2);max-width:22ch}
+.nvx-ba-teaser__kicker{font-family:var(--nvx-sans);font-size:var(--nvx-type-small);font-weight:var(--nvx-fw-medium);letter-spacing:var(--nvx-track-button);text-transform:uppercase;color:var(--nvx-accent-muted);margin:0 0 var(--nvx-space-1)}
+.nvx-ba-teaser__title{font-family:var(--nvx-serif);font-size:var(--nvx-type-h2);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-h2);color:var(--nvx-light);margin:0 0 var(--nvx-space-2);max-width:22ch}
 .nvx-ba-teaser__body{font-family:var(--nvx-sans);font-size:var(--nvx-type-body);line-height:var(--nvx-lh-body);color:var(--nvx-text-on-dark-82);margin:0}
 
 
@@ -1440,7 +1440,7 @@ body.nvx-valoracion-modal-open{
 .nvx-clinical-factsheet__title {
   font-family: var(--nvx-font-heading);
   font-size: var(--nvx-type-h5);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   margin-bottom: var(--nvx-space-3, 16px);
   color: var(--nvx-ink);
 }
@@ -1459,7 +1459,7 @@ body.nvx-valoracion-modal-open{
 }
 
 .nvx-clinical-factsheet__list dt {
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   font-size: var(--nvx-type-small);
   text-transform: uppercase;
   letter-spacing: 0.05em;

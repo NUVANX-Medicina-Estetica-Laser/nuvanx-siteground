@@ -177,7 +177,7 @@
   font-size: var(--nvx-type-small);
   font-weight: var(--nvx-fw-medium);
   color: var(--nvx-on-dark-88);
-  line-height: 1.35;
+  line-height: var(--nvx-lh-nav-submenu);
   text-decoration: none;
 }
 
