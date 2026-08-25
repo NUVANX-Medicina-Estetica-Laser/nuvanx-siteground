@@ -683,6 +683,21 @@ function nvx_sanitize_complianz_banner_html( string $html ): string {
 				$inner_text = str_replace( '{title}', $title, $inner_text );
 			}
 
+			// Replace href="#" with actual URLs to prevent same-origin network errors
+			// Complianz uses data-relative_url attributes for JavaScript replacement,
+			// but href="#" can cause network errors when links are interacted with
+			if ( '#' === $href && false !== strpos( $attr_before, 'data-relative_url' ) ) {
+				if ( false !== strpos( $inner_text, 'Política de cookies' ) || false !== strpos( $inner_text, 'Política de privacidad' ) ) {
+					$href = function_exists( 'home_url' ) ? home_url( '/politica-de-cookies-ue/' ) : '#';
+				} elseif ( false !== strpos( $inner_text, 'Aviso legal' ) ) {
+					$href = function_exists( 'home_url' ) ? home_url( '/aviso-legal/' ) : '#';
+				} elseif ( false !== strpos( $inner_text, 'Administrar opciones' ) || false !== strpos( $inner_text, 'Gestionar' ) ) {
+					$href = '#'; // Keep as hash for JS-managed consent dialogs
+				} else {
+					$href = '#'; // Keep as hash for other JS-managed links
+				}
+			}
+
 			return '<a ' . $attr_before . 'href=' . $quote . $href . $quote . $attr_after . '>' . $inner_text . '</a>';
 		},
 		$html
