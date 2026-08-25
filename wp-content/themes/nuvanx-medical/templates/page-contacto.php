@@ -18,6 +18,7 @@ defined( 'ABSPATH' ) || exit;
 ob_start();
 
 $clinics = function_exists( 'nvx_schema_clinics' ) ? nvx_schema_clinics() : array();
+$config  = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
 
 $chamberi_phone = ! empty( $clinics['chamberi']['telephone'] ) ? (string) $clinics['chamberi']['telephone'] : '+34669319836';
 $goya_phone     = ! empty( $clinics['goya']['telephone'] ) ? (string) $clinics['goya']['telephone'] : '+34647505107';
@@ -25,8 +26,12 @@ $goya_phone     = ! empty( $clinics['goya']['telephone'] ) ? (string) $clinics['
 $chamberi_wa = ltrim( $chamberi_phone, '+' );
 $goya_wa     = ltrim( $goya_phone, '+' );
 
-$chamberi_tel_display = trim( chunk_split( (string) preg_replace( '/^\+34/', '', $chamberi_phone ), 3, ' ' ) );
-$goya_tel_display     = trim( chunk_split( (string) preg_replace( '/^\+34/', '', $goya_phone ), 3, ' ' ) );
+$chamberi_tel_display = ! empty( $config['chamberi']['phone'] )
+	? (string) $config['chamberi']['phone']
+	: trim( chunk_split( (string) preg_replace( '/^\+34/', '', $chamberi_phone ), 3, ' ' ) );
+$goya_tel_display     = ! empty( $config['goya']['phone'] )
+	? (string) $config['goya']['phone']
+	: trim( chunk_split( (string) preg_replace( '/^\+34/', '', $goya_phone ), 3, ' ' ) );
 
 $chamberi_maps = ! empty( $clinics['chamberi']['hasMap'] )
 	? (string) $clinics['chamberi']['hasMap']
