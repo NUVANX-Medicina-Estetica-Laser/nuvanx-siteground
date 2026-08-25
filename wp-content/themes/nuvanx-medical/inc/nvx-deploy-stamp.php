@@ -38,6 +38,7 @@ function nvx_get_deploy_stamp(): array {
 			$needs_deploy_stamp_file = true;
 			break;
 		}
+	}
 
 	if ( $needs_deploy_stamp_file ) {
 		$deploy_stamp_file = get_template_directory() . '/.nvx-deploy-stamp.json';
@@ -48,6 +49,7 @@ function nvx_get_deploy_stamp(): array {
 					if ( '' === ( $stamp[ $key ] ?? '' ) && isset( $deploy_stamp_data[ $key ] ) && is_scalar( $deploy_stamp_data[ $key ] ) ) {
 						$stamp[ $key ] = trim( (string) $deploy_stamp_data[ $key ] );
 					}
+				}
 			}
 		}
 	}
@@ -151,10 +153,7 @@ add_filter(
 
 /*
  * DIAGNOSTIC-ONLY — PR #830, never merge.
- * The Home request writes its late lifecycle trace at shutdown. The staging
- * boundary continues to /soluciones-medicas/ after Home fails, so use that
- * healthy route to transport the prior Home traces without changing Home's
- * status, body, buffering, or normal public behavior.
+ * Relay Home traces through the next healthy boundary route.
  */
 add_action(
 	'send_headers',
@@ -184,27 +183,6 @@ add_action(
 			@unlink( $trace_file );
 		}
 		header( 'X-Robots-Tag: ' . implode( ', ', $directives ), true );
-	},
-	PHP_INT_MAX
-);
-
-/*
- * DIAGNOSTIC-ONLY A/B — PR #830, never merge.
- * SiteGround Dynamic Cache is server-side; force the Home response to be
- * non-cacheable so edge status can be compared against the identical render.
- */
-add_action(
-	'send_headers',
-	static function (): void {
-		if ( ! function_exists( 'wp_get_environment_type' ) || 'staging' !== wp_get_environment_type() ) {
-			return;
-		}
-		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
-		if ( '/' !== $path ) {
-			return;
-		}
-		header( 'Cache-Control: no-cache, no-store, must-revalidate', true );
-		header( 'X-NVX-Staging-Cache-AB: bypass', true );
 	},
 	PHP_INT_MAX
 );
