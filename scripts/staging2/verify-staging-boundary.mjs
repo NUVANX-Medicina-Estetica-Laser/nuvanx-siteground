@@ -176,7 +176,6 @@ function retrieveHomeStatusTrace(captureToken) {
 // first request to / arrives.  Null means the tracer was not deployed
 // (non-fatal — verification continues normally).
 const tracerToken = await deployHomeStatusTracer();
-
 function extractMetaContent(html, name) {
   const tags = html.match(/<meta\b[^>]*>/gi) || [];
   for (const tag of tags) {

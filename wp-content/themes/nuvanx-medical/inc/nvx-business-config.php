@@ -44,7 +44,7 @@ function nvx_get_clinics_config(): array {
 			'address'       => 'Calle de Fernán González, 26',
 			'postal_code'   => '28009',
 			'locality'      => 'Madrid',
-			'phone'         => '647 505 107',
+			'phone'         => '647 50 51 07',
 			'phone_href'    => '+34647505107',
 			'hours'         => 'lunes a sábado, 11:00–20:00',
 			'opening_hours' => array(
