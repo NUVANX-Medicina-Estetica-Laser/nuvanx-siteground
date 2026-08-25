@@ -28,10 +28,10 @@ $goya_wa     = ltrim( $goya_phone, '+' );
 
 $chamberi_tel_display = ! empty( $config['chamberi']['phone'] )
 	? (string) $config['chamberi']['phone']
-	: trim( chunk_split( (string) preg_replace( '/^\+34/', '', $chamberi_phone ), 3, ' ' ) );
+	: '669 31 98 36';
 $goya_tel_display     = ! empty( $config['goya']['phone'] )
 	? (string) $config['goya']['phone']
-	: trim( chunk_split( (string) preg_replace( '/^\+34/', '', $goya_phone ), 3, ' ' ) );
+	: '647 50 51 07';
 
 $chamberi_maps = ! empty( $clinics['chamberi']['hasMap'] )
 	? (string) $clinics['chamberi']['hasMap']
