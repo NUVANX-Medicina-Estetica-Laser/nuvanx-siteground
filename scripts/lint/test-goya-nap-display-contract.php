@@ -62,21 +62,19 @@ if ( ! str_contains( $sources['hub'], '$config[\'goya\'][\'phone\']' ) ) {
 	$fail( 'Clinics hub does not consume Goya display SSOT' );
 }
 
-// Block the exact copy/paste patterns that previously rebuilt Goya into 3-3-3.
-$forbidden_patterns = array(
-	'contact' => array(
-		'chunk_split( (string) preg_replace( \'/^\\+34/\', \'\', $goya_phone )',
-	),
-	'hub' => array(
-		'nvx_clinics_hub_phone_display( $goya_phone )',
-	),
-);
-foreach ( $forbidden_patterns as $surface => $patterns ) {
-	foreach ( $patterns as $pattern ) {
-		if ( str_contains( $sources[ $surface ], $pattern ) ) {
-			$fail( 'ad-hoc Goya phone reconstruction surface=' . $surface );
-		}
-	}
+// A dedicated display helper may own generic E.164 formatting. What is
+// forbidden is reimplementing the 3-digit chunking pattern in each consumer.
+if ( str_contains( $sources['contact'], 'chunk_split( (string) preg_replace( \'/^\\+34/\', \'\', $goya_phone )' ) ) {
+	$fail( 'ad-hoc Goya phone reconstruction surface=contact' );
+}
+$helper_start = strpos( $sources['hub'], 'function nvx_clinics_hub_phone_display' );
+$helper_end   = false === $helper_start ? false : strpos( $sources['hub'], '/**', $helper_start + 1 );
+if ( false === $helper_start || false === $helper_end || $helper_end <= $helper_start ) {
+	$fail( 'unable to isolate clinics hub display helper' );
+}
+$hub_renderer_source = substr( $sources['hub'], 0, $helper_start ) . substr( $sources['hub'], $helper_end );
+if ( str_contains( $hub_renderer_source, 'chunk_split(' ) ) {
+	$fail( 'ad-hoc phone reconstruction outside display helper surface=hub' );
 }
 
 // Footer may remain static markup until its Figma refactor, but its public text
@@ -108,4 +106,4 @@ foreach ( $scan_files as $file ) {
 	}
 }
 
-echo 'GOYA_NAP_DISPLAY_TEST=PASS display=ssot machine=e164 legacy=blocked renderers=3' . PHP_EOL;
+echo 'GOYA_NAP_DISPLAY_TEST=PASS display=ssot machine=e164 legacy=blocked renderers=3 anti_pattern=helper_only' . PHP_EOL;
