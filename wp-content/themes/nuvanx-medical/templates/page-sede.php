@@ -83,7 +83,7 @@ ob_start();
 								/* translators: 1: street address, 2: phone */
 								__( 'Clínica de medicina estética láser en Goya, Barrio de Salamanca: %1$s. Teléfono %2$s. Centro sanitario CS20073. Valoración médica presencial antes de cualquier tratamiento.', 'nuvanx-medical' ),
 								$clinic_address !== '' ? $clinic_address : __( 'Calle de Fernán González, 26, 28009 Madrid', 'nuvanx-medical' ),
-								$phone_display !== '' ? $phone_display : '647 505 107'
+								$phone_display !== '' ? $phone_display : '647 50 51 07'
 							)
 						);
 					}
