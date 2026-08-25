@@ -281,3 +281,54 @@ function nvx_public_media_runtime_attributes( array $attr, $attachment, $size ):
 	return $attr;
 }
 add_filter( 'wp_get_attachment_image_attributes', 'nvx_public_media_runtime_attributes', PHP_INT_MAX, 3 );
+
+/**
+ * Keep SiteGround Speed Optimizer from rebuilding governed image markup after
+ * WordPress has already removed stale local derivatives.
+ *
+ * Speed Optimizer 7.8.x applies its lazy-load transform after theme rendering.
+ * Its public exclusion filter accepts source URLs. Include every canonical
+ * governed source and metadata derivative on both the attachment host and the
+ * current home host so Staging host rewriting cannot bypass the exclusion.
+ *
+ * @param mixed $excluded Existing Speed Optimizer image exclusions.
+ * @return string[]
+ */
+function nvx_public_media_sgo_lazy_load_exclude_images( $excluded ): array {
+	$excluded = is_array( $excluded ) ? $excluded : array();
+	if ( ( function_exists( 'is_admin' ) && is_admin() ) || ! function_exists( 'nvx_governed_public_image_ids' ) ) {
+		return $excluded;
+	}
+
+	$urls = array();
+	foreach ( nvx_governed_public_image_ids() as $attachment_id ) {
+		$resolved_id = 2892 === (int) $attachment_id ? 2877 : (int) $attachment_id;
+		$original    = wp_get_attachment_url( $resolved_id );
+		$meta        = wp_get_attachment_metadata( $resolved_id );
+		$meta        = is_array( $meta ) ? $meta : array();
+
+		if ( is_string( $original ) && '' !== $original ) {
+			$urls[] = $original;
+			$path   = (string) wp_parse_url( $original, PHP_URL_PATH );
+			if ( '' !== $path && function_exists( 'home_url' ) ) {
+				$urls[] = home_url( $path );
+			}
+
+			$dir = trailingslashit( dirname( $original ) );
+			foreach ( (array) ( $meta['sizes'] ?? array() ) as $variant ) {
+				if ( ! is_array( $variant ) || empty( $variant['file'] ) ) {
+					continue;
+				}
+				$candidate = $dir . rawurlencode( basename( (string) $variant['file'] ) );
+				$urls[]   = $candidate;
+				$path     = (string) wp_parse_url( $candidate, PHP_URL_PATH );
+				if ( '' !== $path && function_exists( 'home_url' ) ) {
+					$urls[] = home_url( $path );
+				}
+			}
+		}
+	}
+
+	return array_values( array_unique( array_merge( $excluded, array_filter( $urls, 'is_string' ) ) ) );
+}
+add_filter( 'sgo_lazy_load_exclude_images', 'nvx_public_media_sgo_lazy_load_exclude_images', PHP_INT_MAX );
