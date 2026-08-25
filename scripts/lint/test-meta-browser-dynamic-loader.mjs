@@ -15,7 +15,8 @@ if (!jsMatch) {
 }
 const jsSource = jsMatch[1];
 
-// Minimal DOM Mock to support HTMLScriptElement descriptor overrides
+// Minimal DOM mock that exercises the actual script-element URL assignment APIs
+// guarded by the production runtime.
 class HTMLScriptElement {
   constructor() {
     this._attributes = new Map();
@@ -23,9 +24,13 @@ class HTMLScriptElement {
   setAttribute(name, value) {
     this._attributes.set(String(name).toLowerCase(), String(value));
   }
+  setAttributeNS(namespace, name, value) {
+    void namespace;
+    this.setAttribute(name, value);
+  }
   getAttribute(name) {
-    const k = String(name).toLowerCase();
-    return this._attributes.has(k) ? this._attributes.get(k) : null;
+    const key = String(name).toLowerCase();
+    return this._attributes.has(key) ? this._attributes.get(key) : null;
   }
 }
 
@@ -33,26 +38,26 @@ Object.defineProperty(HTMLScriptElement.prototype, 'src', {
   get() { return this.getAttribute('src') || ''; },
   set(value) { this.setAttribute('src', value); },
   configurable: true,
-  enumerable: true
+  enumerable: true,
 });
 
 global.HTMLScriptElement = HTMLScriptElement;
-global.document = { baseURI: 'https://example.com/' };
-// Simulate the URL global
+global.document = { baseURI: 'https://nuvanx.com/' };
 global.URL = URL;
 
-// Execute the extracted script
 try {
   eval(jsSource);
-} catch (e) {
-  console.error('FAIL: Error evaluating JS source:', e);
+} catch (error) {
+  console.error('FAIL: Error evaluating JS source:', error);
   process.exit(1);
 }
 
 let pass = true;
+const blockedUrl = 'https://connect.facebook.net/en_US/fbevents.js';
+const safeUrl = 'https://www.googletagmanager.com/gtm.js?id=GTM-TEST';
 
 const assertBlocked = (script, method) => {
-  if (script.src !== '') {
+  if (script.src !== '' || script.getAttribute('src') !== null) {
     console.error(`FAIL: Legacy pixel URL was not blocked via ${method}`);
     pass = false;
   }
@@ -63,41 +68,51 @@ const assertBlocked = (script, method) => {
 };
 
 const assertAllowed = (script, method, expectedUrl) => {
-  if (script.src !== expectedUrl) {
+  if (script.src !== expectedUrl || script.getAttribute('src') !== expectedUrl) {
     console.error(`FAIL: Safe URL was blocked via ${method}. Expected ${expectedUrl}, got ${script.src}`);
+    pass = false;
+  }
+  if (script.getAttribute('data-nvx-meta-browser-retired') !== null) {
+    console.error(`FAIL: Safe URL was incorrectly marked via ${method}`);
     pass = false;
   }
 };
 
-// Test 1: Property assignment
-const script1 = new HTMLScriptElement();
-script1.src = 'https://connect.facebook.net/en_US/fbevents.js';
-assertBlocked(script1, 'property assignment');
+const propertyScript = new HTMLScriptElement();
+propertyScript.src = blockedUrl;
+assertBlocked(propertyScript, 'property assignment');
 
-// Test 2: setAttribute
-const script2 = new HTMLScriptElement();
-script2.setAttribute('src', 'https://connect.facebook.net/en_US/fbevents.js');
-assertBlocked(script2, 'setAttribute');
+const attributeScript = new HTMLScriptElement();
+attributeScript.setAttribute('src', blockedUrl);
+assertBlocked(attributeScript, 'setAttribute');
 
-// Test 3: Safe URL property assignment
-const script3 = new HTMLScriptElement();
-script3.src = 'https://example.com/safe.js';
-assertAllowed(script3, 'property assignment', 'https://example.com/safe.js');
+const namespaceScript = new HTMLScriptElement();
+namespaceScript.setAttributeNS(null, 'src', blockedUrl);
+assertBlocked(namespaceScript, 'setAttributeNS');
 
-// Test 4: Safe URL setAttribute
-const script4 = new HTMLScriptElement();
-script4.setAttribute('src', 'https://example.com/safe.js');
-assertAllowed(script4, 'setAttribute', 'https://example.com/safe.js');
+const safePropertyScript = new HTMLScriptElement();
+safePropertyScript.src = safeUrl;
+assertAllowed(safePropertyScript, 'safe property assignment', safeUrl);
 
-// Test 5: Mixed case blocked URL
-const script5 = new HTMLScriptElement();
-script5.src = 'HTTPS://CONNECT.FACEBOOK.NET/EN_US/FBEVENTS.JS';
-assertBlocked(script5, 'mixed-case property assignment');
+const safeAttributeScript = new HTMLScriptElement();
+safeAttributeScript.setAttribute('src', safeUrl);
+assertAllowed(safeAttributeScript, 'safe setAttribute', safeUrl);
 
-// Test 6: Missing document.baseURI fallback (relative URLs)
-const script6 = new HTMLScriptElement();
-script6.src = '/safe-relative.js';
-assertAllowed(script6, 'relative URL assignment', '/safe-relative.js');
+const safeNamespaceScript = new HTMLScriptElement();
+safeNamespaceScript.setAttributeNS(null, 'src', safeUrl);
+assertAllowed(safeNamespaceScript, 'safe setAttributeNS', safeUrl);
+
+const mixedCaseScript = new HTMLScriptElement();
+mixedCaseScript.src = 'HTTPS://CONNECT.FACEBOOK.NET/EN_US/FBEVENTS.JS';
+assertBlocked(mixedCaseScript, 'mixed-case property assignment');
+
+const relativeScript = new HTMLScriptElement();
+relativeScript.src = '/safe-relative.js';
+assertAllowed(relativeScript, 'relative URL assignment', '/safe-relative.js');
+
+const nonPixelFacebookScript = new HTMLScriptElement();
+nonPixelFacebookScript.src = 'https://connect.facebook.net/en_US/sdk.js';
+assertAllowed(nonPixelFacebookScript, 'non-pixel Facebook script', 'https://connect.facebook.net/en_US/sdk.js');
 
 if (!pass) process.exit(1);
-console.log('META_BROWSER_DYNAMIC_LOADER_JS=PASS');
+console.log('META_BROWSER_DYNAMIC_LOADER_JS=PASS property=blocked setAttribute=blocked setAttributeNS=blocked unrelated=allowed');
