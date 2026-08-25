@@ -115,7 +115,7 @@ function nvx_meta_browser_block_dynamic_loader(): void {
 		const blockedHost = ['connect', 'facebook', 'net'].join('.');
 		const blockedFile = ['fb', 'events', '.js'].join('');
 		const descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
-		const nativeSetAttribute = Element.prototype.setAttribute;
+		const nativeScriptSetAttribute = HTMLScriptElement.prototype.setAttribute;
 
 		const isBlocked = (value) => {
 			try {
@@ -133,7 +133,7 @@ function nvx_meta_browser_block_dynamic_loader(): void {
 				get: descriptor.get,
 				set(value) {
 					if (isBlocked(value)) {
-						nativeSetAttribute.call(this, 'data-nvx-meta-browser-retired', '1');
+						nativeScriptSetAttribute.call(this, 'data-nvx-meta-browser-retired', '1');
 						return;
 					}
 					descriptor.set.call(this, value);
@@ -141,16 +141,12 @@ function nvx_meta_browser_block_dynamic_loader(): void {
 			});
 		}
 
-		Element.prototype.setAttribute = function(name, value) {
-			if (
-				this instanceof HTMLScriptElement &&
-				String(name || '').toLowerCase() === 'src' &&
-				isBlocked(value)
-			) {
-				nativeSetAttribute.call(this, 'data-nvx-meta-browser-retired', '1');
+		HTMLScriptElement.prototype.setAttribute = function(name, value) {
+			if (String(name || '').toLowerCase() === 'src' && isBlocked(value)) {
+				nativeScriptSetAttribute.call(this, 'data-nvx-meta-browser-retired', '1');
 				return;
 			}
-			return nativeSetAttribute.call(this, name, value);
+			return nativeScriptSetAttribute.call(this, name, value);
 		};
 	})();
 	</script>
