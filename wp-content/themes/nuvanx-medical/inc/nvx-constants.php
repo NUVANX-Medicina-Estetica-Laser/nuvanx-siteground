@@ -24,26 +24,82 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /*
- * DIAGNOSTIC-ONLY: PR #829 must never be merged.
- * Record the primary Home request status before template output. The trusted
- * boundary verifier already persists X-Robots-Tag, so the trace can cross the
- * public edge without changing the deploy SHA or forcing a diagnostic status.
+ * DIAGNOSTIC-ONLY: PR #830 must never be merged.
+ * Capture the late Home response lifecycle and output-buffer ownership. A
+ * request writes its final PHP-side trace during shutdown; the next primary
+ * Home request transports that previous trace in X-Robots-Tag. The secondary
+ * fatal-capture loopback is excluded so it cannot consume or overwrite it.
  */
 if ( function_exists( 'wp_get_environment_type' ) && 'staging' === wp_get_environment_type() ) {
 	$nvx_diag_path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
 	$nvx_diag_ua   = (string) ( $_SERVER['HTTP_USER_AGENT'] ?? '' );
 	if ( '/' === $nvx_diag_path && 'NUVANX-Staging-Fatal-Capture/1.1' !== $nvx_diag_ua ) {
+		$nvx_trace_file = get_template_directory() . '/.nvx-home-late-trace-830.json';
+		$nvx_previous   = null;
+		if ( is_readable( $nvx_trace_file ) ) {
+			$decoded = json_decode( (string) file_get_contents( $nvx_trace_file ), true );
+			if ( is_array( $decoded ) ) {
+				$nvx_previous = $decoded;
+			}
+			@unlink( $nvx_trace_file );
+		}
+
+		$nvx_buffer_snapshot = static function (): array {
+			$buffers = array();
+			foreach ( ob_get_status( true ) as $status ) {
+				$buffers[] = array(
+					'name'  => substr( (string) ( $status['name'] ?? '' ), 0, 160 ),
+					'level' => isset( $status['level'] ) ? (int) $status['level'] : 0,
+					'flags' => isset( $status['flags'] ) ? (int) $status['flags'] : 0,
+				);
+			}
+			return $buffers;
+		};
+
+		$nvx_late_template_callbacks = static function (): array {
+			global $wp_filter;
+			$hook = $wp_filter['template_redirect'] ?? null;
+			if ( ! $hook instanceof WP_Hook ) {
+				return array();
+			}
+			$out = array();
+			foreach ( $hook->callbacks as $priority => $callbacks ) {
+				if ( (int) $priority < 900000 ) {
+					continue;
+				}
+				foreach ( $callbacks as $registered ) {
+					$callback = $registered['function'] ?? null;
+					$owner    = 'unknown';
+					if ( $callback instanceof Closure ) {
+						try {
+							$reflection = new ReflectionFunction( $callback );
+							$file       = $reflection->getFileName();
+							$owner      = is_string( $file ) ? basename( $file ) : 'closure';
+						} catch ( ReflectionException $exception ) {
+							$owner = 'closure-reflection-failed';
+						}
+					} elseif ( is_array( $callback ) && 2 === count( $callback ) ) {
+						$owner = ( is_object( $callback[0] ) ? get_class( $callback[0] ) : (string) $callback[0] ) . '::' . (string) $callback[1];
+					} elseif ( is_string( $callback ) ) {
+						$owner = $callback;
+					}
+					$out[] = array( 'priority' => (int) $priority, 'owner' => substr( $owner, 0, 180 ) );
+				}
+			}
+			return $out;
+		};
+
 		$nvx_http_trace  = array();
-		$nvx_trace_stage = static function ( string $stage, array $extra = array() ) use ( &$nvx_http_trace ): void {
+		$nvx_trace_stage = static function ( string $stage, array $extra = array() ) use ( &$nvx_http_trace, $nvx_buffer_snapshot ): void {
 			$code  = http_response_code();
 			$entry = array(
-				'stage' => $stage,
-				'code'  => is_int( $code ) ? $code : 0,
+				'stage'        => $stage,
+				'code'         => is_int( $code ) ? $code : 0,
+				'headers_sent' => headers_sent(),
+				'buffers'      => $nvx_buffer_snapshot(),
 			);
 			foreach ( $extra as $key => $value ) {
-				if ( is_scalar( $value ) || null === $value ) {
-					$entry[ (string) $key ] = $value;
-				}
+				$entry[ (string) $key ] = $value;
 			}
 			$nvx_http_trace[] = $entry;
 		};
@@ -67,7 +123,7 @@ if ( function_exists( 'wp_get_environment_type' ) && 'staging' === wp_get_enviro
 			4
 		);
 
-		foreach ( array( 'after_setup_theme', 'init', 'wp_loaded', 'send_headers', 'wp' ) as $nvx_trace_hook ) {
+		foreach ( array( 'after_setup_theme', 'init', 'send_headers', 'wp' ) as $nvx_trace_hook ) {
 			add_action(
 				$nvx_trace_hook,
 				static function () use ( $nvx_trace_stage, $nvx_trace_hook ): void {
@@ -76,21 +132,15 @@ if ( function_exists( 'wp_get_environment_type' ) && 'staging' === wp_get_enviro
 				PHP_INT_MAX
 			);
 		}
-
 		add_action(
-			'template_redirect',
-			static function () use ( $nvx_trace_stage ): void {
-				$nvx_trace_stage( 'template_redirect_early' );
-			},
-			PHP_INT_MIN
-		);
-		add_action(
-			'template_redirect',
-			static function () use ( $nvx_trace_stage ): void {
-				$nvx_trace_stage( 'template_redirect_late' );
+			'wp_loaded',
+			static function () use ( $nvx_trace_stage, $nvx_late_template_callbacks ): void {
+				$nvx_trace_stage( 'wp_loaded', array( 'late_template_callbacks' => $nvx_late_template_callbacks() ) );
 			},
 			PHP_INT_MAX
 		);
+		add_action( 'template_redirect', static function () use ( $nvx_trace_stage ): void { $nvx_trace_stage( 'template_redirect_early' ); }, PHP_INT_MIN );
+		add_action( 'template_redirect', static function () use ( $nvx_trace_stage ): void { $nvx_trace_stage( 'template_redirect_late' ); }, PHP_INT_MAX );
 		add_filter(
 			'template_include',
 			static function ( $template ) use ( $nvx_trace_stage ) {
@@ -102,12 +152,13 @@ if ( function_exists( 'wp_get_environment_type' ) && 'staging' === wp_get_enviro
 
 		add_action(
 			'wp_head',
-			static function () use ( &$nvx_http_trace, $nvx_trace_stage ): void {
+			static function () use ( &$nvx_http_trace, $nvx_previous, $nvx_trace_stage ): void {
 				$nvx_trace_stage( 'wp_head' );
 				$payload = wp_json_encode(
 					array(
-						'trace' => $nvx_http_trace,
-						'query' => array(
+						'current'  => $nvx_http_trace,
+						'previous' => $nvx_previous,
+						'query'    => array(
 							'is_front_page' => is_front_page(),
 							'is_home'       => is_home(),
 							'is_404'        => is_404(),
@@ -117,10 +168,37 @@ if ( function_exists( 'wp_get_environment_type' ) && 'staging' === wp_get_enviro
 				);
 				if ( is_string( $payload ) && '' !== $payload ) {
 					$token = rtrim( strtr( base64_encode( $payload ), '+/', '-_' ), '=' );
-					header( 'X-Robots-Tag: noindex, nofollow, nvx-httptrace-' . $token, true );
+					header( 'X-Robots-Tag: noindex, nofollow, nvx-latetrace-' . $token, true );
 				}
 			},
 			PHP_INT_MIN
+		);
+
+		add_action( 'get_footer', static function () use ( $nvx_trace_stage ): void { $nvx_trace_stage( 'get_footer' ); }, PHP_INT_MAX );
+		add_action( 'wp_footer', static function () use ( $nvx_trace_stage ): void { $nvx_trace_stage( 'wp_footer_early' ); }, PHP_INT_MIN );
+		add_action( 'wp_footer', static function () use ( $nvx_trace_stage ): void { $nvx_trace_stage( 'wp_footer_late' ); }, PHP_INT_MAX );
+		add_action( 'shutdown', static function () use ( $nvx_trace_stage ): void { $nvx_trace_stage( 'wp_shutdown_early' ); }, PHP_INT_MIN );
+		add_action( 'shutdown', static function () use ( $nvx_trace_stage ): void { $nvx_trace_stage( 'wp_shutdown_late' ); }, PHP_INT_MAX );
+
+		register_shutdown_function(
+			static function () use ( &$nvx_http_trace, $nvx_trace_file, $nvx_trace_stage ): void {
+				$nvx_trace_stage( 'php_shutdown_after_wp' );
+				$error   = error_get_last();
+				$payload = array(
+					'trace'      => $nvx_http_trace,
+					'last_error' => is_array( $error )
+						? array(
+							'type' => isset( $error['type'] ) ? (int) $error['type'] : 0,
+							'file' => isset( $error['file'] ) ? basename( (string) $error['file'] ) : '',
+							'line' => isset( $error['line'] ) ? (int) $error['line'] : 0,
+						)
+						: null,
+				);
+				$encoded = wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+				if ( is_string( $encoded ) && '' !== $encoded ) {
+					file_put_contents( $nvx_trace_file, $encoded, LOCK_EX );
+				}
+			}
 		);
 	}
 }
