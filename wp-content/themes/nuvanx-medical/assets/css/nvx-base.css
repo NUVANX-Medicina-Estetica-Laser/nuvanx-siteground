@@ -173,8 +173,9 @@ html:root {
   --nvx-heading-to-grid: 24px;
   --nvx-card-grid-gap: 1px;
   --nvx-card-padding: 20px;
-  --nvx-gutter-inner: 24px;
-  --nvx-gutter-inline: 24px;
+  --nvx-gutter-page: 24px;
+  --nvx-gutter-inner: var(--nvx-gutter-page);
+  --nvx-gutter-inline: var(--nvx-gutter-page);
   --nvx-pad-section: var(--nvx-section-py);
   --nvx-pad-section-tight: var(--nvx-section-compact-py);
   --nvx-gap-section: var(--nvx-subblock-gap);
@@ -188,8 +189,9 @@ html:root {
     --nvx-subblock-gap: 32px;
     --nvx-heading-to-grid: 32px;
     --nvx-card-padding: 24px;
-    --nvx-gutter-inner: 40px;
-    --nvx-gutter-inline: 40px;
+    --nvx-gutter-page: 40px;
+    --nvx-gutter-inner: var(--nvx-gutter-page);
+    --nvx-gutter-inline: var(--nvx-gutter-page);
   }
 }
 
@@ -200,8 +202,9 @@ html:root {
     --nvx-subblock-gap: 48px;
     --nvx-heading-to-grid: 40px;
     --nvx-card-padding: 32px;
-    --nvx-gutter-inner: 48px;
-    --nvx-gutter-inline: 48px;
+    --nvx-gutter-page: 48px;
+    --nvx-gutter-inner: var(--nvx-gutter-page);
+    --nvx-gutter-inline: var(--nvx-gutter-page);
   }
 }
 

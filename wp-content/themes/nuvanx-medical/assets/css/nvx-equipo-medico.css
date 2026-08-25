@@ -11,8 +11,8 @@
   --border-accent: var(--nvx-accent-info);
   --text-accent: var(--nvx-accent-info);
   --bg-accent: var(--nvx-color-paper);
-  --border-success: var(--nvx-accent-gold);
-  --text-success: var(--nvx-accent-gold-text);
+  --border-success: var(--nvx-ink);
+  --text-success: var(--nvx-ink);
   --bg-success: var(--nvx-surface-soft);
 
   display: flex;

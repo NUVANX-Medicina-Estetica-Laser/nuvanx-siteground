@@ -113,7 +113,7 @@ $nvx_col_two  = array_slice( $nvx_footer_treatments, $nvx_split_at );
 				</div>
 			</details>
 
-			<details class="nvx-footer__section">
+			<details class="nvx-footer__section nvx-footer__section--clinics">
 				<summary class="nvx-footer__section-title"><?php esc_html_e( 'Clínicas', 'nuvanx-medical' ); ?></summary>
 				<div class="nvx-footer__clinics">
 					<div class="nvx-footer__clinic">
@@ -136,7 +136,7 @@ $nvx_col_two  = array_slice( $nvx_footer_treatments, $nvx_split_at );
 				</div>
 			</details>
 
-			<details class="nvx-footer__section">
+			<details class="nvx-footer__section nvx-footer__section--nuvanx">
 				<summary class="nvx-footer__section-title"><?php esc_html_e( 'NUVANX', 'nuvanx-medical' ); ?></summary>
 				<div class="nvx-footer__links">
 					<a href="<?php echo esc_url( home_url( '/nosotros/' ) ); ?>">Nosotros</a>

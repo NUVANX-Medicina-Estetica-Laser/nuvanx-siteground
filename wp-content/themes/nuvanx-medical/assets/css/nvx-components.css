@@ -423,8 +423,8 @@ body .joinchat__qr canvas {
 }
 
 /* Media e imágenes - diseño elegante */
-.nvx-media{display:block;width:100%;height:auto;border-radius:var(--nvx-radius-image);transition:transform var(--nvx-duration-slow) ease, box-shadow var(--nvx-duration-slow) ease}
-.nvx-media:hover{transform:scale(1.02);box-shadow:var(--nvx-shadow-soft)}
+.nvx-media{display:block;width:100%;height:auto;border-radius:var(--nvx-radius-image);transition:transform var(--nvx-duration-slow) ease}
+.nvx-media:hover{transform:scale(1.02)}
 .nvx-media--hero{height:100%;object-fit:cover;border-radius:0}
 .nvx-media--doctor{aspect-ratio:5/6;object-fit:cover;max-height:600px;min-height:400px;object-position:center top}
 /* Body content images: natural height, same radius as cards/figures */
@@ -436,7 +436,7 @@ body .joinchat__qr canvas {
     min-height: 300px;
   }
 }
-.nvx-brand-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--nvx-gap-base);align-items:stretch;margin-block:var(--nvx-space-4) var(--nvx-space-8);padding:0;list-style:none}
+.nvx-brand-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--nvx-card-grid-gap);align-items:stretch;margin-block:var(--nvx-heading-to-grid) var(--nvx-subblock-gap);padding:var(--nvx-card-grid-gap);background:var(--nvx-color-line);border:var(--nvx-border-hairline) solid var(--nvx-color-line);list-style:none}
 /*
  * CMS still emits --2 / --3. Without these rules, bare children auto-place into
  * a single 1/12 track and look like a broken two-column layout (Goya ubicación/FAQ).
@@ -1224,7 +1224,7 @@ body.nvx-valoracion-modal-open{
 .nvx-signature-list-number {
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-h2);
-  color: var(--nvx-accent-gold-text);
+  color: var(--nvx-ink);
   margin-right: var(--nvx-space-2);
   font-weight: 300;
 }

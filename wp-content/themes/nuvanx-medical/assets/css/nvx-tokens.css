@@ -76,7 +76,21 @@
   --nvx-space-10: 80px;
   --nvx-space-12: 96px;
 
-  /* Semantic spacing owners for non-scale responsive/layout values. */
+  /* Semantic layout contract. Exact values are refined by breakpoints in nvx-base.css. */
+  --nvx-section-py: var(--nvx-space-6);
+  --nvx-section-compact-py: var(--nvx-space-4);
+  --nvx-subblock-gap: var(--nvx-space-3);
+  --nvx-heading-to-grid: var(--nvx-space-3);
+  --nvx-card-grid-gap: var(--nvx-border-hairline);
+  --nvx-card-padding: 20px;
+  --nvx-gutter-page: 24px;
+  --nvx-gutter-inner: var(--nvx-gutter-page);
+  --nvx-gutter-inline: var(--nvx-gutter-page);
+  --nvx-pad-section: var(--nvx-section-py);
+  --nvx-pad-section-tight: var(--nvx-section-compact-py);
+  --nvx-pad-card: var(--nvx-card-padding);
+  --nvx-gap-section: var(--nvx-subblock-gap);
+
   --nvx-nav-mobile-pad-y: 12px;
   --nvx-nav-gap: 2px;
   --nvx-nav-gap-compact: 1px;
@@ -92,14 +106,7 @@
 
   --nvx-gap-base: clamp(16px, 2.5vw, 24px);
   --nvx-gap-wide: clamp(24px, 3vw, 40px);
-  --nvx-gap-section: clamp(24px, 4vw, 48px);
-
-  --nvx-pad-card: clamp(20px, 2.5vw, 32px);
-  --nvx-pad-section: clamp(48px, 6vw, 96px);
-  --nvx-pad-section-tight: clamp(32px, 4vw, 64px);
-
   --nvx-gutter: clamp(32px, 6vw, 96px);
-  --nvx-gutter-inner: clamp(24px, 5vw, 48px);
 
   --nvx-accent-gold: #C1A68D;
   --nvx-accent-gold-text: #735942;
@@ -113,8 +120,8 @@
   --nvx-margin-lead: 32px;
   --nvx-margin-caption: 16px;
 
-  /* Shell y lectura */
-  --nvx-shell: min(1240px, calc(100vw - var(--nvx-gutter)));
+  /* Shell y lectura: el gutter pertenece al contenedor, una vez por cada lado. */
+  --nvx-shell: min(1240px, calc(100vw - (2 * var(--nvx-gutter-page))));
 
   --nvx-measure: 68ch;
   --nvx-measure-lead: 56ch;

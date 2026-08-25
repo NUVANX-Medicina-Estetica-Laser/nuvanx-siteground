@@ -221,6 +221,16 @@ function nvx_theme_scripts(): void {
 		)
 	);
 	wp_enqueue_script(
+		'nvx-footer',
+		$uri . '/assets/js/nvx-footer.js',
+		array(),
+		nvx_asset_version( 'assets/js/nvx-footer.js' ),
+		array(
+			'in_footer' => true,
+			'strategy'  => 'defer',
+		)
+	);
+	wp_enqueue_script(
 		'nvx-conversion-events',
 		$uri . '/assets/js/nvx-conversion-events.js',
 		array(),

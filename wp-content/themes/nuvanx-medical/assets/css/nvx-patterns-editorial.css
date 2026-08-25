@@ -969,9 +969,10 @@ body:not(.home) .nvx-page-hero__copy h1,
 
 .nvx-laser-pillar,
 .nvx-brand-card {
-  padding: var(--nvx-space-4);
+  padding: var(--nvx-card-padding);
   background: var(--nvx-surface-base, var(--nvx-color-paper));
   border: var(--nvx-border-hairline) solid var(--nvx-border-soft);
+  box-shadow: none;
 }
 
 .nvx-laser-pillar__title,

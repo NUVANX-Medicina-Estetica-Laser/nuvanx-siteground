@@ -51,7 +51,7 @@
 .nvx-hub-region__num {
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-h3);
-  color: var(--nvx-accent-gold);
+  color: var(--nvx-ink);
 }
 
 .nvx-hub-region__name {
@@ -118,7 +118,7 @@
 .nvx-hub-catalog__item-num {
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-display);
-  color: var(--nvx-accent-gold);
+  color: var(--nvx-ink);
   line-height: 0.8;
   margin-bottom: var(--nvx-space-4);
   opacity: 0.9;

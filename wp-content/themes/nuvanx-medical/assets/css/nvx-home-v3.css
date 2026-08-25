@@ -267,7 +267,7 @@
 	flex-direction: column;
 	gap: var(--nvx-space-2);
 	max-width: var(--nvx-measure);
-	border-left: 2px solid var(--nvx-accent-gold-text);
+	border-left: var(--nvx-border-hairline) solid var(--nvx-ink);
 	padding-left: var(--nvx-space-4);
 }
 
@@ -275,7 +275,7 @@
 	font-family: var(--nvx-serif);
 	font-size: var(--nvx-type-caption);
 	font-weight: var(--nvx-fw-medium);
-	color: var(--nvx-accent-gold-text);
+	color: var(--nvx-ink);
 	margin-bottom: var(--nvx-space-1);
 }
 
@@ -344,13 +344,16 @@
 }
 
 .nvx-home-portfolio__link:hover .nvx-home-portfolio__name, .nvx-home-portfolio__link:focus-visible .nvx-home-portfolio__name {
-	color: var(--nvx-accent-gold-text);
+	color: var(--nvx-ink);
+	text-decoration: underline;
+	text-decoration-thickness: var(--nvx-border-hairline);
+	text-underline-offset: var(--nvx-space-1);
 }
 
 .nvx-home-portfolio__number {
 	font-family: var(--nvx-sans);
 	font-size: var(--nvx-type-small);
-	color: var(--nvx-accent-gold-text);
+	color: var(--nvx-ink);
 	font-weight: var(--nvx-fw-medium);
 }
 
@@ -648,8 +651,10 @@
 	padding-block: var(--nvx-space-1);
 	font-family: var(--nvx-sans);
 	font-size: var(--nvx-type-small);
-	color: var(--nvx-accent-gold-text);
-	text-decoration: none;
+	color: var(--nvx-ink);
+	text-decoration: underline;
+	text-decoration-thickness: var(--nvx-border-hairline);
+	text-underline-offset: var(--nvx-space-1);
 	font-weight: var(--nvx-fw-medium);
 	transition: color var(--nvx-transition-fast);
 }
