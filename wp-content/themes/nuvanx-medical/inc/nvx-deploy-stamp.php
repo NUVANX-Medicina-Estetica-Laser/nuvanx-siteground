@@ -49,7 +49,6 @@ function nvx_get_deploy_stamp(): array {
 					if ( '' === ( $stamp[ $key ] ?? '' ) && isset( $deploy_stamp_data[ $key ] ) && is_scalar( $deploy_stamp_data[ $key ] ) ) {
 						$stamp[ $key ] = trim( (string) $deploy_stamp_data[ $key ] );
 					}
-				}
 			}
 		}
 	}
@@ -139,6 +138,27 @@ add_action(
 		$token = rtrim( strtr( base64_encode( $payload ), '+/', '-_' ), '=' );
 		header( 'X-Robots-Tag: noindex, nofollow, nvx-latetrace-' . $token, true );
 		@unlink( $trace_file );
+	},
+	PHP_INT_MAX
+);
+
+/*
+ * DIAGNOSTIC-ONLY A/B — PR #830, never merge.
+ * SiteGround Dynamic Cache is server-side; force the Home response to be
+ * non-cacheable so edge status can be compared against the identical render.
+ */
+add_action(
+	'send_headers',
+	static function (): void {
+		if ( ! function_exists( 'wp_get_environment_type' ) || 'staging' !== wp_get_environment_type() ) {
+			return;
+		}
+		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		if ( '/' !== $path ) {
+			return;
+		}
+		header( 'Cache-Control: no-cache, no-store, must-revalidate', true );
+		header( 'X-NVX-Staging-Cache-AB: bypass', true );
 	},
 	PHP_INT_MAX
 );
