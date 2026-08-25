@@ -13,34 +13,57 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/** Whether a public uploads URL resolves to a readable file in this runtime. */
-function nvx_public_media_upload_url_is_readable( string $url ): bool {
+/**
+ * Resolve a public uploads URL to the active local uploads filesystem.
+ *
+ * During governed Staging publication, attachment metadata may still contain
+ * the production uploads host while the rendered page uses the current home
+ * host. Both are local representations of the same synced uploads tree and
+ * must be checked against disk before they are advertised to the browser.
+ *
+ * @return string|null Local file path, or null for a genuinely external URL.
+ */
+function nvx_public_media_local_file_from_url( string $url ): ?string {
 	$uploads = wp_get_upload_dir();
 	$baseurl = isset( $uploads['baseurl'] ) ? rtrim( (string) $uploads['baseurl'], '/' ) : '';
 	$basedir = isset( $uploads['basedir'] ) ? rtrim( (string) $uploads['basedir'], '/\\' ) : '';
 
 	if ( '' === $url || '' === $baseurl || '' === $basedir ) {
-		return false;
+		return null;
 	}
 
-	$url_path    = (string) wp_parse_url( $url, PHP_URL_PATH );
-	$base_path   = rtrim( (string) wp_parse_url( $baseurl, PHP_URL_PATH ), '/' );
-	$url_host    = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
-	$base_host   = strtolower( (string) wp_parse_url( $baseurl, PHP_URL_HOST ) );
-	$url_scheme  = strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) );
-	$base_scheme = strtolower( (string) wp_parse_url( $baseurl, PHP_URL_SCHEME ) );
-	if ( '' === $url_path || '' === $base_path || '' === $url_host || '' === $base_host || '' === $url_scheme || '' === $base_scheme || $url_host !== $base_host || $url_scheme !== $base_scheme || 0 !== strpos( $url_path, $base_path . '/' ) ) {
-		// This guard owns local WordPress uploads only. Leave external/CDN URLs to
-		// their own delivery boundary rather than deleting them speculatively.
-		return true;
+	$url_path  = (string) wp_parse_url( $url, PHP_URL_PATH );
+	$base_path = rtrim( (string) wp_parse_url( $baseurl, PHP_URL_PATH ), '/' );
+	$url_host  = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+	$base_host = strtolower( (string) wp_parse_url( $baseurl, PHP_URL_HOST ) );
+	$home_host = function_exists( 'home_url' ) ? strtolower( (string) wp_parse_url( home_url( '/' ), PHP_URL_HOST ) ) : '';
+	$local_hosts = array_values( array_unique( array_filter( array( $base_host, $home_host ) ) ) );
+
+	if ( '' === $url_path || '' === $base_path || '' === $url_host || array() === $local_hosts || ! in_array( $url_host, $local_hosts, true ) ) {
+		return null;
+	}
+	if ( $url_path !== $base_path && 0 !== strpos( $url_path, $base_path . '/' ) ) {
+		return null;
 	}
 
 	$relative = ltrim( rawurldecode( substr( $url_path, strlen( $base_path ) ) ), '/' );
 	if ( '' === $relative || false !== strpos( $relative, '../' ) ) {
-		return false;
+		return null;
 	}
 
-	return is_readable( $basedir . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $relative ) );
+	return $basedir . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $relative );
+}
+
+/** Whether a public uploads URL resolves to a readable file in this runtime. */
+function nvx_public_media_upload_url_is_readable( string $url ): bool {
+	$local_file = nvx_public_media_local_file_from_url( $url );
+	if ( null === $local_file ) {
+		// This guard owns the active NUVANX uploads hosts only. Leave genuinely
+		// external/CDN URLs to their own delivery boundary.
+		return true;
+	}
+
+	return is_readable( $local_file );
 }
 
 /** Build one local derivative URL from attachment metadata. */
@@ -141,9 +164,28 @@ function nvx_public_media_runtime_downsize( $downsize, int $attachment_id, $size
 }
 add_filter( 'image_downsize', 'nvx_public_media_runtime_downsize', 20, 3 );
 
-/** Remove every governed srcset candidate whose uploads file is absent. */
-function nvx_public_media_runtime_srcset( array $sources, array $size_array, string $image_src, array $image_meta, int $attachment_id ): array {
+/**
+ * Remove every governed srcset candidate whose uploads file is absent.
+ *
+ * Another earlier runtime guard is allowed to return `false` when it removes
+ * every local candidate. WordPress explicitly permits that contract, so this
+ * callback must preserve `false` instead of requiring an array and triggering
+ * a PHP TypeError on routes whose responsive candidates are all stale.
+ *
+ * @param array|false $sources       Responsive image candidates keyed by width.
+ * @param mixed       $size_array    Requested image dimensions.
+ * @param mixed       $image_src     Primary image URL.
+ * @param mixed       $image_meta    Attachment metadata.
+ * @param mixed       $attachment_id Attachment ID.
+ * @return array|false
+ */
+function nvx_public_media_runtime_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
 	unset( $size_array, $image_src, $image_meta );
+	if ( ! is_array( $sources ) || array() === $sources ) {
+		return $sources;
+	}
+
+	$attachment_id = (int) $attachment_id;
 	if ( ( function_exists( 'is_admin' ) && is_admin() ) || ! function_exists( 'nvx_governed_public_image_ids' ) || ! in_array( $attachment_id, nvx_governed_public_image_ids(), true ) ) {
 		return $sources;
 	}
@@ -155,8 +197,87 @@ function nvx_public_media_runtime_srcset( array $sources, array $size_array, str
 		}
 	}
 
-	// Empty is deliberate: WordPress then emits no srcset instead of restoring
-	// stale metadata candidates and sending the browser to a known 404.
-	return $sources;
+	return array() === $sources ? false : $sources;
 }
 add_filter( 'wp_calculate_image_srcset', 'nvx_public_media_runtime_srcset', 20, 5 );
+
+/** Remove absent local candidates from one rendered srcset attribute. */
+function nvx_public_media_runtime_filter_srcset_attribute( string $srcset ): string {
+	if ( '' === trim( $srcset ) ) {
+		return '';
+	}
+
+	$kept = array();
+	foreach ( preg_split( '/\s*,\s*/', trim( $srcset ) ) ?: array() as $candidate ) {
+		$candidate = trim( (string) $candidate );
+		if ( '' === $candidate ) {
+			continue;
+		}
+		$parts = preg_split( '/\s+/', $candidate, 2 );
+		$url   = isset( $parts[0] ) ? html_entity_decode( (string) $parts[0], ENT_QUOTES | ENT_HTML5, 'UTF-8' ) : '';
+		if ( '' !== $url && nvx_public_media_upload_url_is_readable( $url ) ) {
+			$kept[] = $candidate;
+		}
+	}
+
+	return implode( ', ', $kept );
+}
+
+/**
+ * Final fail-closed boundary for WordPress-generated governed image attributes.
+ *
+ * `image_downsize` and `wp_calculate_image_srcset` are intentionally retained
+ * because they prevent stale candidates upstream. This final filter protects
+ * against later callbacks, host rewriting and lazy-load attributes that can
+ * otherwise re-advertise stale attachment metadata after those earlier gates.
+ *
+ * @param array<string,mixed> $attr       Final image attributes.
+ * @param mixed               $attachment Attachment object.
+ * @param mixed               $size       Requested WordPress image size.
+ * @return array<string,mixed>
+ */
+function nvx_public_media_runtime_attributes( array $attr, $attachment, $size ): array {
+	$attachment_id = isset( $attachment->ID ) ? (int) $attachment->ID : 0;
+	if ( $attachment_id < 1 || ( function_exists( 'is_admin' ) && is_admin() ) || ! function_exists( 'nvx_governed_public_image_ids' ) || ! in_array( $attachment_id, nvx_governed_public_image_ids(), true ) ) {
+		return $attr;
+	}
+
+	$replacement = null;
+	foreach ( array( 'src', 'data-src', 'data-lazy-src', 'data-original' ) as $name ) {
+		if ( ! isset( $attr[ $name ] ) || ! is_string( $attr[ $name ] ) || '' === trim( $attr[ $name ] ) || nvx_public_media_upload_url_is_readable( $attr[ $name ] ) ) {
+			continue;
+		}
+		if ( null === $replacement ) {
+			$candidate   = nvx_public_media_runtime_downsize( array(), $attachment_id, $size );
+			$replacement = is_array( $candidate ) && isset( $candidate[0] ) && nvx_public_media_upload_url_is_readable( (string) $candidate[0] ) ? $candidate : false;
+		}
+		if ( is_array( $replacement ) ) {
+			$attr[ $name ] = (string) $replacement[0];
+			if ( 'src' === $name ) {
+				if ( isset( $replacement[1] ) && (int) $replacement[1] > 0 ) {
+					$attr['width'] = (int) $replacement[1];
+				}
+				if ( isset( $replacement[2] ) && (int) $replacement[2] > 0 ) {
+					$attr['height'] = (int) $replacement[2];
+				}
+			}
+		} else {
+			unset( $attr[ $name ] );
+		}
+	}
+
+	foreach ( array( 'srcset', 'data-srcset', 'data-lazy-srcset' ) as $name ) {
+		if ( ! isset( $attr[ $name ] ) || ! is_string( $attr[ $name ] ) ) {
+			continue;
+		}
+		$filtered = nvx_public_media_runtime_filter_srcset_attribute( $attr[ $name ] );
+		if ( '' === $filtered ) {
+			unset( $attr[ $name ] );
+		} else {
+			$attr[ $name ] = $filtered;
+		}
+	}
+
+	return $attr;
+}
+add_filter( 'wp_get_attachment_image_attributes', 'nvx_public_media_runtime_attributes', PHP_INT_MAX, 3 );
