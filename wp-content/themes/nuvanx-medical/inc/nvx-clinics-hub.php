@@ -65,8 +65,12 @@ function nvx_clinics_hub_page_markup(): string {
 	$goya_url       = home_url( $goya_path );
 	$valoracion     = home_url( '/madrid/valoracion/' );
 
-	$chamberi_tel_disp = nvx_clinics_hub_phone_display( $chamberi_phone );
-	$goya_tel_disp     = nvx_clinics_hub_phone_display( $goya_phone );
+	$chamberi_tel_disp = ! empty( $config['chamberi']['phone'] )
+		? (string) $config['chamberi']['phone']
+		: nvx_clinics_hub_phone_display( $chamberi_phone );
+	$goya_tel_disp     = ! empty( $config['goya']['phone'] )
+		? (string) $config['goya']['phone']
+		: nvx_clinics_hub_phone_display( $goya_phone );
 
 	$chamberi_wa = ! empty( $config['chamberi']['whatsapp_href'] ) ? (string) $config['chamberi']['whatsapp_href'] : 'https://wa.me/' . preg_replace( '/\D/', '', $chamberi_phone );
 	$goya_wa     = ! empty( $config['goya']['whatsapp_href'] ) ? (string) $config['goya']['whatsapp_href'] : 'https://wa.me/' . preg_replace( '/\D/', '', $goya_phone );
