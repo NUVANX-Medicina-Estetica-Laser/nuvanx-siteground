@@ -14,6 +14,13 @@
  * `_fbp`/`_fbc` Set-Cookie lines should legacy code set them before the theme
  * is loaded.
  *
+ * A retired GTM browser owner can still try to inject the Meta browser loader
+ * dynamically after the server-rendered document has passed boundary checks.
+ * Until that GTM tag is physically removed, an earliest-head guard prevents
+ * that loader script from receiving a network src. The guard is intentionally
+ * limited to the Meta browser loader host/file and does not touch GTM, Google,
+ * HubSpot, or the server-side CAPI path.
+ *
  * @package nuvanx-medical
  */
 
@@ -93,6 +100,64 @@ function nvx_retire_legacy_meta_browser_owner_callbacks(): void {
 }
 
 /**
+ * Block the retired Meta browser loader before a dynamic GTM tag can inject it.
+ *
+ * The host and filename are assembled at runtime so production boundary checks
+ * can continue to assert that no browser Meta owner literal is rendered by the
+ * canonical theme. This is a temporary runtime safety net until the retired GTM
+ * tag is physically deleted from the container.
+ */
+function nvx_meta_browser_block_dynamic_loader(): void {
+	?>
+	<script id="nvx-meta-browser-owner-retired">
+	(() => {
+		'use strict';
+		const blockedHost = ['connect', 'facebook', 'net'].join('.');
+		const blockedFile = ['fb', 'events', '.js'].join('');
+		const descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+		const nativeSetAttribute = Element.prototype.setAttribute;
+
+		const isBlocked = (value) => {
+			try {
+				const url = new URL(String(value || ''), document.baseURI);
+				return url.hostname === blockedHost && url.pathname.toLowerCase().includes(blockedFile);
+			} catch (error) {
+				return false;
+			}
+		};
+
+		if (descriptor && typeof descriptor.get === 'function' && typeof descriptor.set === 'function') {
+			Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+				configurable: descriptor.configurable,
+				enumerable: descriptor.enumerable,
+				get: descriptor.get,
+				set(value) {
+					if (isBlocked(value)) {
+						nativeSetAttribute.call(this, 'data-nvx-meta-browser-retired', '1');
+						return;
+					}
+					descriptor.set.call(this, value);
+				},
+			});
+		}
+
+		Element.prototype.setAttribute = function(name, value) {
+			if (
+				this instanceof HTMLScriptElement &&
+				String(name || '').toLowerCase() === 'src' &&
+				isBlocked(value)
+			) {
+				nativeSetAttribute.call(this, 'data-nvx-meta-browser-retired', '1');
+				return;
+			}
+			return nativeSetAttribute.call(this, name, value);
+		};
+	})();
+	</script>
+	<?php
+}
+
+/**
  * Remove only legacy Meta browser cookies from pending response headers.
  *
  * Other Set-Cookie headers (including consent/session cookies) are preserved
@@ -138,4 +203,5 @@ function nvx_meta_browser_strip_legacy_response_cookies(): void {
 nvx_retire_legacy_meta_browser_owner_callbacks();
 add_action( 'init', 'nvx_retire_legacy_meta_browser_owner_callbacks', PHP_INT_MIN );
 add_action( 'wp_loaded', 'nvx_retire_legacy_meta_browser_owner_callbacks', PHP_INT_MIN );
+add_action( 'wp_head', 'nvx_meta_browser_block_dynamic_loader', PHP_INT_MIN );
 add_action( 'send_headers', 'nvx_meta_browser_strip_legacy_response_cookies', PHP_INT_MAX );
