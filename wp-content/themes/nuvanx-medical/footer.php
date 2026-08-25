@@ -126,7 +126,7 @@ $nvx_col_two  = array_slice( $nvx_footer_treatments, $nvx_split_at );
 					</div>
 					<div class="nvx-footer__clinic">
 						<a href="<?php echo esc_url( home_url( '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' ) ); ?>" class="nvx-footer__clinic-name">Salamanca–Goya</a>
-						<a href="tel:+34647505107" class="nvx-footer__clinic-phone">647 505 107</a>
+						<a href="tel:+34647505107" class="nvx-footer__clinic-phone">647 50 51 07</a>
 						<address class="nvx-footer__address">
 							Calle de Fernán González, 26<br>
 							28009 Madrid
