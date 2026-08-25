@@ -38,7 +38,6 @@ function nvx_get_deploy_stamp(): array {
 			$needs_deploy_stamp_file = true;
 			break;
 		}
-	}
 
 	if ( $needs_deploy_stamp_file ) {
 		$deploy_stamp_file = get_template_directory() . '/.nvx-deploy-stamp.json';
@@ -112,9 +111,49 @@ add_action( 'wp_head', 'nvx_render_deploy_stamp_meta', 1 );
 
 /*
  * DIAGNOSTIC-ONLY — PR #830, never merge.
+ * Record the caller chain at the exact moment Home requests HTTP 500.
+ */
+add_filter(
+	'status_header',
+	static function ( $status_header, $code, $description, $protocol ) {
+		if ( ! function_exists( 'wp_get_environment_type' ) || 'staging' !== wp_get_environment_type() || (int) $code < 500 ) {
+			return $status_header;
+		}
+		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		if ( '/' !== $path ) {
+			return $status_header;
+		}
+		$frames = array();
+		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 32 ) as $frame ) {
+			$frames[] = array(
+				'file'     => isset( $frame['file'] ) ? basename( (string) $frame['file'] ) : '',
+				'line'     => isset( $frame['line'] ) ? (int) $frame['line'] : 0,
+				'class'    => isset( $frame['class'] ) ? substr( (string) $frame['class'], 0, 160 ) : '',
+				'type'     => isset( $frame['type'] ) ? (string) $frame['type'] : '',
+				'function' => isset( $frame['function'] ) ? substr( (string) $frame['function'], 0, 160 ) : '',
+			);
+		}
+		$payload = array(
+			'code'        => (int) $code,
+			'description' => substr( (string) $description, 0, 80 ),
+			'protocol'    => substr( (string) $protocol, 0, 16 ),
+			'frames'      => $frames,
+		);
+		$encoded = wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		if ( is_string( $encoded ) && '' !== $encoded ) {
+			file_put_contents( get_template_directory() . '/.nvx-home-status500-trace-830.json', $encoded, LOCK_EX );
+		}
+		return $status_header;
+	},
+	PHP_INT_MIN + 1,
+	4
+);
+
+/*
+ * DIAGNOSTIC-ONLY — PR #830, never merge.
  * The Home request writes its late lifecycle trace at shutdown. The staging
  * boundary continues to /soluciones-medicas/ after Home fails, so use that
- * healthy route to transport the prior Home trace without changing Home's
+ * healthy route to transport the prior Home traces without changing Home's
  * status, body, buffering, or normal public behavior.
  */
 add_action(
@@ -127,17 +166,24 @@ add_action(
 		if ( '/soluciones-medicas/' !== $path ) {
 			return;
 		}
-		$trace_file = get_template_directory() . '/.nvx-home-late-trace-830.json';
-		if ( ! is_readable( $trace_file ) ) {
-			return;
+		$directives = array( 'noindex', 'nofollow' );
+		foreach (
+			array(
+				'nvx-latetrace-' => get_template_directory() . '/.nvx-home-late-trace-830.json',
+				'nvx-status500-' => get_template_directory() . '/.nvx-home-status500-trace-830.json',
+			) as $prefix => $trace_file
+		) {
+			if ( ! is_readable( $trace_file ) ) {
+				continue;
+			}
+			$payload = (string) file_get_contents( $trace_file );
+			if ( '' === trim( $payload ) ) {
+				continue;
+			}
+			$directives[] = $prefix . rtrim( strtr( base64_encode( $payload ), '+/', '-_' ), '=' );
+			@unlink( $trace_file );
 		}
-		$payload = (string) file_get_contents( $trace_file );
-		if ( '' === trim( $payload ) ) {
-			return;
-		}
-		$token = rtrim( strtr( base64_encode( $payload ), '+/', '-_' ), '=' );
-		header( 'X-Robots-Tag: noindex, nofollow, nvx-latetrace-' . $token, true );
-		@unlink( $trace_file );
+		header( 'X-Robots-Tag: ' . implode( ', ', $directives ), true );
 	},
 	PHP_INT_MAX
 );
