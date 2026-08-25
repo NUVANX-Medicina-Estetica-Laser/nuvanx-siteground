@@ -10,9 +10,10 @@
 
 get_header();
 
-$shell_content   = get_query_var( 'nvx_shell_content' );
-$shell_skip_hdr  = get_query_var( 'nvx_shell_skip_header' );
-$shell_with_wrap = get_query_var( 'nvx_shell_with_wrapper' );
+$shell_content           = get_query_var( 'nvx_shell_content' );
+$shell_skip_hdr          = get_query_var( 'nvx_shell_skip_header' );
+$shell_with_wrap         = get_query_var( 'nvx_shell_with_wrapper' );
+$shell_content_is_layout = get_query_var( 'nvx_shell_content_is_layout' );
 
 if ( ! empty( $shell_content ) && ! is_singular() ) {
 	?>
@@ -163,7 +164,7 @@ while ( have_posts() ) :
 	if ( $has_standard_wrapper && strpos( $content, '<div class="entry-content nvx-page__content nvx-prose">' ) === 0 ) {
 		the_content();
 	} else {
-		$no_prose_wrap = ! empty( $shell_with_wrap ) || $has_managed_editorial || $has_standard_wrapper;
+		$no_prose_wrap = ! empty( $shell_with_wrap ) || ! empty( $shell_content_is_layout ) || $has_managed_editorial || $has_standard_wrapper;
 
 		if ( ! $no_prose_wrap ) {
 			?>

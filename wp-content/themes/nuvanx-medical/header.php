@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once get_template_directory() . '/inc/nvx-public-media-runtime-governance.php';
 // No theme-level document rewrite buffer: SiteGround Optimizer + Complianz own
 // the front-end buffer stack. Head contract is emitted via wp_head filters.
 ?><!doctype html>
