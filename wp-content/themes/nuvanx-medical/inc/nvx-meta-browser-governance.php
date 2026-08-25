@@ -102,10 +102,11 @@ function nvx_retire_legacy_meta_browser_owner_callbacks(): void {
 /**
  * Block the retired Meta browser loader before a dynamic GTM tag can inject it.
  *
- * The host and filename are assembled at runtime so production boundary checks
- * can continue to assert that no browser Meta owner literal is rendered by the
- * canonical theme. This is a temporary runtime safety net until the retired GTM
- * tag is physically deleted from the container.
+ * The known retired GTM snippet follows the normal script-element loader path.
+ * Guard all script URL assignment variants used by that path (`src`,
+ * `setAttribute`, and `setAttributeNS`) while leaving unrelated script URLs and
+ * DOM APIs untouched. This remains a temporary safety net until the GTM tag is
+ * physically deleted.
  */
 function nvx_meta_browser_block_dynamic_loader(): void {
 	?>
@@ -116,6 +117,7 @@ function nvx_meta_browser_block_dynamic_loader(): void {
 		const blockedFile = ['fb', 'events', '.js'].join('');
 		const descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
 		const nativeScriptSetAttribute = HTMLScriptElement.prototype.setAttribute;
+		const nativeScriptSetAttributeNS = HTMLScriptElement.prototype.setAttributeNS;
 
 		const isBlocked = (value) => {
 			try {
@@ -126,6 +128,10 @@ function nvx_meta_browser_block_dynamic_loader(): void {
 			}
 		};
 
+		const markBlocked = (script) => {
+			nativeScriptSetAttribute.call(script, 'data-nvx-meta-browser-retired', '1');
+		};
+
 		if (descriptor && typeof descriptor.get === 'function' && typeof descriptor.set === 'function') {
 			Object.defineProperty(HTMLScriptElement.prototype, 'src', {
 				configurable: descriptor.configurable,
@@ -133,7 +139,7 @@ function nvx_meta_browser_block_dynamic_loader(): void {
 				get: descriptor.get,
 				set(value) {
 					if (isBlocked(value)) {
-						nativeScriptSetAttribute.call(this, 'data-nvx-meta-browser-retired', '1');
+						markBlocked(this);
 						return;
 					}
 					descriptor.set.call(this, value);
@@ -143,11 +149,21 @@ function nvx_meta_browser_block_dynamic_loader(): void {
 
 		HTMLScriptElement.prototype.setAttribute = function(name, value) {
 			if (String(name || '').toLowerCase() === 'src' && isBlocked(value)) {
-				nativeScriptSetAttribute.call(this, 'data-nvx-meta-browser-retired', '1');
+				markBlocked(this);
 				return;
 			}
 			return nativeScriptSetAttribute.call(this, name, value);
 		};
+
+		if (typeof nativeScriptSetAttributeNS === 'function') {
+			HTMLScriptElement.prototype.setAttributeNS = function(namespace, name, value) {
+				if (String(name || '').toLowerCase() === 'src' && isBlocked(value)) {
+					markBlocked(this);
+					return;
+				}
+				return nativeScriptSetAttributeNS.call(this, namespace, name, value);
+			};
+		}
 	})();
 	</script>
 	<?php
