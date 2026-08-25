@@ -200,6 +200,30 @@ foreach ( $manifest['routes'] as $route => $expected ) {
 }
 
 if ( ! empty( $missing ) || ! empty( $surplus ) || ! empty( $changed ) ) {
+    $surplusDetails = array_map(
+        static function ( string $route ) use ( $actual ): array {
+            $source = is_array( $actual[ $route ] ?? null ) ? $actual[ $route ] : array();
+            return array(
+                'route'     => $route,
+                'post_id'   => (int) ( $source['ID'] ?? 0 ),
+                'post_type' => (string) ( $source['post_type'] ?? '' ),
+                'slug'      => (string) ( $source['post_name'] ?? '' ),
+                'status'    => (string) ( $source['post_status'] ?? '' ),
+            );
+        },
+        $surplus
+    );
+    $driftDetails = array(
+        'missing'     => array_values( $missing ),
+        'surplus'     => array_values( $surplusDetails ),
+        'changed'     => array_values( $changed ),
+        'transitions' => array_values( $routeTransitions ),
+    );
+
+    fwrite(
+        STDERR,
+        'PRODUCTION_PUBLICATION_DRIFT=' . wp_json_encode( $driftDetails, JSON_UNESCAPED_SLASHES ) . "\n"
+    );
     fwrite(
         STDERR,
         sprintf(
