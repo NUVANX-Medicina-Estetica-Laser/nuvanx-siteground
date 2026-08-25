@@ -36,11 +36,11 @@ $clinic_config = $config[ $clinic_key ] ?? array();
 
 $clinic_name    = ! empty( $clinic_data['name'] ) ? $clinic_data['name'] : ( 'chamberi' === $clinic_key ? 'Centro Clínico NUVANX Chamberí' : 'Centro Clínico NUVANX Salamanca–Goya' );
 $clinic_address = ! empty( $clinic_config['address'] ) ? sprintf( '%s, %s %s', $clinic_config['address'], $clinic_config['postal_code'], $clinic_config['locality'] ) : '';
-$clinic_phone   = ! empty( $clinic_data['telephone'] ) ? $clinic_data['telephone'] : '';
+$clinic_phone   = ! empty( $clinic_config['phone_href'] ) ? $clinic_config['phone_href'] : '';
 $clinic_hours   = ! empty( $clinic_config['hours'] ) ? $clinic_config['hours'] : '';
 $clinic_maps    = ! empty( $clinic_data['hasMap'] ) ? $clinic_data['hasMap'] : '';
 
-$phone_display  = ! empty( $clinic_phone ) ? trim( chunk_split( preg_replace( '/^\+34/', '', $clinic_phone ), 3, ' ' ) ) : '';
+$phone_display  = ! empty( $clinic_config['phone'] ) ? $clinic_config['phone'] : '';
 $whatsapp_url   = ! empty( $clinic_config['whatsapp_href'] ) ? $clinic_config['whatsapp_href'] : ( ! empty( $clinic_phone ) ? 'https://wa.me/' . preg_replace( '/\D/', '', $clinic_phone ) : '' );
 $valoracion_url = home_url( '/madrid/valoracion/' );
 
