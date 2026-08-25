@@ -153,6 +153,44 @@ add_filter(
 
 /*
  * DIAGNOSTIC-ONLY — PR #830, never merge.
+ * WordPress passes the original fatal payload through wp_php_error_args before
+ * wp_die() emits response=500. Preserve that payload before later warnings or
+ * deprecations can overwrite error_get_last().
+ */
+add_filter(
+	'wp_php_error_args',
+	static function ( $args, $error ) {
+		if ( ! function_exists( 'wp_get_environment_type' ) || 'staging' !== wp_get_environment_type() ) {
+			return $args;
+		}
+		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		if ( '/' !== $path || ! is_array( $error ) ) {
+			return $args;
+		}
+		$root = defined( 'ABSPATH' ) ? (string) ABSPATH : '';
+		$normalize = static function ( $value ) use ( $root ): string {
+			$value = (string) $value;
+			return '' !== $root ? str_replace( $root, '<ABSPATH>/', $value ) : $value;
+		};
+		$payload = array(
+			'type'    => isset( $error['type'] ) ? (int) $error['type'] : 0,
+			'message' => $normalize( $error['message'] ?? '' ),
+			'file'    => $normalize( $error['file'] ?? '' ),
+			'line'    => isset( $error['line'] ) ? (int) $error['line'] : 0,
+			'args'    => is_array( $args ) ? array_intersect_key( $args, array( 'response' => true, 'exit' => true ) ) : array(),
+		);
+		$encoded = wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		if ( is_string( $encoded ) && '' !== $encoded ) {
+			file_put_contents( get_template_directory() . '/.nvx-home-fatal-error-830.json', $encoded, LOCK_EX );
+		}
+		return $args;
+	},
+	PHP_INT_MIN,
+	2
+);
+
+/*
+ * DIAGNOSTIC-ONLY — PR #830, never merge.
  * Relay Home traces through the next healthy boundary route.
  */
 add_action(
@@ -170,6 +208,7 @@ add_action(
 			array(
 				'nvx-latetrace-' => get_template_directory() . '/.nvx-home-late-trace-830.json',
 				'nvx-status500-' => get_template_directory() . '/.nvx-home-status500-trace-830.json',
+				'nvx-fatalerror-' => get_template_directory() . '/.nvx-home-fatal-error-830.json',
 			) as $prefix => $trace_file
 		) {
 			if ( ! is_readable( $trace_file ) ) {
