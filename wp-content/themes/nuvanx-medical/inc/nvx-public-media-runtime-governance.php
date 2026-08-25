@@ -302,28 +302,32 @@ function nvx_public_media_sgo_lazy_load_exclude_images( $excluded ): array {
 
 	$urls = array();
 	foreach ( nvx_governed_public_image_ids() as $attachment_id ) {
-		$resolved_id = 2892 === (int) $attachment_id ? 2877 : (int) $attachment_id;
-		$original    = wp_get_attachment_url( $resolved_id );
-		$meta        = wp_get_attachment_metadata( $resolved_id );
-		$meta        = is_array( $meta ) ? $meta : array();
+		$resolved_id    = 2892 === (int) $attachment_id ? 2877 : (int) $attachment_id;
+		$ids_to_process = array_unique( array( (int) $attachment_id, $resolved_id ) );
 
-		if ( is_string( $original ) && '' !== $original ) {
-			$urls[] = $original;
-			$path   = (string) wp_parse_url( $original, PHP_URL_PATH );
-			if ( '' !== $path && function_exists( 'home_url' ) ) {
-				$urls[] = home_url( $path );
-			}
+		foreach ( $ids_to_process as $process_id ) {
+			$original = wp_get_attachment_url( $process_id );
+			$meta     = wp_get_attachment_metadata( $process_id );
+			$meta     = is_array( $meta ) ? $meta : array();
 
-			$dir = trailingslashit( dirname( $original ) );
-			foreach ( (array) ( $meta['sizes'] ?? array() ) as $variant ) {
-				if ( ! is_array( $variant ) || empty( $variant['file'] ) ) {
-					continue;
-				}
-				$candidate = $dir . rawurlencode( basename( (string) $variant['file'] ) );
-				$urls[]   = $candidate;
-				$path     = (string) wp_parse_url( $candidate, PHP_URL_PATH );
+			if ( is_string( $original ) && '' !== $original ) {
+				$urls[] = $original;
+				$path   = (string) wp_parse_url( $original, PHP_URL_PATH );
 				if ( '' !== $path && function_exists( 'home_url' ) ) {
 					$urls[] = home_url( $path );
+				}
+
+				$dir = trailingslashit( dirname( $original ) );
+				foreach ( (array) ( $meta['sizes'] ?? array() ) as $variant ) {
+					if ( ! is_array( $variant ) || empty( $variant['file'] ) ) {
+						continue;
+					}
+					$candidate = $dir . rawurlencode( basename( (string) $variant['file'] ) );
+					$urls[]    = $candidate;
+					$path      = (string) wp_parse_url( $candidate, PHP_URL_PATH );
+					if ( '' !== $path && function_exists( 'home_url' ) ) {
+						$urls[] = home_url( $path );
+					}
 				}
 			}
 		}
