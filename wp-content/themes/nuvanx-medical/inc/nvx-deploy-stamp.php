@@ -49,6 +49,7 @@ function nvx_get_deploy_stamp(): array {
 					if ( '' === ( $stamp[ $key ] ?? '' ) && isset( $deploy_stamp_data[ $key ] ) && is_scalar( $deploy_stamp_data[ $key ] ) ) {
 						$stamp[ $key ] = trim( (string) $deploy_stamp_data[ $key ] );
 					}
+				}
 			}
 		}
 	}
