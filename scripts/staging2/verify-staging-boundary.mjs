@@ -71,6 +71,112 @@ for (const route of routes) {
 const outputDir = path.resolve('scripts/staging2/artifacts');
 await fs.mkdir(outputDir, { recursive: true });
 
+const stagingRoot = (process.env.STAGING_ROOT || '').trim();
+
+/**
+ * Deploy the home-status-tracer MU plugin to the staging server.
+ * Returns the capture token on success, null if staging root is unavailable
+ * or the template file is missing.  The plugin self-destructs after the
+ * first qualifying request so it leaves no persistent side effects.
+ *
+ * DIAGNOSTIC ONLY — this function and the plugin template must not be
+ * promoted to master.
+ */
+async function deployHomeStatusTracer() {
+  if (!stagingRoot || !/^\/[a-z0-9/_.-]+$/.test(stagingRoot)) return null;
+
+  let phpTemplate;
+  try {
+    phpTemplate = await fs.readFile(
+      path.resolve('scripts/staging2/mu-plugin-templates/nvx-staging-home-trace.php'),
+      'utf8'
+    );
+  } catch {
+    console.warn('NVX_TRACER: plugin template not found — home-status trace skipped');
+    return null;
+  }
+
+  const captureToken = `${process.pid}-${Date.now()}`;
+  // Replace the placeholder in JS so the PHP file is clean before encoding.
+  const phpContent = phpTemplate.replace(/__NVX_TRACE_TOKEN__/g, captureToken);
+  // Base64-encode to avoid shell-escaping issues when embedding in the remote script.
+  const phpB64 = Buffer.from(phpContent, 'utf8').toString('base64');
+
+  const remoteScript = [
+    'set -Eeuo pipefail',
+    '[[ "$CAPTURE_TOKEN" =~ ^[0-9]+-[0-9]+$ ]]',
+    'cd "$STAGING_ROOT"',
+    'PLUGIN="wp-content/mu-plugins/nvx-staging-home-trace-${CAPTURE_TOKEN}.php"',
+    '[[ ! -e "$PLUGIN" && ! -L "$PLUGIN" ]] || { echo "NVX_TRACER_DEPLOY=REFUSED reason=plugin_exists" >&2; exit 1; }',
+    'mkdir -p wp-content/mu-plugins',
+    'printf "%s" "$PHP_B64" | base64 -d > "$PLUGIN"',
+    'echo "NVX_TRACER_DEPLOY=PASS token=${CAPTURE_TOKEN}"',
+    '',
+  ].join('\n');
+
+  const result = spawnSync(
+    sshBin,
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'ConnectionAttempts=1',
+     '--', originSshAlias,
+     `STAGING_ROOT=${stagingRoot} CAPTURE_TOKEN=${captureToken} PHP_B64=${phpB64} bash -se`],
+    { input: remoteScript, encoding: 'utf8', timeout: 30000, maxBuffer: 2 * 1024 * 1024 }
+  );
+
+  if (result.error || result.status !== 0) {
+    console.warn(
+      `NVX_TRACER: deploy failed exit=${result.status} err=${
+        result.error?.message || (result.stderr || '').trim().slice(0, 120)
+      }`
+    );
+    return null;
+  }
+
+  console.log(`NVX_TRACER_DEPLOY=PASS token=${captureToken}`);
+  return captureToken;
+}
+
+/**
+ * Retrieve the trace JSON written by the MU plugin to /tmp on the server.
+ * Also removes any stale plugin file that was not self-destructed.
+ *
+ * DIAGNOSTIC ONLY.
+ */
+function retrieveHomeStatusTrace(captureToken) {
+  if (!captureToken || !stagingRoot) return null;
+
+  const traceFile  = `/tmp/nvx-home-trace-${captureToken}.json`;
+  const pluginFile = `${stagingRoot}/wp-content/mu-plugins/nvx-staging-home-trace-${captureToken}.php`;
+
+  const remoteScript = [
+    'set -euo pipefail',
+    `rm -f '${pluginFile}'`,
+    `if [ -s '${traceFile}' ]; then cat '${traceFile}'; rm -f '${traceFile}'; else printf 'NVX_TRACE_MISSING'; fi`,
+    '',
+  ].join('\n');
+
+  const result = spawnSync(
+    sshBin,
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'ConnectionAttempts=1',
+     '--', originSshAlias, 'bash -se'],
+    { input: remoteScript, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024 }
+  );
+
+  const stdout = (result.stdout || '').trim();
+  if (!stdout || stdout === 'NVX_TRACE_MISSING') {
+    return { available: false, reason: stdout || 'empty_stdout' };
+  }
+  try {
+    return { available: true, trace: JSON.parse(stdout) };
+  } catch {
+    return { available: false, reason: 'json_parse_error', raw: stdout.slice(0, 200) };
+  }
+}
+
+// Deploy tracer before the route loop so the MU plugin is live when the
+// first request to / arrives.  Null means the tracer was not deployed
+// (non-fatal — verification continues normally).
+const tracerToken = await deployHomeStatusTracer();
+
 function extractMetaContent(html, name) {
   const tags = html.match(/<meta\b[^>]*>/gi) || [];
   for (const tag of tags) {
@@ -311,6 +417,24 @@ for (const route of routes) {
 }
 
 report.pass = report.failures.length === 0;
+
+// Retrieve the home-status trace (if the tracer was deployed).
+// This captures the complete WP hook lifecycle and status_header() calls
+// written by the MU plugin to /tmp after the / request completed.
+const homeStatusTrace = retrieveHomeStatusTrace(tracerToken);
+if (homeStatusTrace) {
+  report.homeStatusTrace = homeStatusTrace;
+  if (homeStatusTrace.available) {
+    const { final_http_status: hs, status_header_calls: sh, hooks } = homeStatusTrace.trace;
+    console.log(
+      `NVX_HOME_TRACE final_http_status=${hs} status_header_calls=${JSON.stringify(sh)} ` +
+      `hooks=${JSON.stringify(hooks)}`
+    );
+  } else {
+    console.warn(`NVX_HOME_TRACE unavailable reason=${homeStatusTrace.reason}`);
+  }
+}
+
 await fs.writeFile(path.join(outputDir, 'staging2-boundary.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
 if (!report.pass) {
