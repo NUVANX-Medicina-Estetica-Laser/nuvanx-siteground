@@ -52,16 +52,30 @@ function captureStagingFatalDiagnostic(triggerStatus) {
   }
 
   stagingFatalCaptureAttempted = true;
+  const captureToken = `${process.pid}-${Date.now()}`;
   const remoteScript = [
     'set -Eeuo pipefail',
+    '[[ "$CAPTURE_TOKEN" =~ ^[0-9]+-[0-9]+$ ]]',
     'cd "$STAGING_ROOT"',
-    'plugin="wp-content/mu-plugins/nvx-staging-fatal-capture.php"',
-    'fatal_file="wp-content/nvx-staging-fatal.json"',
+    'plugin="wp-content/mu-plugins/nvx-staging-fatal-capture-${CAPTURE_TOKEN}.php"',
+    'fatal_file="/tmp/nvx-staging-fatal-${CAPTURE_TOKEN}.json"',
+    'write_failure_file="/tmp/nvx-staging-fatal-${CAPTURE_TOKEN}.write-failed"',
+    'headers="$(mktemp)"',
     'mkdir -p wp-content/mu-plugins',
-    'cleanup() { rm -f "$plugin" "$fatal_file"; }',
-    'trap cleanup EXIT',
+    'if [[ -e "$plugin" || -L "$plugin" || -e "$fatal_file" || -e "$write_failure_file" ]]; then',
+    '  echo "NVX_FATAL_CAPTURE=REFUSED reason=target_exists" >&2',
+    '  exit 1',
+    'fi',
+    'cleanup() { rm -f "$plugin" "$fatal_file" "$write_failure_file" "$headers"; }',
+    'trap cleanup EXIT HUP INT TERM',
     'cat > "$plugin" <<\'PHP\'',
     '<?php',
+    'if ( ( $_SERVER[\'HTTP_USER_AGENT\'] ?? \'\' ) !== \'NUVANX-Staging-Fatal-Capture/1.1\' ) {',
+    '    @unlink( __FILE__ );',
+    '    return;',
+    '}',
+    'define( \'NVX_STAGING_FATAL_CAPTURE_FILE\', \'/tmp/nvx-staging-fatal-__CAPTURE_TOKEN__.json\' );',
+    'define( \'NVX_STAGING_FATAL_WRITE_FAILURE_FILE\', \'/tmp/nvx-staging-fatal-__CAPTURE_TOKEN__.write-failed\' );',
     'register_shutdown_function(',
     '    static function () {',
     '        $error = error_get_last();',
@@ -84,23 +98,37 @@ function captureStagingFatalDiagnostic(triggerStatus) {
     '            \'file\' => $normalize( $error[\'file\'] ?? \'\' ),',
     '            \'line\' => isset( $error[\'line\'] ) ? (int) $error[\'line\'] : 0,',
     '        );',
-    '        file_put_contents( WP_CONTENT_DIR . \'/nvx-staging-fatal.json\', json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . PHP_EOL, LOCK_EX );',
+    '        $encoded = json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );',
+    '        $written = false !== $encoded ? file_put_contents( NVX_STAGING_FATAL_CAPTURE_FILE, $encoded . PHP_EOL, LOCK_EX ) : false;',
+    '        if ( false === $written ) {',
+    '            @file_put_contents( NVX_STAGING_FATAL_WRITE_FAILURE_FILE, \'write_failed\' . PHP_EOL, LOCK_EX );',
+    '        }',
     '    }',
     ');',
+    '// The diagnostic request already loaded this file; unlink immediately so an interrupted SSH session cannot leave an active MU owner behind.',
+    '@unlink( __FILE__ );',
     'PHP',
-    'rm -f "$fatal_file"',
+    'sed -i "s/__CAPTURE_TOKEN__/${CAPTURE_TOKEN}/g" "$plugin"',
     'set +e',
-    'request_status="$(curl -4 -k -sS --connect-timeout 10 --max-time 30 --resolve "${EXPECTED_HOST}:443:127.0.0.1" --proto \'=https\' -A \'NUVANX-Staging-Fatal-Capture/1.0\' -H \'Accept: text/html,application/xhtml+xml\' -H \'Cache-Control: no-cache\' -o /dev/null -w \'%{http_code}\' "https://${EXPECTED_HOST}/")"',
+    'request_status="$(curl -4 -k -sS --connect-timeout 10 --max-time 30 --resolve "${EXPECTED_HOST}:443:127.0.0.1" --proto \'=https\' -A \'NUVANX-Staging-Fatal-Capture/1.1\' -H \'Accept: text/html,application/xhtml+xml\' -H \'Cache-Control: no-cache\' -D "$headers" -o /dev/null -w \'%{http_code}\' "https://${EXPECTED_HOST}/")"',
     'curl_rc=$?',
     'set -e',
     'fatal_json=""',
-    'if [[ -s "$fatal_file" ]]; then fatal_json="$(cat "$fatal_file")"; fi',
+    'capture_state="no_fatal_recorded"',
+    'if [[ -s "$fatal_file" ]]; then',
+    '  fatal_json="$(cat "$fatal_file")"',
+    '  capture_state="fatal_recorded"',
+    'elif [[ -s "$write_failure_file" ]]; then',
+    '  capture_state="fatal_write_failed"',
+    'elif [[ "$request_status" == "500" ]]; then',
+    '  capture_state="http_500_without_fatal_record"',
+    'fi',
     'fatal_b64="$(printf \'%s\' "$fatal_json" | base64 | tr -d \'\\n\')"',
-    'printf \'NVX_FATAL_CAPTURE request_status=%s curl_rc=%s fatal_b64=%s\\n\' "$request_status" "$curl_rc" "$fatal_b64"',
+    'printf \'NVX_FATAL_CAPTURE request_status=%s curl_rc=%s capture_state=%s fatal_b64=%s\\n\' "$request_status" "$curl_rc" "$capture_state" "$fatal_b64"',
     '',
   ].join('\n');
 
-  const remoteCommand = `STAGING_ROOT=${stagingRoot} EXPECTED_HOST=${expectedHost} bash -se`;
+  const remoteCommand = `STAGING_ROOT=${stagingRoot} EXPECTED_HOST=${expectedHost} CAPTURE_TOKEN=${captureToken} bash -se`;
   const result = spawnSync(
     '/usr/bin/ssh',
     ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'ConnectionAttempts=1', '--', sshAlias, remoteCommand],
@@ -110,6 +138,7 @@ function captureStagingFatalDiagnostic(triggerStatus) {
   const stdout = (result.stdout || '').trim();
   const stderr = (result.stderr || '').trim();
   const fatalMatch = stdout.match(/\bfatal_b64=([A-Za-z0-9+/=]*)/);
+  const captureStateMatch = stdout.match(/\bcapture_state=([a-z0-9_-]+)/);
   let fatal = null;
   if (fatalMatch?.[1]) {
     try {
@@ -127,6 +156,7 @@ function captureStagingFatalDiagnostic(triggerStatus) {
     ssh_exit_status: result.status,
     ssh_signal: result.signal || '',
     ssh_error: result.error ? result.error.message : '',
+    capture_state: captureStateMatch?.[1] || 'remote_capture_unavailable',
     remote_stdout: stdout,
     remote_stderr: stderr,
     fatal,
