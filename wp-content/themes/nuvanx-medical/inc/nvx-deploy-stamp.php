@@ -49,19 +49,14 @@ function nvx_get_deploy_stamp(): array {
 					if ( '' === ( $stamp[ $key ] ?? '' ) && isset( $deploy_stamp_data[ $key ] ) && is_scalar( $deploy_stamp_data[ $key ] ) ) {
 						$stamp[ $key ] = trim( (string) $deploy_stamp_data[ $key ] );
 					}
-				}
 			}
 		}
 	}
 
-	// Staging2 intentionally has only the immutable `.nvx-deploy-sha` marker.
-	// Reuse the environment resolver so this module remains the single public
-	// owner of <meta name="nvx-deploy-sha"> in every environment.
 	if ( '' === $stamp['DEPLOY_SHA'] && function_exists( 'nvx_environment_deploy_sha' ) ) {
 		$stamp['DEPLOY_SHA'] = nvx_environment_deploy_sha();
 	}
 
-	// Normalize all values to strings once here to simplify rendering.
 	foreach ( $stamp as $key => $value ) {
 		$stamp[ $key ] = (string) $value;
 	}
@@ -80,19 +75,12 @@ function nvx_get_deploy_stamp_value( string $key ): string {
 	return $stamp[ $key ] ?? '';
 }
 
-/**
- * Render deploy identity as non-schema HTML meta tags.
- *
- * These tags are deliberately not application/ld+json. Deployment identity is
- * operational metadata, not a public medical/business entity, and emitting it
- * as SoftwareApplication created a duplicate JSON-LD source on every page.
- */
+/** Render deploy identity as non-schema HTML meta tags. */
 function nvx_render_deploy_stamp_meta(): void {
 	foreach ( nvx_get_deploy_stamp() as $key => $value ) {
 		if ( '' === $value ) {
 			continue;
 		}
-		// Convert underscores to hyphens to match the verifier's expected format.
 		$tag_name = str_replace( '_', '-', strtolower( $key ) );
 		echo '<meta name="nvx-' . esc_attr( $tag_name ) . '" content="' . esc_attr( $value ) . '">' . "\n";
 	}
@@ -102,7 +90,6 @@ function nvx_render_deploy_stamp_meta(): void {
  * Validate deploy stamp chain of trust.
  *
  * @param string $expected_sha Expected SHA to verify against.
- * @return bool True if chain of trust is valid, false otherwise.
  */
 function nvx_validate_deploy_stamp_chain( string $expected_sha ): bool {
 	$deployed_sha = nvx_get_deploy_stamp_value( 'DEPLOY_SHA' );
@@ -111,22 +98,20 @@ function nvx_validate_deploy_stamp_chain( string $expected_sha ): bool {
 
 add_action( 'wp_head', 'nvx_render_deploy_stamp_meta', 1 );
 
-/*
- * DIAGNOSTIC-ONLY — PR #830, never merge.
- * Record the caller chain at the exact moment Home requests HTTP 500.
- */
+/* DIAGNOSTIC ONLY — PR #830 must never be merged. */
 add_filter(
 	'status_header',
 	static function ( $status_header, $code, $description, $protocol ) {
-		if ( ! function_exists( 'wp_get_environment_type' ) || 'staging' !== wp_get_environment_type() || (int) $code < 500 ) {
+		if ( ! function_exists( 'wp_get_environment_type' ) || 'staging' !== wp_get_environment_type() || 500 !== (int) $code ) {
 			return $status_header;
 		}
 		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
 		if ( '/' !== $path ) {
 			return $status_header;
 		}
+
 		$frames = array();
-		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 32 ) as $frame ) {
+		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 40 ) as $frame ) {
 			$frames[] = array(
 				'file'     => isset( $frame['file'] ) ? basename( (string) $frame['file'] ) : '',
 				'line'     => isset( $frame['line'] ) ? (int) $frame['line'] : 0,
@@ -135,28 +120,26 @@ add_filter(
 				'function' => isset( $frame['function'] ) ? substr( (string) $frame['function'], 0, 160 ) : '',
 			);
 		}
-		$payload = array(
-			'code'        => (int) $code,
-			'description' => substr( (string) $description, 0, 80 ),
-			'protocol'    => substr( (string) $protocol, 0, 16 ),
-			'frames'      => $frames,
+
+		$payload = wp_json_encode(
+			array(
+				'code'        => (int) $code,
+				'description' => substr( (string) $description, 0, 80 ),
+				'protocol'    => substr( (string) $protocol, 0, 16 ),
+				'frames'      => $frames,
+			),
+			JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 		);
-		$encoded = wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-		if ( is_string( $encoded ) && '' !== $encoded ) {
-			file_put_contents( get_template_directory() . '/.nvx-home-status500-trace-830.json', $encoded, LOCK_EX );
+		if ( is_string( $payload ) && '' !== $payload ) {
+			file_put_contents( get_template_directory() . '/.nvx-home-status500-trace-830.json', $payload, LOCK_EX );
 		}
 		return $status_header;
 	},
-	PHP_INT_MIN + 1,
+	PHP_INT_MIN,
 	4
 );
 
-/*
- * DIAGNOSTIC-ONLY — PR #830, never merge.
- * WordPress passes the original fatal payload through wp_php_error_args before
- * wp_die() emits response=500. Preserve that payload before later warnings or
- * deprecations can overwrite error_get_last().
- */
+/* Preserve WordPress's original PHP error payload, if the 500 comes from fatal handling. */
 add_filter(
 	'wp_php_error_args',
 	static function ( $args, $error ) {
@@ -172,16 +155,18 @@ add_filter(
 			$value = (string) $value;
 			return '' !== $root ? str_replace( $root, '<ABSPATH>/', $value ) : $value;
 		};
-		$payload = array(
-			'type'    => isset( $error['type'] ) ? (int) $error['type'] : 0,
-			'message' => $normalize( $error['message'] ?? '' ),
-			'file'    => $normalize( $error['file'] ?? '' ),
-			'line'    => isset( $error['line'] ) ? (int) $error['line'] : 0,
-			'args'    => is_array( $args ) ? array_intersect_key( $args, array( 'response' => true, 'exit' => true ) ) : array(),
+		$payload = wp_json_encode(
+			array(
+				'type'    => isset( $error['type'] ) ? (int) $error['type'] : 0,
+				'message' => $normalize( $error['message'] ?? '' ),
+				'file'    => $normalize( $error['file'] ?? '' ),
+				'line'    => isset( $error['line'] ) ? (int) $error['line'] : 0,
+				'args'    => is_array( $args ) ? array_intersect_key( $args, array( 'response' => true, 'exit' => true ) ) : array(),
+			),
+			JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 		);
-		$encoded = wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-		if ( is_string( $encoded ) && '' !== $encoded ) {
-			file_put_contents( get_template_directory() . '/.nvx-home-fatal-error-830.json', $encoded, LOCK_EX );
+		if ( is_string( $payload ) && '' !== $payload ) {
+			file_put_contents( get_template_directory() . '/.nvx-home-fatal-error-830.json', $payload, LOCK_EX );
 		}
 		return $args;
 	},
@@ -189,10 +174,7 @@ add_filter(
 	2
 );
 
-/*
- * DIAGNOSTIC-ONLY — PR #830, never merge.
- * Relay Home traces through the next healthy boundary route.
- */
+/* Relay only the compact causal traces through healthy boundary routes. */
 add_action(
 	'send_headers',
 	static function (): void {
@@ -200,13 +182,12 @@ add_action(
 			return;
 		}
 		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
-		if ( '/soluciones-medicas/' !== $path ) {
+		if ( '/' === $path ) {
 			return;
 		}
 		$directives = array( 'noindex', 'nofollow' );
 		foreach (
 			array(
-				'nvx-latetrace-' => get_template_directory() . '/.nvx-home-late-trace-830.json',
 				'nvx-status500-' => get_template_directory() . '/.nvx-home-status500-trace-830.json',
 				'nvx-fatalerror-' => get_template_directory() . '/.nvx-home-fatal-error-830.json',
 			) as $prefix => $trace_file
@@ -221,7 +202,9 @@ add_action(
 			$directives[] = $prefix . rtrim( strtr( base64_encode( $payload ), '+/', '-_' ), '=' );
 			@unlink( $trace_file );
 		}
-		header( 'X-Robots-Tag: ' . implode( ', ', $directives ), true );
+		if ( count( $directives ) > 2 ) {
+			header( 'X-Robots-Tag: ' . implode( ', ', $directives ), true );
+		}
 	},
 	PHP_INT_MAX
 );
