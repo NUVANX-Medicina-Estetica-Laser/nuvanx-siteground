@@ -66,6 +66,7 @@ const shortContentRoutes = new Set([
   '/aviso-legal/',
   '/politica-de-cookies/',
   '/mas-informacion-sobre-las-cookies/',
+  '/eliminacion-datos-meta/',
 ]);
 
 // Every published WordPress page and article must remain addressable with HTTP 200.

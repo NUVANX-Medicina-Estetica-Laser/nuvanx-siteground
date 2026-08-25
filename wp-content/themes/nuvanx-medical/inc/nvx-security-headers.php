@@ -46,7 +46,7 @@ function nvx_add_security_headers( $headers ) {
 		"img-src 'self' data: https:",
 		"font-src 'self' data: https://fonts.gstatic.com",
 		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-		"connect-src 'self' https://*.hsforms.com https://*.hubspot.com https://*.google-analytics.com https://*.analytics.google.com https://stats.g.doubleclick.net https://*.klaviyo.com https://*.supabase.co"
+		"connect-src 'self' https://*.hsforms.com https://*.hubspot.com https://*.hscollectedforms.net https://*.google-analytics.com https://*.analytics.google.com https://stats.g.doubleclick.net https://*.klaviyo.com https://*.supabase.co"
 	);
 	$headers['Content-Security-Policy'] = implode( '; ', $csp ) . ';';
 

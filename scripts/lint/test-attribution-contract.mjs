@@ -12,4 +12,5 @@ if (mode === 'v2' && fs.existsSync(integrationPath)) {
 if (mode === 'v2') {
   await import('./test-hubspot-v4-hidden-lineage.mjs');
   await import('./test-lead-captured-server-relay.mjs');
+  await import('./test-google-attribution-relay-auth.mjs');
 }

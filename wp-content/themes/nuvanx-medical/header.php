@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once get_template_directory() . '/inc/nvx-public-media-runtime-governance.php';
 // No theme-level document rewrite buffer: SiteGround Optimizer + Complianz own
 // the front-end buffer stack. Head contract is emitted via wp_head filters.
 ?><!doctype html>
@@ -36,22 +37,12 @@ wp_head();
 		<?php
 		$logo_id        = (int) get_theme_mod( 'custom_logo' );
 		$logo_file      = $logo_id > 0 ? get_attached_file( $logo_id ) : '';
-		$logo_available = is_string( $logo_file ) && '' !== $logo_file && is_readable( $logo_file );
+		$logo_url       = $logo_id > 0 ? wp_get_attachment_url( $logo_id ) : '';
+		$logo_available = is_string( $logo_file ) && '' !== $logo_file && is_readable( $logo_file ) && is_string( $logo_url ) && '' !== $logo_url;
 		if ( $logo_available ) :
-			echo wp_get_attachment_image(
-				$logo_id,
-				'medium',
-				false,
-				array(
-					'class'  => 'nvx-logo__img',
-					'alt'    => '',
-					'width'  => '160',
-					'height' => '154',
-					'sizes'  => '160px',
-				)
-			);
-		else :
 			?>
+		<img src="<?php echo esc_url( $logo_url ); ?>" class="nvx-logo__img" alt="" width="160" height="154" decoding="async">
+		<?php else : ?>
 		<span class="nvx-logo__wordmark" aria-hidden="true">NUVANX</span>
 		<span class="nvx-logo__tagline" aria-hidden="true">MEDICINA ESTÉTICA LÁSER</span>
 		<?php endif; ?>
