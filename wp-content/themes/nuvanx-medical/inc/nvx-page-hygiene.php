@@ -673,6 +673,20 @@ function nvx_sanitize_complianz_banner_html( string $html ): string {
 			$attr_after  = $matches[4];
 			$inner_text  = $matches[5];
 
+			if ( '#' === $href && false !== strpos( $attr_before, 'data-relative_url' ) ) {
+				if ( false !== strpos( $inner_text, 'Política de privacidad' ) ) {
+					$href = function_exists( 'home_url' ) ? home_url( '/politica-privacidad/' ) : '#';
+				} elseif ( false !== strpos( $inner_text, 'Política de cookies' ) ) {
+					$href = function_exists( 'home_url' ) ? home_url( '/politica-de-cookies-ue/' ) : '#';
+				} elseif ( false !== strpos( $inner_text, 'Aviso legal' ) ) {
+					$href = function_exists( 'home_url' ) ? home_url( '/aviso-legal/' ) : '#';
+				} elseif ( false !== strpos( $inner_text, 'Administrar opciones' ) || false !== strpos( $inner_text, 'Gestionar' ) ) {
+					$href = '#'; // Keep as hash for JS-managed consent dialogs
+				} else {
+					$href = '#'; // Keep as hash for other JS-managed links
+				}
+			}
+
 			if ( false !== strpos( $inner_text, '{title}' ) ) {
 				$title = 'Política de cookies';
 				if ( false !== strpos( $href, 'privacidad' ) || false !== strpos( $href, 'privacy' ) ) {
