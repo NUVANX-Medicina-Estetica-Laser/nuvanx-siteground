@@ -32,6 +32,12 @@ str_contains( $runtime_source, '$hook->remove_filter( $hook_name, $callback, (in
 	|| $fail( 'source_scoped_removal_missing' );
 str_contains( $runtime_source, "add_action( 'init', 'nvx_retire_legacy_meta_browser_owner_callbacks', PHP_INT_MIN );" )
 	|| $fail( 'early_init_retirement_missing' );
+str_contains( $runtime_source, "add_action( 'wp_head', 'nvx_meta_browser_block_dynamic_loader', PHP_INT_MIN );" )
+	|| $fail( 'pre_gtm_loader_guard_missing' );
+str_contains( $runtime_source, "data-nvx-meta-browser-retired" )
+	|| $fail( 'loader_guard_marker_missing' );
+str_contains( $runtime_source, "Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src')" )
+	|| $fail( 'script_src_guard_missing' );
 str_contains( $runtime_source, "add_action( 'send_headers', 'nvx_meta_browser_strip_legacy_response_cookies', PHP_INT_MAX );" )
 	|| $fail( 'header_guard_missing' );
 str_contains( $runtime_source, "header_remove( 'Set-Cookie' );" ) || $fail( 'set_cookie_rebuild_missing' );
@@ -45,4 +51,4 @@ foreach ( array( 'connect.facebook.net', 'fbevents.js', "fbq('init'", '149794065
 	! str_contains( $runtime_source, $forbidden_browser_owner ) || $fail( 'browser_meta_loader_forbidden:' . $forbidden_browser_owner );
 }
 
-echo "META_BROWSER_OWNER_RETIREMENT=PASS source_scoped=1 header_guard=1 browser_pixel_owner=none\n";
+echo "META_BROWSER_OWNER_RETIREMENT=PASS source_scoped=1 dynamic_loader_guard=1 header_guard=1 browser_pixel_owner=none\n";
