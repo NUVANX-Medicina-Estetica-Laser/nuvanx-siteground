@@ -51,4 +51,10 @@ foreach ( array( 'connect.facebook.net', 'fbevents.js', "fbq('init'", '149794065
 	! str_contains( $runtime_source, $forbidden_browser_owner ) || $fail( 'browser_meta_loader_forbidden:' . $forbidden_browser_owner );
 }
 
+// Execute browser-level JS assertion
+exec('node ' . __DIR__ . '/test-meta-browser-dynamic-loader.mjs', $output, $code);
+if ($code !== 0) {
+	$fail('browser_level_dynamic_loader_guard_failed');
+}
+
 echo "META_BROWSER_OWNER_RETIREMENT=PASS source_scoped=1 dynamic_loader_guard=1 header_guard=1 browser_pixel_owner=none\n";
