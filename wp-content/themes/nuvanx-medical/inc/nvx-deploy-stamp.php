@@ -49,7 +49,6 @@ function nvx_get_deploy_stamp(): array {
 					if ( '' === ( $stamp[ $key ] ?? '' ) && isset( $deploy_stamp_data[ $key ] ) && is_scalar( $deploy_stamp_data[ $key ] ) ) {
 						$stamp[ $key ] = trim( (string) $deploy_stamp_data[ $key ] );
 					}
-				}
 			}
 		}
 	}
@@ -110,3 +109,30 @@ function nvx_validate_deploy_stamp_chain( string $expected_sha ): bool {
 }
 
 add_action( 'wp_head', 'nvx_render_deploy_stamp_meta', 1 );
+
+/*
+ * DIAGNOSTIC-ONLY — PR #830, never merge.
+ * The trusted origin verifier normally aborts immediately when the Home vhost
+ * returns 500, before it can persist the late-trace response header. For its
+ * exact internal User-Agent only, stop the request at the end of wp_head,
+ * after the real deploy SHA and the staging trace header have been emitted.
+ * Normal browser/edge requests and production are untouched.
+ */
+add_action(
+	'wp_head',
+	static function (): void {
+		if ( ! function_exists( 'wp_get_environment_type' ) || 'staging' !== wp_get_environment_type() ) {
+			return;
+		}
+		if ( 'NUVANX-Staging-Origin-Boundary/1.4' !== (string) ( $_SERVER['HTTP_USER_AGENT'] ?? '' ) ) {
+			return;
+		}
+		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		if ( '/' !== $path ) {
+			return;
+		}
+		echo '</head><body>staging-origin-trace-transport</body></html>';
+		exit;
+	},
+	PHP_INT_MAX
+);
