@@ -51,20 +51,21 @@ if ( ! str_contains( $goya_block, "'phone_href'    => '" . $e164 . "'" ) ) {
 	$fail( 'Goya governed E.164 phone drift' );
 }
 
-// Theme-owned visible renderers must not reconstruct the Goya number from E.164.
-if ( ! str_contains( $sources['sede'], "$clinic_config['phone']" ) ) {
+// Theme-owned visible renderers must consume the governed display value.
+if ( ! str_contains( $sources['sede'], '$clinic_config[\'phone\']' ) ) {
 	$fail( 'Sede renderer does not consume clinic display phone' );
 }
-if ( ! str_contains( $sources['contact'], "$config['goya']['phone']" ) ) {
+if ( ! str_contains( $sources['contact'], '$config[\'goya\'][\'phone\']' ) ) {
 	$fail( 'Contacto renderer does not consume Goya display SSOT' );
 }
-if ( ! str_contains( $sources['hub'], "$config['goya']['phone']" ) ) {
+if ( ! str_contains( $sources['hub'], '$config[\'goya\'][\'phone\']' ) ) {
 	$fail( 'Clinics hub does not consume Goya display SSOT' );
 }
 
+// Block the exact copy/paste patterns that previously rebuilt Goya into 3-3-3.
 $forbidden_patterns = array(
 	'contact' => array(
-		"chunk_split( (string) preg_replace( '/^\\+34/', '', $goya_phone )",
+		'chunk_split( (string) preg_replace( \'/^\\+34/\', \'\', $goya_phone )',
 	),
 	'hub' => array(
 		'nvx_clinics_hub_phone_display( $goya_phone )',
@@ -93,7 +94,13 @@ if ( str_contains( $sources['schema'], $display ) ) {
 }
 
 // Ban the known legacy public representation across governed text/code sources.
-$scan_files = array_merge( glob( $theme_root . '/*.php' ) ?: array(), glob( $theme_root . '/inc/*.php' ) ?: array(), glob( $theme_root . '/templates/*.php' ) ?: array(), glob( $theme_root . '/inc/data/*.json' ) ?: array(), array( $paths['llms'] ) );
+$scan_files = array_merge(
+	glob( $theme_root . '/*.php' ) ?: array(),
+	glob( $theme_root . '/inc/*.php' ) ?: array(),
+	glob( $theme_root . '/templates/*.php' ) ?: array(),
+	glob( $theme_root . '/inc/data/*.json' ) ?: array(),
+	array( $paths['llms'] )
+);
 foreach ( $scan_files as $file ) {
 	$source = file_get_contents( $file );
 	if ( false !== $source && str_contains( $source, $legacy ) ) {
