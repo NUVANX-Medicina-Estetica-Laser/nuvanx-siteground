@@ -177,6 +177,46 @@ function retrieveHomeStatusTrace(captureToken) {
 // (non-fatal — verification continues normally).
 const tracerToken = await deployHomeStatusTracer();
 
+/**
+ * Deactivate SG Optimizer (sg-cachepress) via SSH before the route loop
+ * to determine if it causes the 200→500 conversion in NGINX/Dynamic Cache.
+ *
+ * DIAGNOSTIC ONLY.
+ */
+function deactivateSGOptimizer() {
+  if (!stagingRoot) return false;
+
+  const remoteScript = [
+    'set -euo pipefail',
+    `cd "${stagingRoot}"`,
+    'wp plugin deactivate sg-cachepress --skip-plugins --allow-root',
+    'echo "SG_OPTIMIZER_DEACTIVATED=PASS"',
+    '',
+  ].join('\n');
+
+  const result = spawnSync(
+    sshBin,
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'ConnectionAttempts=1',
+     '--', originSshAlias, 'bash -se'],
+    { input: remoteScript, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024 }
+  );
+
+  if (result.error || result.status !== 0) {
+    console.warn(
+      `SG_OPTIMIZER: deactivate failed exit=${result.status} err=${
+        result.error?.message || (result.stderr || '').trim().slice(0, 120)
+      }`
+    );
+    return false;
+  }
+
+  console.log('SG_OPTIMIZER_DEACTIVATED=PASS');
+  return true;
+}
+
+// Deactivate SG Optimizer before route loop to test if it causes 200→500.
+const sgOptimizerDeactivated = deactivateSGOptimizer();
+
 function extractMetaContent(html, name) {
   const tags = html.match(/<meta\b[^>]*>/gi) || [];
   for (const tag of tags) {
