@@ -137,6 +137,38 @@ function nvx_attribution_email_hash( string $email ): string {
 	return '' === $email ? '' : hash( 'sha256', $email );
 }
 
+/** Resolve the server-only HubSpot credential used to derive the Google relay signing key. */
+function nvx_attribution_google_signing_token(): string {
+	if ( ! defined( 'NVX_HUBSPOT_ACCESS_TOKEN' ) ) {
+		return '';
+	}
+	return trim( (string) NVX_HUBSPOT_ACCESS_TOKEN );
+}
+
+/** Derive a domain-separated HMAC key dedicated to Google click attribution relay signing. */
+function nvx_attribution_google_hmac_key( string $token ): string {
+	$context = 'nuvanx-google-click-attribution-hmac-key-v1';
+	$info    = hash_hmac( 'sha256', $context, $token, true );
+	return bin2hex( $info );
+}
+
+/** Build authenticated collector headers without exposing the HubSpot token itself. */
+function nvx_attribution_collector_signed_headers( string $body, string $origin ): array {
+	$token = nvx_attribution_google_signing_token();
+	if ( '' === $token ) {
+		return array();
+	}
+	$timestamp = (string) time();
+	$hmac_key  = nvx_attribution_google_hmac_key( $token );
+	$signature = hash_hmac( 'sha256', $timestamp . '.' . $body, $hmac_key );
+	return array(
+		'Content-Type'    => 'application/json',
+		'Origin'          => $origin,
+		'x-nvx-timestamp' => $timestamp,
+		'x-nvx-signature' => $signature,
+	);
+}
+
 /**
  * Convert HubSpot fields to a simple name => value map.
  *
@@ -277,16 +309,19 @@ function nvx_attribution_relay_direct_form_after_hubspot( $preempt, array $args,
 		return $preempt;
 	}
 
+	$collector_headers = nvx_attribution_collector_signed_headers( $collector_body, $origin );
+	if ( empty( $collector_headers ) ) {
+		nvx_attribution_log_direct_relay( 'FAILURE', 0, 'signing_key_missing' );
+		return $preempt;
+	}
+
 	$response = wp_remote_post(
 		$endpoint,
 		array(
 			'timeout'     => 0.5,
 			'redirection' => 0,
 			'blocking'    => false,
-			'headers'     => array(
-				'Content-Type' => 'application/json',
-				'Origin'       => $origin,
-			),
+			'headers'     => $collector_headers,
 			'body'        => $collector_body,
 		)
 	);

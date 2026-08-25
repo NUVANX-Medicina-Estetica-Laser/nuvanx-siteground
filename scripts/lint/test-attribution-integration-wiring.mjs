@@ -53,6 +53,12 @@ const collectorPayload = integration.match(/\$collector_payload = array\(([\s\S]
 assert.ok(collectorPayload);
 assert.doesNotMatch(collectorPayload, /applied_lead_id/);
 assert.match(integration, /'Origin'\s*=>\s*\$origin/);
+assert.match(integration, /nuvanx-google-click-attribution-hmac-key-v1/);
+assert.match(integration, /'x-nvx-timestamp'\s*=>\s*\$timestamp/);
+assert.match(integration, /'x-nvx-signature'\s*=>\s*\$signature/);
+assert.match(integration, /hash_hmac\( 'sha256', \$timestamp \. '\.' \. \$body, \$hmac_key \)/);
+assert.match(integration, /signing_key_missing/);
+assert.match(integration, /'headers'\s*=>\s*\$collector_headers/);
 assert.match(integration, /origin_not_allowed/);
 assert.match(gtm, /nvx_hubspot_secure_form_id/);
 assert.match(gtm, /require_once __DIR__ \. '\/nvx-attribution-integration\.php'/);
