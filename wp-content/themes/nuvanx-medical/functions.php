@@ -319,7 +319,6 @@ require_once get_template_directory() . '/inc/nvx-treatment-hub-schema.php';
 require_once get_template_directory() . '/inc/nvx-treatments-catalog.php';
 require_once get_template_directory() . '/inc/nvx-solutions-page.php';
 require_once get_template_directory() . '/inc/nvx-endolift-page.php';
-require_once get_template_directory() . '/inc/nvx-contour-architecture-page.php';
 require_once get_template_directory() . '/inc/nvx-exion-page.php';
 require_once get_template_directory() . '/inc/nvx-profhilo-page.php';
 require_once get_template_directory() . '/inc/nvx-endolaser-page.php';

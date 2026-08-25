@@ -217,9 +217,9 @@ if ( str_contains( $solutions, PROSE_WRAPPER )
 }
 
 $photos = array(
-	'chamberi-interior.jpg',
-	'chamberi-sala.jpg',
-	'chamberi-equipo.jpg',
+	'chamberi/01-interior.jpg',
+	'chamberi/02-sala.jpg',
+	'chamberi/03-consulta-rivera.jpg',
 );
 foreach ( $photos as $photo ) {
 	$path = $root . '/wp-content/themes/nuvanx-medical/assets/images/clinics/' . $photo;

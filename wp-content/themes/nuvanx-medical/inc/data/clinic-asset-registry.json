@@ -8,7 +8,7 @@
     "goya_nap_discarded": "649 232 267",
     "chamberi_nap": "669 319 836",
     "valoracion_central": "689 31 73 99",
-    "sala_waiting": "chamberi-sala.jpg is Chamberí waiting room; same hash must not be used as Goya proof",
+    "sala_waiting": "chamberi/02-sala.jpg is Chamberí waiting room; same hash must not be used as Goya proof",
     "equipment_prep_only": {
       "chamberi": ["DEKA/SmartLipo", "Endolift/LaseMAR"],
       "goya": ["EXION®", "Endolift/LaseMAR"]
@@ -33,11 +33,11 @@
       "goya/10-laser-piel.jpg"
     ],
     "removed_bytes": 2327711,
-    "note": "The removed Goya files were byte-identical to the same-numbered Chamberí files. They remain logical aliases only and must not be used as evidence that the scene belongs to Goya."
+    "note": "The removed Goya files were byte-identical to the same-numbered Chamberí files. They remain historical deduplication records only and must not be used as evidence that the scene belongs to Goya."
   },
   "notes": [
     "No ZIP/WebP from the local-SEO pack is loaded here. Theme JPEGs only.",
-    "Hashes show most former Goya files were copies of Chamberí/PMAX assets. The duplicate physical files were removed; only goya/01-fachada.jpg remains in the Goya theme directory.",
+    "Hashes show most former Goya files were copies of Chamberí/PMAX assets. Duplicate physical files are retired; only canonical Chamberí files and goya/01-fachada.jpg remain in the governed theme set.",
     "BTL EXION® promotional PNG and manufacturer packshots are rejected for GBP and sede landings.",
     "GBP derivatives must be JPG sRGB; web may use WebP/AVIF later. Do not upload WebP to GBP."
   ],
@@ -73,8 +73,7 @@
       "rights_status": "theme_copy_from_ads_pmax",
       "location_verified": false,
       "approved_for_landing": false,
-      "approved_for_gbp": false,
-      "aliases": ["chamberi-interior.jpg"]
+      "approved_for_gbp": false
     },
     {
       "sede": "chamberi",
@@ -88,8 +87,7 @@
       "location_verified": true,
       "approved_for_landing": false,
       "approved_for_gbp": false,
-      "note": "Confirmed Chamberí waiting room (chamberi-sala.jpg / Sala-Nuvanx equivalent). Former goya/02-sala.jpg was the same file and was removed; do not use it as Goya local proof.",
-      "aliases": ["chamberi-sala.jpg", "goya/02-sala.jpg"]
+      "note": "Confirmed Chamberí waiting room at canonical chamberi/02-sala.jpg. The former goya/02-sala.jpg duplicate was removed; do not use it as Goya local proof."
     },
     {
       "sede": "chamberi",
@@ -102,8 +100,7 @@
       "rights_status": "theme_copy_from_ads_pmax",
       "location_verified": false,
       "approved_for_landing": false,
-      "approved_for_gbp": false,
-      "aliases": ["chamberi-equipo.jpg", "goya/03-consulta-rivera.jpg"]
+      "approved_for_gbp": false
     },
     {
       "sede": "unassigned",
