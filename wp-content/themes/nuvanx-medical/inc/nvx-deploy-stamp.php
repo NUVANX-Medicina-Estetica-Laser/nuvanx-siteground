@@ -111,22 +111,34 @@ function nvx_validate_deploy_stamp_chain( string $expected_sha ): bool {
 
 add_action( 'wp_head', 'nvx_render_deploy_stamp_meta', 1 );
 
-/* DIAGNOSTIC-ONLY — PR #830, never merge. */
+/*
+ * DIAGNOSTIC-ONLY — PR #830, never merge.
+ * The Home request writes its late lifecycle trace at shutdown. The staging
+ * boundary continues to /soluciones-medicas/ after Home fails, so use that
+ * healthy route to transport the prior Home trace without changing Home's
+ * status, body, buffering, or normal public behavior.
+ */
 add_action(
-	'wp_head',
+	'send_headers',
 	static function (): void {
 		if ( ! function_exists( 'wp_get_environment_type' ) || 'staging' !== wp_get_environment_type() ) {
 			return;
 		}
-		if ( 'NUVANX-Staging-Origin-Boundary/1.4' !== (string) ( $_SERVER['HTTP_USER_AGENT'] ?? '' ) ) {
-			return;
-		}
 		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
-		if ( '/' !== $path ) {
+		if ( '/soluciones-medicas/' !== $path ) {
 			return;
 		}
-		echo '</head><body>staging-origin-trace-transport</body></html>';
-		exit;
+		$trace_file = get_template_directory() . '/.nvx-home-late-trace-830.json';
+		if ( ! is_readable( $trace_file ) ) {
+			return;
+		}
+		$payload = (string) file_get_contents( $trace_file );
+		if ( '' === trim( $payload ) ) {
+			return;
+		}
+		$token = rtrim( strtr( base64_encode( $payload ), '+/', '-_' ), '=' );
+		header( 'X-Robots-Tag: noindex, nofollow, nvx-latetrace-' . $token, true );
+		@unlink( $trace_file );
 	},
 	PHP_INT_MAX
 );
