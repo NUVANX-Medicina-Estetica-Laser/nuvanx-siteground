@@ -262,3 +262,6 @@ require_once __DIR__ . '/nvx-attribution-integration.php';
 
 // Mirror successful secure HubSpot submissions into the canonical first-party capture ledger.
 require_once __DIR__ . '/nvx-lead-captured-relay.php';
+
+// Authenticate server-side Google click attribution relay requests before transport.
+require_once __DIR__ . '/nvx-google-attribution-relay-auth.php';
