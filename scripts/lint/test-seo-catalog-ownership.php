@@ -93,6 +93,19 @@ if ( ! is_file( $local_contract ) ) {
     }
 }
 
+// Goya NAP display is governed separately from machine-readable E.164 values.
+// This blocks copy/paste regressions that reformat the public number ad hoc.
+$nap_contract = __DIR__ . '/test-goya-nap-display-contract.php';
+if ( ! is_file( $nap_contract ) ) {
+    $failures[] = 'goya_nap_display_contract_missing';
+} else {
+    $command = 'php ' . escapeshellarg( $nap_contract );
+    passthru( $command, $nap_status );
+    if ( 0 !== $nap_status ) {
+        $failures[] = 'goya_nap_display_contract_failed exit=' . $nap_status;
+    }
+}
+
 // Search Analytics is a production telemetry contract, but its code/auth/privacy
 // guarantees are static and must block CI before a candidate can reach master.
 $gsc_contract = __DIR__ . '/test-gsc-search-analytics-contract.mjs';
