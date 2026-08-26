@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const relayPath = 'wp-content/themes/nuvanx-medical/assets/js/nvx-conversion-events.js';
-const retiredPublisherPath = 'scripts/seo/setup-gtm-conversion-trigger.js';
-const seoReadmePath = 'scripts/seo/README.md';
+const repoRoot = new URL('../../', import.meta.url);
+const relayPath = new URL('wp-content/themes/nuvanx-medical/assets/js/nvx-conversion-events.js', repoRoot);
+const retiredPublisherPath = new URL('scripts/seo/setup-gtm-conversion-trigger.js', repoRoot);
+const seoReadmePath = new URL('scripts/seo/README.md', repoRoot);
 
 assert.equal(fs.existsSync(relayPath), true, 'Conversion relay must exist');
 const relay = fs.readFileSync(relayPath, 'utf8');
