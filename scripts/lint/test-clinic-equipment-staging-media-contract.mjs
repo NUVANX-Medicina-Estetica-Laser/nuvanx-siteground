@@ -21,6 +21,11 @@ const requireSource = (source, needle, reason) => {
 const forbidSource = (source, needle, reason) => {
   if (source.includes(needle)) failures.push(reason);
 };
+const requireOrder = (source, firstNeedle, secondNeedle, reason) => {
+  const first = source.indexOf(firstNeedle);
+  const second = source.indexOf(secondNeedle);
+  if (first < 0 || second < 0 || first >= second) failures.push(reason);
+};
 
 function segment(source, startNeedle, endNeedle, label) {
   const start = source.indexOf(startNeedle);
@@ -77,10 +82,24 @@ requireSource(migrationSource, 'foreach ( $equipment_catalog as $eq )', 'staging
 forbidSource(migrationSource, "if ( function_exists( 'nvx_clinics_hub_equipment_catalog' ) )", 'staging_media_catalog_optional_guard_present');
 requireSource(migrationSource, "$eq_path = $normalize_media_path( (string) ( $eq['uploads_path'] ?? '' ) );", 'staging_media_catalog_path_normalization');
 requireSource(migrationSource, '[FATAL] Clinic equipment catalog contains an invalid uploads_path.', 'staging_media_catalog_invalid_path_fatal');
-requireSource(migrationSource, '$media_paths[ $eq_path ]        = true;', 'staging_media_catalog_sync_registration');
-requireSource(migrationSource, '$required_originals[ $eq_path ] = true;', 'staging_media_catalog_required_original');
-requireSource(migrationSource, 'if ( ! is_file( $source ) )', 'staging_media_missing_source_guard');
-requireSource(migrationSource, 'if ( isset( $required_originals[ $relative ] ) )', 'staging_media_required_source_branch');
+requireSource(migrationSource, '$media_paths[ $eq_path ]         = true;', 'staging_media_catalog_sync_registration');
+requireSource(migrationSource, '$required_originals[ $eq_path ]  = true;', 'staging_media_catalog_required_original');
+requireSource(migrationSource, '$equipment_originals[ $eq_path ] = true;', 'staging_media_catalog_equipment_original');
+
+const requiredSourceGuard = 'if ( $is_required && ( ! is_file( $source ) || filesize( $source ) <= 0 ) )';
+const destinationGuard = 'if ( file_exists( $destination ) )';
+requireSource(migrationSource, '$is_required  = isset( $required_originals[ $relative ] );', 'staging_media_required_flag');
+requireSource(migrationSource, '$is_equipment = isset( $equipment_originals[ $relative ] );', 'staging_media_equipment_flag');
+requireSource(migrationSource, requiredSourceGuard, 'staging_media_required_source_guard');
+requireSource(migrationSource, '[MEDIA-ERROR] required Production original missing or empty:', 'staging_media_required_source_fatal');
+requireOrder(migrationSource, requiredSourceGuard, destinationGuard, 'staging_media_required_source_must_precede_destination_acceptance');
+requireSource(migrationSource, 'false === @getimagesize( $source )', 'staging_media_equipment_source_image_guard');
+requireSource(migrationSource, '$destination_matches_source = filesize( $destination ) === filesize( $source );', 'staging_media_required_destination_size_guard');
+requireSource(migrationSource, 'false !== @getimagesize( $destination )', 'staging_media_equipment_existing_destination_image_guard');
+requireSource(migrationSource, '[MEDIA-REPAIR] required Staging media stale or unreadable:', 'staging_media_required_repair_path');
+requireSource(migrationSource, 'if ( ! is_file( $source ) || filesize( $source ) <= 0 )', 'staging_media_optional_missing_source_guard');
+requireSource(migrationSource, 'copied media failed size verification:', 'staging_media_copy_size_verification');
+requireSource(migrationSource, 'copied equipment media failed image verification:', 'staging_media_copy_image_verification');
 requireSource(migrationSource, '$media_copy_failures++;', 'staging_media_copy_failure_accounting');
 requireSource(migrationSource, 'if ( $media_copy_failures > 0 )', 'staging_media_parity_fail_closed');
 requireSource(migrationSource, 'Status: MIGRATION_FAIL', 'staging_media_migration_failure_exit');
@@ -90,4 +109,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`CLINIC_EQUIPMENT_STAGING_MEDIA_CONTRACT=PASS equipment=${equipmentPaths.length} sync=required_dynamic required_originals=fail_closed renderer=local_readable_only`);
+console.log(`CLINIC_EQUIPMENT_STAGING_MEDIA_CONTRACT=PASS equipment=${equipmentPaths.length} sync=required_dynamic source=production_first destination=size_checked image=verified fail_closed=1 renderer=local_readable_only`);
