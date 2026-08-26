@@ -178,9 +178,10 @@ foreach ( $seed_pages as $page ) {
 // Staging and Production use separate uploads trees. Content parity can therefore
 // leave a valid featured-image attachment record in Staging while the referenced
 // file is physically absent. Browser acceptance must treat that as a real defect.
-// Repair only missing or zero-byte truncated files for featured media used by published posts/pages,
-// sourcing from the canonical Production uploads tree. Production is read-only;
-// valid non-zero Staging files are never overwritten.
+// Production is read-only. Required originals must exist in Production before
+// Staging can be considered in parity; governed equipment must also be readable
+// images. Missing, zero-byte, size-mismatched or unreadable required Staging
+// copies are repaired from the canonical Production uploads tree.
 
 echo "\n--- Block B: Featured Media Filesystem Parity ---\n";
 
@@ -240,8 +241,9 @@ if (
         }
     }
 
-    $media_paths        = array();
-    $required_originals = array();
+    $media_paths         = array();
+    $required_originals  = array();
+    $equipment_originals = array();
 
     foreach ( array_keys( $featured_attachment_ids ) as $attachment_id ) {
         $relative = $normalize_media_path( (string) get_post_meta( $attachment_id, '_wp_attached_file', true ) );
@@ -292,7 +294,7 @@ if (
         }
     }
 
-    // Also scan published post_content for any inline referenced media
+    // Also scan published post_content for any inline referenced media.
     $inline_contents = $wpdb->get_col(
         "SELECT post_content FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ('post', 'page') AND post_content LIKE '%/wp-content/uploads/%'"
     );
@@ -318,8 +320,9 @@ if (
             echo "Status: MIGRATION_FAIL\n";
             exit( 1 );
         }
-        $media_paths[ $eq_path ]        = true;
-        $required_originals[ $eq_path ] = true;
+        $media_paths[ $eq_path ]         = true;
+        $required_originals[ $eq_path ]  = true;
+        $equipment_originals[ $eq_path ] = true;
     }
 
     if ( function_exists( 'nvx_clinic_editorial_photo_map' ) ) {
@@ -341,8 +344,26 @@ if (
     $media_copy_failures   = 0;
 
     foreach ( array_keys( $media_paths ) as $relative ) {
-        $source      = $production_uploads_real . DIRECTORY_SEPARATOR . $relative;
-        $destination = $staging_uploads_real . DIRECTORY_SEPARATOR . $relative;
+        $source       = $production_uploads_real . DIRECTORY_SEPARATOR . $relative;
+        $destination  = $staging_uploads_real . DIRECTORY_SEPARATOR . $relative;
+        $is_required  = isset( $required_originals[ $relative ] );
+        $is_equipment = isset( $equipment_originals[ $relative ] );
+
+        // Required originals are a source-of-truth contract. Never accept a
+        // pre-existing Staging file when the canonical Production source is
+        // missing, zero-byte or (for governed equipment) not a readable image.
+        if ( $is_required && ( ! is_file( $source ) || filesize( $source ) <= 0 ) ) {
+            $media_source_missing++;
+            fwrite( STDERR, "[MEDIA-ERROR] required Production original missing or empty: {$relative}\n" );
+            $media_copy_failures++;
+            continue;
+        }
+
+        if ( $is_equipment && ( ! is_readable( $source ) || false === @getimagesize( $source ) ) ) {
+            fwrite( STDERR, "[MEDIA-ERROR] required Production equipment image unreadable: {$relative}\n" );
+            $media_copy_failures++;
+            continue;
+        }
 
         if ( file_exists( $destination ) ) {
             if ( is_dir( $destination ) ) {
@@ -350,20 +371,32 @@ if (
                 $media_copy_failures++;
                 continue;
             }
+
             if ( is_file( $destination ) && filesize( $destination ) > 0 ) {
-                $media_already_present++;
-                continue;
+                if ( ! $is_required ) {
+                    $media_already_present++;
+                    continue;
+                }
+
+                $destination_matches_source = filesize( $destination ) === filesize( $source );
+                if ( $is_equipment ) {
+                    $destination_matches_source = $destination_matches_source
+                        && is_readable( $destination )
+                        && false !== @getimagesize( $destination );
+                }
+
+                if ( $destination_matches_source ) {
+                    $media_already_present++;
+                    continue;
+                }
+
+                printf( "[MEDIA-REPAIR] required Staging media stale or unreadable: %s\n", $relative );
             }
         }
 
-        if ( ! is_file( $source ) ) {
+        if ( ! is_file( $source ) || filesize( $source ) <= 0 ) {
             $media_source_missing++;
-            if ( isset( $required_originals[ $relative ] ) ) {
-                fwrite( STDERR, "[MEDIA-ERROR] required Production featured image missing: {$relative}\n" );
-                $media_copy_failures++;
-            } else {
-                printf( "[MEDIA-WARN] Production derivative missing: %s\n", $relative );
-            }
+            printf( "[MEDIA-WARN] Production derivative missing or empty: %s\n", $relative );
             continue;
         }
 
@@ -380,9 +413,17 @@ if (
             continue;
         }
 
+        clearstatcache( true, $source );
         clearstatcache( true, $destination );
         if ( ! is_file( $destination ) || filesize( $destination ) !== filesize( $source ) ) {
             fwrite( STDERR, "[MEDIA-ERROR] copied media failed size verification: {$relative}\n" );
+            @unlink( $destination );
+            $media_copy_failures++;
+            continue;
+        }
+
+        if ( $is_equipment && ( ! is_readable( $destination ) || false === @getimagesize( $destination ) ) ) {
+            fwrite( STDERR, "[MEDIA-ERROR] copied equipment media failed image verification: {$relative}\n" );
             @unlink( $destination );
             $media_copy_failures++;
             continue;
