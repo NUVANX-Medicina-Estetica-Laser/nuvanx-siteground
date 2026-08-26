@@ -39,7 +39,7 @@ foreach ($sources as $width => $source) {
     }
 }
 
-foreach (array("'id'      => 0", "'width'   => 960", "'height'  => 540", "'srcset'  => \$fallback_srcset", 'loading="lazy"', 'decoding="async"') as $required) {
+foreach (array("'id'      => 0", "'file'    => \$theme_uri . 'assets/images/responsive/consulta-medica-personalizada-nuvanx-madrid-960.webp'", "'width'   => 960", "'height'  => 540", "'srcset'  => \$fallback_srcset", 'loading="lazy"', 'decoding="async"') as $required) {
     if (!str_contains($template, $required)) {
         $fail('renderer media contract missing ' . $required);
     }
