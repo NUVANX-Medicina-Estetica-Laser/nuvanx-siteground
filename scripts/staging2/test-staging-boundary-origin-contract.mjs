@@ -25,6 +25,8 @@ function requireCacheBypassOnEveryOriginCurl(source, label, minimumProbes) {
   }
 
   probes.forEach((probe, index) => {
+    requireSource(probe, '--resolve "${EXPECTED_HOST}:443:127.0.0.1"', `${label}_origin_curl_${index + 1}_loopback_resolve_missing`);
+    requireSource(probe, "--proto \\'=https\\'", `${label}_origin_curl_${index + 1}_protocol_guard_missing`);
     if (!probe.includes("-b \\'wpSGCacheBypass=1\\'")) {
       failures.push(`${label}_origin_curl_${index + 1}_cache_bypass_missing`);
     }
