@@ -173,11 +173,7 @@ function nvx_clinic_landing_photos( string $clinic_key ): array {
 			foreach ( $asset_sources as $source ) {
 				$file  = isset( $source['file'] ) ? ltrim( (string) $source['file'], '/' ) : '';
 				$width = isset( $source['width'] ) ? (int) $source['width'] : 0;
-				$asset_path = trailingslashit( get_template_directory() ) . $file;
-				// The versioned theme asset is served by the web tier. Some deployments
-				// run PHP under a different read context, so require physical presence
-				// without suppressing an otherwise valid public fallback.
-				if ( '' === $file || $width < 1 || ! file_exists( $asset_path ) ) {
+				if ( '' === $file || $width < 1 || ! is_readable( trailingslashit( get_template_directory() ) . $file ) ) {
 					continue;
 				}
 				$asset_candidates[ $width ] = trailingslashit( get_template_directory_uri() ) . $file;

@@ -160,14 +160,33 @@ ob_start();
 		</section>
 
 		<?php
-					$clinic_photos = function_exists( 'nvx_clinic_landing_photos' )
+			$clinic_photos = function_exists( 'nvx_clinic_landing_photos' )
 				? nvx_clinic_landing_photos( $clinic_key )
 				: array();
+			if ( 'goya' === $clinic_key && 3 === count( $clinic_photos ) ) {
+				$theme_uri       = trailingslashit( get_template_directory_uri() );
+				$fallback_srcset = implode(
+					', ',
+					array(
+						$theme_uri . 'assets/images/responsive/consulta-medica-personalizada-nuvanx-madrid-480.webp 480w',
+						$theme_uri . 'assets/images/responsive/consulta-medica-personalizada-nuvanx-madrid-768.webp 768w',
+						$theme_uri . 'assets/images/responsive/consulta-medica-personalizada-nuvanx-madrid-960.webp 960w',
+					)
+				);
+				$clinic_photos[] = array(
+					'id'      => 0,
+					'file'    => $theme_uri . 'assets/images/responsive/consulta-medica-personalizada-nuvanx-madrid-960.webp',
+					'srcset'  => $fallback_srcset,
+					'width'   => 960,
+					'height'  => 540,
+					'alt'     => __( 'Consulta médica y valoración en NUVANX', 'nuvanx-medical' ),
+					'caption' => __( 'Valoración médica', 'nuvanx-medical' ),
+				);
+			}
 			$clinic_gallery_complete = function_exists( 'nvx_clinic_landing_gallery_is_complete' )
 				? nvx_clinic_landing_gallery_is_complete( $clinic_photos )
 				: 4 === count( $clinic_photos );
 			if ( $clinic_gallery_complete ) :
-
 			?>
 		<section class="nvx-brand-section nvx-clinic-gallery" aria-labelledby="nvx-clinic-gallery-title">
 			<div class="nvx-brand-section__inner">
