@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { isIgnorableExternalConsoleError } from './console-error-classifier.mjs';
 import './test-browser-request-failure-classifier.mjs';
+import '../lint/test-clinic-equipment-staging-media-contract.mjs';
 
 const corsNoise = "Access to XMLHttpRequest at 'https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/GetPlaceWidgetMetadata' from origin 'https://www.google.com' has been blocked by CORS policy";
 const widgetNoise = '<gmp-place-details-compact>: Encountered a network request error: Rpc failed due to xhr error. uri: https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/GetPlaceWidgetMetadata';
