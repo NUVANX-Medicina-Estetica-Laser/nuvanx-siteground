@@ -14,6 +14,58 @@ function validateRoute(route) {
   }
 }
 
+function validateUserAgent(userAgent) {
+  if (!/^[A-Za-z0-9 ._\/-]+$/.test(String(userAgent || ''))) {
+    throw new Error('Origin verifier user-agent contains unsupported characters.');
+  }
+}
+
+/**
+ * Build the only allowed SiteGround origin transport.
+ *
+ * The public hostname is preserved for HTTPS Host/SNI on every request. The
+ * first probe targets loopback. Only curl exit 7 (no listener) may activate a
+ * fallback, and that fallback is a validated non-loopback IPv4 returned by the
+ * SiteGround host itself. There is deliberately no DNS/public-edge fallback.
+ *
+ * Consumers must define fail_origin() and origin_url before these lines run.
+ */
+export function buildSiteGroundOriginCurlLines(userAgent) {
+  validateUserAgent(userAgent);
+
+  return [
+    'is_valid_ipv4() {',
+    '  local ip="$1" a b c d extra octet',
+    '  IFS=. read -r a b c d extra <<< "$ip"',
+    '  [[ -z "${extra:-}" && -n "$a" && -n "$b" && -n "$c" && -n "$d" ]] || return 1',
+    '  for octet in "$a" "$b" "$c" "$d"; do',
+    '    [[ "$octet" =~ ^[0-9]{1,3}$ ]] || return 1',
+    '    (( 10#$octet <= 255 )) || return 1',
+    '  done',
+    '}',
+    'fallback_ip=""',
+    'set +e',
+    `result="$(curl -4 -k -sS --connect-timeout 10 --max-time 30 --resolve "\${EXPECTED_HOST}:443:127.0.0.1" --proto '=https' -A '${userAgent}' -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -b 'wpSGCacheBypass=1' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$origin_url")"`,
+    'curl_rc=$?',
+    'if [[ "$curl_rc" -eq 7 ]]; then',
+    '  for candidate in $(hostname -I 2>/dev/null || true); do',
+    '    if is_valid_ipv4 "$candidate" && [[ "$candidate" != 127.* ]]; then fallback_ip="$candidate"; break; fi',
+    '  done',
+    '  [[ -n "$fallback_ip" ]] || fail_origin "fallback_ip_unavailable"',
+    `  result="$(curl -4 -k -sS --connect-timeout 10 --max-time 30 --resolve "\${EXPECTED_HOST}:443:\${fallback_ip}" --proto '=https' -A '${userAgent}' -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -b 'wpSGCacheBypass=1' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$origin_url")"`,
+    '  curl_rc=$?',
+    'fi',
+    'set -e',
+    '[[ "$curl_rc" -eq 0 ]] || fail_origin "curl_exit_$curl_rc"',
+    'code="$(printf \'%s\' "$result" | cut -d\'|\' -f1)"',
+    'effective="$(printf \'%s\' "$result" | cut -d\'|\' -f2)"',
+    'remote_ip="$(printf \'%s\' "$result" | cut -d\'|\' -f3)"',
+    '[[ "$code" == \'200\' ]] || fail_origin "http_code_$code"',
+    'case "$effective" in "https://${EXPECTED_HOST}/"*|"https://${EXPECTED_HOST}") ;; *) fail_origin "final_url_$effective" ;; esac',
+    'if [[ "$remote_ip" != "127.0.0.1" && ( -z "${fallback_ip:-}" || "$remote_ip" != "$fallback_ip" ) ]]; then fail_origin "unexpected_remote_ip_$remote_ip"; fi',
+  ];
+}
+
 function runOriginScript({ originSshAlias, expectedHost, expectedSha, route, remoteScript, timeout = 60000, maxBuffer = 1024 * 1024 }) {
   const remoteCommand = `EXPECTED_HOST=${expectedHost} EXPECTED_SHA=${expectedSha} ROUTE=${route} bash -se`;
   return spawnSync(
@@ -61,21 +113,7 @@ export function createSiteGroundOriginVerifier({
       'cleanup() { rm -f "$headers" "$body"; }',
       'trap cleanup EXIT',
       'fail_origin() { echo "ORIGIN_VERIFY_FAIL route=$ROUTE reason=$1" >&2; exit 1; }',
-      'set +e',
-      'result="$(curl -4 -k -sS --connect-timeout 10 --max-time 30 --resolve "${EXPECTED_HOST}:443:127.0.0.1" --proto \'=https\' -A \'Mozilla/5.0 NUVANX-Origin-Verification/2.2\' -H \'Accept: text/html,application/xhtml+xml\' -H \'Cache-Control: no-cache\' -b \'wpSGCacheBypass=1\' -D "$headers" -o "$body" -w \'%{http_code}|%{url_effective}|%{remote_ip}\' "$origin_url")"',
-      'curl_rc=$?',
-      'if [[ "$curl_rc" -ne 0 ]] || [[ "$result" == 000* ]]; then',
-      '  result="$(curl -4 -k -sS --connect-timeout 10 --max-time 30 --proto \'=https\' -A \'Mozilla/5.0 NUVANX-Origin-Verification/2.2\' -H \'Accept: text/html,application/xhtml+xml\' -H \'Cache-Control: no-cache\' -b \'wpSGCacheBypass=1\' -D "$headers" -o "$body" -w \'%{http_code}|%{url_effective}|%{remote_ip}\' "$origin_url")"',
-      '  curl_rc=$?',
-      'fi',
-      'set -e',
-      '[[ "$curl_rc" -eq 0 ]] || fail_origin "curl_exit_$curl_rc"',
-      'code="$(printf \'%s\' "$result" | cut -d\'|\' -f1)"',
-      'effective="$(printf \'%s\' "$result" | cut -d\'|\' -f2)"',
-      'remote_ip="$(printf \'%s\' "$result" | cut -d\'|\' -f3)"',
-      '[[ "$code" == \'200\' ]] || fail_origin "http_code_$code"',
-      'case "$effective" in "https://${EXPECTED_HOST}/"*|"https://${EXPECTED_HOST}") ;; *) fail_origin "final_url_$effective" ;; esac',
-      '[[ -n "$remote_ip" ]] || fail_origin "unexpected_remote_ip_$remote_ip"',
+      ...buildSiteGroundOriginCurlLines('Mozilla/5.0 NUVANX-Origin-Verification/2.3'),
       `if grep -Fq '${SITEGROUND_CAPTCHA_PATH}' "$body"; then fail_origin 'captcha-body'; fi`,
       'if grep -Eiq \'^sg-captcha:[[:space:]]*challenge\' "$headers"; then fail_origin \'captcha-header\'; fi',
       'extract_meta_content() {',
@@ -84,7 +122,7 @@ export function createSiteGroundOriginVerifier({
       'deploy_sha="$(extract_meta_content nvx-deploy-sha)"',
       '[[ "$deploy_sha" == "$EXPECTED_SHA" ]] || fail_origin "deploy_sha_${deploy_sha:-missing}"',
       'robots_meta="$(extract_meta_content robots)"',
-      'xrobots="$(grep -Ei \'^x-robots-tag:\' "$headers" | tail -n 1 | sed -E \'s/^[Xx]-[Rr]obots-[Tt]ag:[[:space:]]*//\' || true)"',
+      'xrobots="$(grep -Ei \'^x-robots-tag:\' "$headers" | sed -E \'s/^[Xx]-[Rr]obots-[Tt]ag:[[:space:]]*//\' | paste -sd, - || true)"',
       'combined="${robots_meta}${xrobots:+,${xrobots}}"',
       'printf \'%s\' "$combined" | grep -Eiq \'noindex\' || fail_origin \'missing-noindex\'',
       'printf \'%s\' "$combined" | grep -Eiq \'nofollow\' || fail_origin \'missing-nofollow\'',
@@ -125,21 +163,7 @@ export function createSiteGroundOriginVerifier({
       'cleanup() { rm -f "$headers" "$body"; }',
       'trap cleanup EXIT',
       'fail_origin() { echo "ORIGIN_HTML_FAIL route=$ROUTE reason=$1" >&2; exit 1; }',
-      'set +e',
-      'result="$(curl -4 -k -sS --connect-timeout 10 --max-time 30 --resolve "${EXPECTED_HOST}:443:127.0.0.1" --proto \'=https\' -A \'Mozilla/5.0 NUVANX-Origin-A11y/1.2\' -H \'Accept: text/html,application/xhtml+xml\' -H \'Cache-Control: no-cache\' -b \'wpSGCacheBypass=1\' -D "$headers" -o "$body" -w \'%{http_code}|%{url_effective}|%{remote_ip}\' "$origin_url")"',
-      'curl_rc=$?',
-      'if [[ "$curl_rc" -ne 0 ]] || [[ "$result" == 000* ]]; then',
-      '  result="$(curl -4 -k -sS --connect-timeout 10 --max-time 30 --proto \'=https\' -A \'Mozilla/5.0 NUVANX-Origin-A11y/1.2\' -H \'Accept: text/html,application/xhtml+xml\' -H \'Cache-Control: no-cache\' -b \'wpSGCacheBypass=1\' -D "$headers" -o "$body" -w \'%{http_code}|%{url_effective}|%{remote_ip}\' "$origin_url")"',
-      '  curl_rc=$?',
-      'fi',
-      'set -e',
-      '[[ "$curl_rc" -eq 0 ]] || fail_origin "curl_exit_$curl_rc"',
-      'code="$(printf \'%s\' "$result" | cut -d\'|\' -f1)"',
-      'effective="$(printf \'%s\' "$result" | cut -d\'|\' -f2)"',
-      'remote_ip="$(printf \'%s\' "$result" | cut -d\'|\' -f3)"',
-      '[[ "$code" == \'200\' ]] || fail_origin "http_code_$code"',
-      'case "$effective" in "https://${EXPECTED_HOST}/"*|"https://${EXPECTED_HOST}") ;; *) fail_origin "final_url_$effective" ;; esac',
-      '[[ -n "$remote_ip" ]] || fail_origin "unexpected_remote_ip_$remote_ip"',
+      ...buildSiteGroundOriginCurlLines('Mozilla/5.0 NUVANX-Origin-A11y/1.3'),
       `if grep -Fq '${SITEGROUND_CAPTCHA_PATH}' "$body"; then fail_origin 'captcha-body'; fi`,
       'if grep -Eiq \'^sg-captcha:[[:space:]]*challenge\' "$headers"; then fail_origin \'captcha-header\'; fi',
       'deploy_sha="$(php -r \'$html=file_get_contents($argv[1]); if (preg_match("/<meta\\b[^>]*\\bname\\s*=\\s*[\\x22\\x27]nvx-deploy-sha[\\x22\\x27][^>]*\\bcontent\\s*=\\s*[\\x22\\x27]([^\\x22\\x27]+)[\\x22\\x27][^>]*>/is", $html, $m) || preg_match("/<meta\\b[^>]*\\bcontent\\s*=\\s*[\\x22\\x27]([^\\x22\\x27]+)[\\x22\\x27][^>]*\\bname\\s*=\\s*[\\x22\\x27]nvx-deploy-sha[\\x22\\x27][^>]*>/is", $html, $m)) echo trim($m[1]);\' "$body")"',
@@ -174,7 +198,7 @@ export function createSiteGroundOriginVerifier({
       signal: result.signal || '',
       stderr,
       error: result.error ? result.error.message : '',
-      transportFailure: Boolean(result.error) || result.status === 255,
+      transportFailure: Boolean(result.error) || result.status === 255 || /(?:curl_exit_|fallback_ip_unavailable)/.test(stderr),
       originStatus: statusMatch ? Number.parseInt(statusMatch[1], 10) : null,
       originDeploySha: shaMatch ? shaMatch[1] : '',
       effectiveUrl: effectiveMatch ? Buffer.from(effectiveMatch[1], 'base64').toString('utf8') : '',
@@ -207,6 +231,7 @@ export function isBlockCTransientSiteGroundFailure(result, baseUrl) {
     blockers.length > 0 &&
     blockers.every((message) => /^Navigation returned no HTTP response$/i.test(message)) &&
     issues.length === 0 &&
+    networkErrors.length > 0 &&
     networkErrors.every((msg) => {
       const message = String(msg || '').trim();
       return /net::ERR_ABORTED/i.test(message) && message.startsWith(`${baseUrl}${SITEGROUND_CAPTCHA_PATH}`);
