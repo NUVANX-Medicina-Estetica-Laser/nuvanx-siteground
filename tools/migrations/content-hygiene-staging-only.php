@@ -294,6 +294,27 @@ if (
         }
     }
 
+    // Also ensure governed clinic gallery and equipment catalog assets are synced
+    if ( function_exists( 'nvx_clinics_hub_equipment_catalog' ) ) {
+        foreach ( nvx_clinics_hub_equipment_catalog() as $eq ) {
+            $eq_path = $normalize_media_path( (string) ( $eq['uploads_path'] ?? '' ) );
+            if ( '' !== $eq_path ) {
+                $media_paths[ $eq_path ]        = true;
+                $required_originals[ $eq_path ] = true;
+            }
+        }
+    }
+    if ( function_exists( 'nvx_clinic_editorial_photo_map' ) ) {
+        foreach ( array( 'goya', 'chamberi' ) as $clinic_key ) {
+            foreach ( nvx_clinic_editorial_photo_map( $clinic_key ) as $photo ) {
+                $photo_path = $normalize_media_path( (string) ( $photo['uploads_path'] ?? '' ) );
+                if ( '' !== $photo_path ) {
+                    $media_paths[ $photo_path ] = true;
+                }
+            }
+        }
+    }
+
     ksort( $media_paths );
 
     $media_copied          = 0;

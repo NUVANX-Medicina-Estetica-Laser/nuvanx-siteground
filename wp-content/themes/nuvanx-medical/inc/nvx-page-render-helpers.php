@@ -471,6 +471,9 @@ function nvx_known_image_intrinsics(): array {
 		'Espalda-novias'                                 => array( 941, 1672 ),
 		'Papada-novias'                                  => array( 1536, 1024 ),
 		'nvx-co2-hero-760'                               => array( 760, 510 ),
+		'ipl-exilite-luz-pulsada'                        => array( 554, 554 ),
+		'Emfusion-btl-lentigo-aranitas-vasculares-punto-de-rubi-marcas-de-acne' => array( 524, 903 ),
+		'SMARTXIDE-DOT_EQUIPO-TOUCH-DEKA-LASER-CO2-FRACCIONAL' => array( 447, 1105 ),
 	);
 }
 
