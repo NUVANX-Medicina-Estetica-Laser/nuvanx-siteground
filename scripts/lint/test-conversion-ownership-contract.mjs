@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+// Resolve from this module so the release contract is independent of the caller's cwd.
 const repoRoot = new URL('../../', import.meta.url);
 const relayPath = new URL('wp-content/themes/nuvanx-medical/assets/js/nvx-conversion-events.js', repoRoot);
 const retiredPublisherPath = new URL('scripts/seo/setup-gtm-conversion-trigger.js', repoRoot);
