@@ -18,6 +18,9 @@ const failures = [];
 const requireSource = (source, needle, reason) => {
   if (!source.includes(needle)) failures.push(reason);
 };
+const forbidSource = (source, needle, reason) => {
+  if (source.includes(needle)) failures.push(reason);
+};
 
 function segment(source, startNeedle, endNeedle, label) {
   const start = source.indexOf(startNeedle);
@@ -66,9 +69,14 @@ requireSource(sectionMarkup, 'return nvx_clinics_hub_equipment_unavailable_marku
 requireSource(sectionMarkup, '7 !== count( $catalog ) || 7 !== count( $cards )', 'equipment_section_exact_card_count_guard');
 requireSource(sectionMarkup, 'data-nvx-approved-equipment-section="clinic-hub-v1"', 'equipment_section_approval_marker');
 
-requireSource(migrationSource, "function_exists( 'nvx_clinics_hub_equipment_catalog' )", 'staging_media_catalog_function_guard');
-requireSource(migrationSource, 'foreach ( nvx_clinics_hub_equipment_catalog() as $eq )', 'staging_media_catalog_iteration');
+requireSource(migrationSource, "if ( ! function_exists( 'nvx_clinics_hub_equipment_catalog' ) )", 'staging_media_catalog_required_function_guard');
+requireSource(migrationSource, '[FATAL] nvx_clinics_hub_equipment_catalog() not available.', 'staging_media_catalog_missing_function_fatal');
+requireSource(migrationSource, '$equipment_catalog = nvx_clinics_hub_equipment_catalog();', 'staging_media_catalog_eager_load');
+requireSource(migrationSource, '7 !== count( $equipment_catalog )', 'staging_media_catalog_exact_count_guard');
+requireSource(migrationSource, 'foreach ( $equipment_catalog as $eq )', 'staging_media_catalog_iteration');
+forbidSource(migrationSource, "if ( function_exists( 'nvx_clinics_hub_equipment_catalog' ) )", 'staging_media_catalog_optional_guard_present');
 requireSource(migrationSource, "$eq_path = $normalize_media_path( (string) ( $eq['uploads_path'] ?? '' ) );", 'staging_media_catalog_path_normalization');
+requireSource(migrationSource, '[FATAL] Clinic equipment catalog contains an invalid uploads_path.', 'staging_media_catalog_invalid_path_fatal');
 requireSource(migrationSource, '$media_paths[ $eq_path ]        = true;', 'staging_media_catalog_sync_registration');
 requireSource(migrationSource, '$required_originals[ $eq_path ] = true;', 'staging_media_catalog_required_original');
 requireSource(migrationSource, 'if ( ! is_file( $source ) )', 'staging_media_missing_source_guard');
@@ -82,4 +90,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`CLINIC_EQUIPMENT_STAGING_MEDIA_CONTRACT=PASS equipment=${equipmentPaths.length} sync=dynamic required_originals=fail_closed renderer=local_readable_only`);
+console.log(`CLINIC_EQUIPMENT_STAGING_MEDIA_CONTRACT=PASS equipment=${equipmentPaths.length} sync=required_dynamic required_originals=fail_closed renderer=local_readable_only`);
