@@ -20,6 +20,7 @@ VALORACION_FORM_CONTRACT_TEST="$ROOT/scripts/production/test-valoracion-form-con
 ENV_FLAGS="$ROOT/wp-content/themes/nuvanx-medical/inc/nvx-environment-flags.php"
 DEPLOY_STAMP="$ROOT/wp-content/themes/nuvanx-medical/inc/nvx-deploy-stamp.php"
 LCP_CSS_CONTRACT="$ROOT/scripts/lint/test-lcp-css-delivery.mjs"
+CONVERSION_OWNERSHIP_CONTRACT="$ROOT/scripts/lint/test-conversion-ownership-contract.mjs"
 META_BROWSER_OWNER_CONTRACT="$ROOT/scripts/lint/test-meta-browser-owner-retirement.php"
 SEO_OWNERSHIP_CONTRACT="$ROOT/scripts/lint/test-seo-catalog-ownership.php"
 WORDPRESS_SECURITY_CONTRACT="$ROOT/scripts/lint/test-wordpress-security-contract.php"
@@ -27,7 +28,7 @@ SEO_GEO_AUDIT="$ROOT/scripts/production/seo-geo-origin-audit.sh"
 SEO_TOOLING_DIR="$ROOT/scripts/seo"
 THEME_DIR="$ROOT/wp-content/themes/nuvanx-medical"
 
-for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$PREMERGE_CONTRACT" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$WORDPRESS_SECURITY_CONTRACT" "$SEO_GEO_AUDIT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock" "$THEME_DIR/composer.json" "$THEME_DIR/phpcs.xml.dist"; do
+for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$PREMERGE_CONTRACT" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$CONVERSION_OWNERSHIP_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$WORDPRESS_SECURITY_CONTRACT" "$SEO_GEO_AUDIT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock" "$THEME_DIR/composer.json" "$THEME_DIR/phpcs.xml.dist"; do
   [[ -s "$required" ]] || fail "missing_file:$required"
 done
 
@@ -191,6 +192,11 @@ pass_assert 'wordpress-security-contract'
 # non-blocking Google Fonts, and the narrow editorial-only defer boundary.
 node "$LCP_CSS_CONTRACT" || fail 'lcp_css_delivery_contract'
 pass_assert 'lcp-css-delivery'
+# Form conversion ownership is a release-blocking invariant. The canonical
+# path is HubSpot -> GA4 generate_lead -> Ads 908 import; direct form owners
+# and the retired GTM publisher must not return.
+node "$CONVERSION_OWNERSHIP_CONTRACT" || fail 'conversion_ownership_contract'
+pass_assert 'conversion-ownership-contract'
 
 # Keep routed SEO metadata complete and enforce one text-metadata owner.
 php "$SEO_OWNERSHIP_CONTRACT" || fail 'seo_catalog_ownership_contract'

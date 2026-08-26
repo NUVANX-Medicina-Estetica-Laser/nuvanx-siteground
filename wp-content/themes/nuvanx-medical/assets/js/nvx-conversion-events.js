@@ -6,8 +6,6 @@
 	var submissionWindowMs = 8000;
 	var recentSubmissions = new Map();
 	var recentFallbackConversionIds = new Map();
-	var configuredCanonicalForm = String((config.forms || {}).valoracion || '').toLowerCase();
-	var canonicalForm = configuredCanonicalForm || '';
 
 	function cleanToken(value, fallback) {
 		var token = String(value || '')
@@ -199,10 +197,6 @@
 			form_event_source: eventSource,
 		});
 
-		if (String(formId || '').toLowerCase() === canonicalForm) {
-			window.dataLayer = window.dataLayer || [];
-			window.dataLayer.push({ event: 'nvx_valoracion_success', form: 'valoracion', source: 'hubspot_native' });
-		}
 	}
 
 	function isAllowedHubSpotOrigin(origin) {

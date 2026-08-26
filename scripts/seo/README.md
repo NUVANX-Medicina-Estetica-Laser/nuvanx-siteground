@@ -31,30 +31,15 @@ Current contract:
 - `gsc-full-analysis.js` — read-only Search Console analysis covering queries, pages, devices, countries, trends and query/page combinations.
 - `pagespeed-cwv-analysis.js` — manual Core Web Vitals/PageSpeed diagnostic for the configured NUVANX URLs.
 
-### Manual GTM publisher
+### GTM ownership
 
-- `gtm-utils.js` — shared sanitization/helper module used by the GTM publisher.
-- `setup-gtm-conversion-trigger.js` — private local publisher for the governed `nvx_conversion_signal` → Google Ads conversion path. It refuses CI/non-TTY execution, requires `GTM_CONFIRM_PUBLISH=yes`, requires target identifiers through environment variables, uses an isolated workspace and publishes only entities created by the current invocation.
+`gtm-utils.js` remains available for read-only GTM diagnostics. The former `setup-gtm-conversion-trigger.js` publisher has been retired because it could create a second, direct Google Ads form-conversion owner.
 
-## GTM publisher required environment
+The canonical contract is:
 
-Before running `setup-gtm-conversion-trigger.js`, configure these values in the private local environment or `.env.local`:
+`HubSpot successful submit → GA4 generate_lead → Google Ads 908 import`
 
-- `GTM_REFRESH_TOKEN`
-- `GTM_CLIENT_ID` and `GTM_CLIENT_SECRET` (or the corresponding `GOOGLE_ADS_*` OAuth client pair)
-- `GTM_ACCOUNT_ID`
-- `GTM_CONTAINER_ID`
-- `GOOGLE_ADS_CONVERSION_ID` in `AW-<digits>` format
-- `GOOGLE_ADS_CONVERSION_LABEL`
-
-Invoke it deliberately from a private local TTY:
-
-```bash
-source .env.local
-GTM_CONFIRM_PUBLISH=yes node scripts/seo/setup-gtm-conversion-trigger.js
-```
-
-A successful publisher exit is not sufficient evidence to retire another tracking owner. Verify the live GTM container/version and the expected conversion event end-to-end first.
+No repository script may create or publish a direct Google Ads form tag. Changes to the live GTM container must be performed manually in the administrative UI, after verifying Primary/Secondary action settings and HubSpot Ads > Events. The direct 820 phone/WhatsApp conversion remains a separate, deliberate measurement decision and is not part of form-conversion cleanup.
 
 ## Security and cleanup rules
 
