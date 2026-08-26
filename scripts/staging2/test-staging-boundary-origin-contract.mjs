@@ -15,6 +15,22 @@ const forbidSource = (source, needle, reason) => {
   if (source.includes(needle)) failures.push(reason);
 };
 
+function requireCacheBypassOnEveryOriginCurl(source, label, minimumProbes) {
+  const probes = source
+    .split('\n')
+    .filter((line) => line.includes('curl -4') && line.includes('$origin_url'));
+
+  if (probes.length < minimumProbes) {
+    failures.push(`${label}_origin_curl_probe_count_${probes.length}`);
+  }
+
+  probes.forEach((probe, index) => {
+    if (!probe.includes("-b \\'wpSGCacheBypass=1\\'")) {
+      failures.push(`${label}_origin_curl_${index + 1}_cache_bypass_missing`);
+    }
+  });
+}
+
 for (const [label, source] of [
   ['boundary', boundarySource],
   ['shared', sharedSource],
@@ -22,13 +38,15 @@ for (const [label, source] of [
   requireSource(source, '--resolve "${EXPECTED_HOST}:443:127.0.0.1"', `${label}_https_loopback_resolve_missing`);
   requireSource(source, 'origin_url="https://${EXPECTED_HOST}${ROUTE}"', `${label}_https_origin_url_missing`);
   requireSource(source, "--proto \\'=https\\'", `${label}_https_protocol_guard_missing`);
-  requireSource(source, "-b \\'wpSGCacheBypass=1\\'", `${label}_siteground_cache_bypass_missing`);
   requireSource(source, 'unexpected_remote_ip_$remote_ip', `${label}_loopback_remote_ip_guard_missing`);
   requireSource(source, "[[ \"$code\" == \\'200\\' ]]", `${label}_origin_http_200_guard_missing`);
   requireSource(source, 'deploy_sha_${deploy_sha:-missing}', `${label}_exact_deploy_sha_guard_missing`);
   forbidSource(source, 'base_url="http://localhost"', `${label}_legacy_http_localhost_fallback_present`);
   forbidSource(source, '"${base_url}${ROUTE}"', `${label}_legacy_http_localhost_request_present`);
 }
+
+requireCacheBypassOnEveryOriginCurl(boundarySource, 'boundary', 2);
+requireCacheBypassOnEveryOriginCurl(sharedSource, 'shared', 4);
 
 requireSource(boundarySource, "^sg-captcha:[[:space:]]*challenge", 'boundary_origin_captcha_signature_missing');
 requireSource(boundarySource, 'sg_captcha_challenge', 'boundary_origin_captcha_diagnostic_missing');
@@ -48,4 +66,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('STAGING_BOUNDARY_ORIGIN_CONTRACT=PASS owners=boundary,shared transport=https-loopback host=sni-preserved status=200 sha=exact robots=noindex,nofollow captcha=strict cache_bypass=1 diagnostic=explicit');
+console.log('STAGING_BOUNDARY_ORIGIN_CONTRACT=PASS owners=boundary,shared transport=https-loopback host=sni-preserved status=200 sha=exact robots=noindex,nofollow captcha=strict cache_bypass=all_origin_curl_probes diagnostic=explicit');
