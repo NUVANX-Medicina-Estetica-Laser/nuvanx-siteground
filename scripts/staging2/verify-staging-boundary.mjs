@@ -5,6 +5,7 @@ import {
   SITEGROUND_CAPTCHA_PATH,
   isSiteGroundTransientResponse,
 } from './siteground-transient-classifier.mjs';
+import { buildSiteGroundOriginCurlLines } from './siteground-origin-verifier.mjs';
 
 const expectedHost = process.env.EXPECTED_HOST || 'staging2.nuvanx.com';
 const expectedSha = (process.env.EXPECTED_SHA || '').trim();
@@ -14,8 +15,6 @@ const transientAttempts = Number.parseInt(process.env.STAGING_BOUNDARY_TRANSIENT
 const transientBaseDelayMs = Number.parseInt(process.env.STAGING_BOUNDARY_TRANSIENT_DELAY_MS || '3000', 10);
 const requestTimeoutMs = Number.parseInt(process.env.STAGING_BOUNDARY_REQUEST_TIMEOUT_MS || '15000', 10);
 const sshBin = '/usr/bin/ssh';
-const stagingRoot = process.env.STAGING_ROOT || '/home/customer/www/staging2.nuvanx.com/public_html';
-const shaFile = `${stagingRoot}/wp-content/themes/nuvanx-medical/.nvx-deploy-sha`;
 const routes = [
   '/',
   '/soluciones-medicas/',
@@ -128,35 +127,41 @@ function sshAliasConfigured(alias) {
 }
 
 function verifyViaSiteGroundOrigin(route) {
+  // A challenged GitHub-runner request is revalidated against the exact HTTPS
+  // WordPress vhost from SiteGround itself. The shared transport owns both the
+  // loopback probe and the fail-closed local-server-IP fallback; DNS/public edge
+  // is never used by origin verification.
   const remoteScript = [
     'set -Eeuo pipefail',
+    'origin_url="https://${EXPECTED_HOST}${ROUTE}"',
+    'headers="$(mktemp)"',
+    'body="$(mktemp)"',
+    'cleanup() { rm -f "$headers" "$body"; }',
+    'trap cleanup EXIT',
     'fail_origin() { echo "ORIGIN_BOUNDARY_FAIL route=$ROUTE reason=$1" >&2; exit 1; }',
-
-    // 1. SHA — marcador inmutable escrito por el workflow de deploy
-    `deploy_sha="$(tr -d '\\r\\n' < '${shaFile}' 2>/dev/null || true)"`,
-    '[[ "$deploy_sha" =~ ^[0-9a-f]{40}$ ]] || fail_origin "deploy_sha_invalid"',
+    ...buildSiteGroundOriginCurlLines('NUVANX-Staging-Origin-Boundary/1.5'),
+    '! grep -Fq \'${SITEGROUND_CAPTCHA_PATH}\' "$body" || fail_origin \'captcha_path_in_body\'',
+    '! grep -Eiq \'^sg-captcha:[[:space:]]*challenge\' "$headers" || fail_origin \'sg_captcha_challenge\'',
+    'extract_meta_content() {',
+    String.raw`  php -r '$html=file_get_contents($argv[1]); $wanted=strtolower($argv[2]); preg_match_all("/<meta\b[^>]*>/is", $html, $tags); foreach ($tags[0] as $tag) { if (!preg_match("/\bname\s*=\s*(?:\x22([^\x22]+)\x22|\x27([^\x27]+)\x27)/is", $tag, $name)) continue; $actual=strtolower(trim(html_entity_decode($name[1] !== "" ? $name[1] : $name[2], ENT_QUOTES | ENT_HTML5, "UTF-8"))); if ($actual !== $wanted) continue; if (preg_match("/\bcontent\s*=\s*(?:\x22([^\x22]*)\x22|\x27([^\x27]*)\x27)/is", $tag, $content)) echo trim(html_entity_decode($content[1] !== "" ? $content[1] : $content[2], ENT_QUOTES | ENT_HTML5, "UTF-8")); break; }' "$body" "$1"`,
+    '}',
+    'deploy_sha="$(extract_meta_content nvx-deploy-sha)"',
     '[[ "$deploy_sha" == "$EXPECTED_SHA" ]] || fail_origin "deploy_sha_${deploy_sha:-missing}"',
-
-    // 2. WordPress funcional
-    `cd '${stagingRoot}'`,
-    "wp eval 'echo \"WP_OK\";' --allow-root 2>/dev/null | grep -q 'WP_OK' || fail_origin 'wp_not_functional'",
-
-    // 3. Robots staging — blog_public=0 confirma configuración noindex
-    "blog_public=\"$(wp option get blog_public --allow-root 2>/dev/null | tr -d '[:space:]' || echo '1')\"",
-    '[[ "$blog_public" == "0" ]] || fail_origin "blog_public_${blog_public}"',
-    "robots_combined='noindex,nofollow'",
-    "robots_b64=\"$(printf '%s' \"$robots_combined\" | base64 | tr -d '\\n')\"",
-
-    'echo "ORIGIN_BOUNDARY=PASS route=$ROUTE sha=$deploy_sha robots_b64=$robots_b64"',
+    'robots_meta="$(extract_meta_content robots)"',
+    'xrobots="$(grep -Ei \'^x-robots-tag:\' "$headers" | sed -E \'s/^[Xx]-[Rr]obots-[Tt]ag:[[:space:]]*//\' | paste -sd, - || true)"',
+    'combined="${robots_meta}${xrobots:+,${xrobots}}"',
+    'printf \'%s\' "$combined" | grep -Eiq \'noindex\' || fail_origin \'missing_noindex\'',
+    'printf \'%s\' "$combined" | grep -Eiq \'nofollow\' || fail_origin \'missing_nofollow\'',
+    'if printf \'%s\' "$combined" | grep -Eiq \'(^|[^a-z])index[[:space:]]*,?[[:space:]]*follow([^a-z]|$)\'; then fail_origin \'index_follow_present\'; fi',
+    String.raw`robots_b64="$(printf '%s' "$combined" | base64 | tr -d '\n')"`,
+    'echo "ORIGIN_BOUNDARY=PASS route=$ROUTE status=$code final=$effective remote_ip=$remote_ip sha=$deploy_sha robots_b64=$robots_b64"',
     '',
   ].join('\n');
 
-  const remoteCommand =
-    `EXPECTED_HOST=${expectedHost} EXPECTED_SHA=${expectedSha} ROUTE=${route} bash -se`;
+  const remoteCommand = `EXPECTED_HOST=${expectedHost} EXPECTED_SHA=${expectedSha} ROUTE=${route} SITEGROUND_CAPTCHA_PATH=${SITEGROUND_CAPTCHA_PATH} bash -se`;
   const result = spawnSync(
     sshBin,
-    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5',
-     '-o', 'ConnectionAttempts=1', '--', originSshAlias, remoteCommand],
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'ConnectionAttempts=1', '--', originSshAlias, remoteCommand],
     { input: remoteScript, encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 }
   );
 
