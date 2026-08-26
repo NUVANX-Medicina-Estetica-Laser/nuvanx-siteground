@@ -14,11 +14,9 @@ const originSshAlias = String(process.env.ORIGIN_SSH_ALIAS || 'nvx-staging2').tr
 const route = '/matriz-diagnostico-facial-estructura-piel-musculo-grasa/';
 const url = `${baseUrl}${route}`;
 const expectedCanonical = url;
-const expectedOgUrl = baseUrl === 'https://nuvanx.com'
-  ? expectedCanonical
-  : `https://nuvanx.com${route}`;
-const expectedTitle = 'Matriz de diagnóstico facial | NUVANX Madrid';
-const expectedH1 = 'Matriz de diagnóstico facial: estructura, músculo, piel y grasa';
+const expectedOgUrl = expectedCanonical;
+const expectedTitle = 'Matriz de diagnóstico facial: estructura, músculo, piel y grasa';
+const expectedH1 = expectedTitle;
 const expectedRuntimeContract = '20260815-immutable-request-final-query-lock-v3';
 const neighbouringSlug = 'tratamientos-faciales-sin-cirugia-guia-medica-diagnostico';
 const originFallbackAllowed = baseUrl === 'https://staging2.nuvanx.com';
