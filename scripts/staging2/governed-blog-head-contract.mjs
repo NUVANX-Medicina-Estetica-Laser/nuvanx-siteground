@@ -10,7 +10,6 @@ import {
 
 const execFileAsync = promisify(execFile);
 const base = (process.env.BASE_URL || 'https://staging2.nuvanx.com').replace(/\/$/, '');
-const prod = 'https://nuvanx.com';
 const sha = (process.env.EXPECTED_SHA || '').trim();
 const stagingRoot = (process.env.STAGING_ROOT || '/home/customer/www/staging2.nuvanx.com/public_html').trim();
 const sshAlias = (process.env.ORIGIN_SSH_ALIAS || 'nvx-staging2').trim();
@@ -216,7 +215,10 @@ async function runGovernedBlogHeadContract() {
         if (headData.canonical.length !== 1 || norm(headData.canonical[0] || '') !== norm(expectedCanonical)) {
           issues.push(`canonical=${headData.canonical.join(',')}`);
         }
-        if (headData.og.length !== 1 || norm(headData.og[0] || '') !== norm(`${prod}/${post.slug}/`)) {
+        // Open Graph URL is an absolute page identity and must follow the same
+        // environment-specific canonical as the rendered document. Production
+        // validates https://nuvanx.com; Staging validates https://staging2.nuvanx.com.
+        if (headData.og.length !== 1 || norm(headData.og[0] || '') !== norm(expectedCanonical)) {
           issues.push(`og=${headData.og.join(',')}`);
         }
         if (headData.deploy !== sha) issues.push(`sha=${headData.deploy || 'missing'}`);
@@ -272,4 +274,3 @@ const exitCode = await runGovernedBlogHeadContract().catch((err) => {
   return 1;
 });
 process.exit(exitCode);
-
