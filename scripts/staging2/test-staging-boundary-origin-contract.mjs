@@ -48,8 +48,9 @@ requireSource(boundarySource, "robots_combined='noindex,nofollow'", 'boundary_ro
 requireSource(boundarySource, 'ORIGIN_BOUNDARY_FAIL route=$ROUTE reason=$1', 'boundary_failure_diagnostic_missing');
 requireSource(boundarySource, 'isTransientSiteGroundChallenge(response) && getOriginFallbackAvailable()', 'boundary_transient_origin_fallback_gate_missing');
 requireSource(boundarySource, 'result.originFallback = verifyViaSiteGroundOrigin(route)', 'boundary_wpcli_origin_fallback_wiring_missing');
-forbidSource(boundarySource, 'base_url="http://localhost"', 'boundary_legacy_http_localhost_fallback_present');
-forbidSource(boundarySource, '--resolve "${EXPECTED_HOST}:443:127.0.0.1"', 'boundary_retired_loopback_transport_reintroduced');
+forbidSource(boundarySource.toLowerCase(), 'localhost', 'boundary_localhost_transport_present');
+forbidSource(boundarySource, '127.0.0.1', 'boundary_loopback_address_present');
+forbidSource(boundarySource.toLowerCase(), 'curl', 'boundary_curl_transport_present');
 
 if (failures.length > 0) {
   console.error(`STAGING_BOUNDARY_ORIGIN_CONTRACT=FAIL reasons=${failures.join(',')}`);
