@@ -37,6 +37,22 @@ if ( ! function_exists( 'nvx_aesthetic_treatment_catalog' ) ) {
     exit( 1 );
 }
 
+if ( ! function_exists( 'nvx_clinics_hub_equipment_catalog' ) ) {
+    fwrite(
+        STDERR,
+        "[FATAL] nvx_clinics_hub_equipment_catalog() not available. Theme may not be fully loaded. Aborting.\n"
+    );
+    echo "Status: STAGING_ONLY_ABORT\n";
+    exit( 1 );
+}
+
+$equipment_catalog = nvx_clinics_hub_equipment_catalog();
+if ( ! is_array( $equipment_catalog ) || 7 !== count( $equipment_catalog ) ) {
+    fwrite( STDERR, "[FATAL] Clinic equipment catalog must contain exactly 7 governed assets. Aborting.\n" );
+    echo "Status: STAGING_ONLY_ABORT\n";
+    exit( 1 );
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 global $wpdb;
@@ -294,16 +310,18 @@ if (
         }
     }
 
-    // Also ensure governed clinic gallery and equipment catalog assets are synced
-    if ( function_exists( 'nvx_clinics_hub_equipment_catalog' ) ) {
-        foreach ( nvx_clinics_hub_equipment_catalog() as $eq ) {
-            $eq_path = $normalize_media_path( (string) ( $eq['uploads_path'] ?? '' ) );
-            if ( '' !== $eq_path ) {
-                $media_paths[ $eq_path ]        = true;
-                $required_originals[ $eq_path ] = true;
-            }
+    // Also ensure governed clinic gallery and equipment catalog assets are synced.
+    foreach ( $equipment_catalog as $eq ) {
+        $eq_path = $normalize_media_path( (string) ( $eq['uploads_path'] ?? '' ) );
+        if ( '' === $eq_path ) {
+            fwrite( STDERR, "[FATAL] Clinic equipment catalog contains an invalid uploads_path. Aborting.\n" );
+            echo "Status: MIGRATION_FAIL\n";
+            exit( 1 );
         }
+        $media_paths[ $eq_path ]        = true;
+        $required_originals[ $eq_path ] = true;
     }
+
     if ( function_exists( 'nvx_clinic_editorial_photo_map' ) ) {
         foreach ( array( 'goya', 'chamberi' ) as $clinic_key ) {
             foreach ( nvx_clinic_editorial_photo_map( $clinic_key ) as $photo ) {
@@ -426,4 +444,3 @@ if ( 0 === $blocks_fail ) {
 
 printf( "Status: MIGRATION_FAIL (%d block(s) failed)\n", $blocks_fail );
 exit( 1 );
-
