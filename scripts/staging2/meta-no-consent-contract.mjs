@@ -88,11 +88,18 @@ async function fetchOriginAfterChallenge(url) {
   if (!new Set(['nvx-staging2', 'nvx-staging2-pr']).has(originSshAlias)) {
     throw new Error(`ORIGIN_SSH_ALIAS must be one of: nvx-staging2, nvx-staging2-pr.`);
   }
-  const { stdout } = await execFileAsync('ssh', ['-n', '--', originSshAlias, remoteCommand], {
-    encoding: 'utf8',
-    maxBuffer: 8 * 1024 * 1024,
-    timeout: 45000,
-  });
+  let stdout;
+  try {
+    stdout = await execFileAsync('ssh', ['-n', '--', originSshAlias, remoteCommand], {
+      encoding: 'utf8',
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: 45000,
+    });
+  } catch (err) {
+    // Classify SSH/curl failures as transient
+    transient = true;
+    throw new Error(`origin_ssh_curl_failure_transient: ${err.message}`);
+  }
 
   const sepIndex = stdout.indexOf('\n__NVX_SEP__\n');
   if (sepIndex === -1) throw new Error('origin_fallback_missing_separator');
