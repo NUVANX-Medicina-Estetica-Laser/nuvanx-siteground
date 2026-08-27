@@ -64,6 +64,34 @@ function nvx_valoracion_modal_hubspot_config(): array {
 }
 
 /**
+ * Add the modal/button presentation layer to the same inline critical bundle as
+ * the canonical components CSS. Public requests intentionally suppress local
+ * theme stylesheet links, so a conventional wp_enqueue_style() would be dropped.
+ */
+function nvx_valoracion_modal_enqueue_presentation_styles(): void {
+	if ( ! nvx_valoracion_modal_enabled() ) {
+		return;
+	}
+
+	$path = get_template_directory() . '/assets/css/nvx-conversion-surfaces.css';
+	if ( ! is_readable( $path ) ) {
+		return;
+	}
+
+	$css = file_get_contents( $path );
+	if ( ! is_string( $css ) || '' === trim( $css ) ) {
+		return;
+	}
+
+	if ( ! wp_style_is( 'nvx-components', 'registered' ) ) {
+		wp_register_style( 'nvx-components', false, array(), NVX_THEME_VERSION );
+	}
+	wp_enqueue_style( 'nvx-components' );
+	wp_add_inline_style( 'nvx-components', $css );
+}
+add_action( 'wp_enqueue_scripts', 'nvx_valoracion_modal_enqueue_presentation_styles', 35 );
+
+/**
  * Modal dialog markup.
  */
 function nvx_valoracion_modal_markup(): string {
