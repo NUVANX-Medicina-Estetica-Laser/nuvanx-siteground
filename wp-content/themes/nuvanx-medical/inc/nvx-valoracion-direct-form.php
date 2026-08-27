@@ -249,6 +249,11 @@ function nvx_valoracion_direct_success_redirect_url(): string {
 	}
 }
 
+function nvx_valoracion_direct_success_token(): string {
+	$raw = isset( $_GET['nvx_success'] ) ? (string) $_GET['nvx_success'] : '';
+	return sanitize_text_field( wp_unslash( $raw ) );
+}
+
 /**
  * Consume the first-party success token before rendering the thank-you page.
  * Any request carrying the token is non-cacheable so a cached page can never
@@ -261,8 +266,8 @@ function nvx_valoracion_prepare_direct_success(): void {
 		? is_page( nvx_theme_thank_you_page_slugs() )
 		: is_page( 'gracias' );
 		
-	$raw_token = filter_input( INPUT_GET, 'nvx_success' );
-	if ( ! $is_thank_you || empty( $raw_token ) ) {
+	$token = nvx_valoracion_direct_success_token();
+	if ( ! $is_thank_you || '' === $token ) {
 		return;
 	}
 
@@ -271,7 +276,6 @@ function nvx_valoracion_prepare_direct_success(): void {
 	}
 	nocache_headers();
 
-	$token = sanitize_text_field( wp_unslash( (string) $raw_token ) );
 	if ( 1 !== preg_match( '/^[a-f0-9]{64}$/D', $token ) ) {
 		return;
 	}
