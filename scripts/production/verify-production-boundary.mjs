@@ -235,7 +235,7 @@ legacy_valoracion_direct_form_count() {
   ' -- "$body"
 }
 
-ua='NUVANX-Production-Boundary/1.6'
+ua='NUVANX-Production-Boundary/1.7'
 for route in \
   '/' \
   '/soluciones-medicas/' \
@@ -251,7 +251,7 @@ do
   body="$(mktemp)"
   cleanup() { rm -f "$headers" "$body"; }
   if [[ "$probe_mode" == 'origin' ]]; then
-    result="$(curl -sS -L --max-redirs 5 --max-time 30 -k --resolve "$EXPECTED_HOST:443:127.0.0.1" -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
+    result="$(curl -sS --max-time 30 --proto '=http' -A "$ua" -H "Host: $EXPECTED_HOST" -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-Port: 443' -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "http://localhost$route")"
   else
     result="$(curl -sS -L --max-redirs 5 --max-time 30 --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
   fi
@@ -259,11 +259,18 @@ do
   effective="$(printf '%s' "$result" | cut -d'|' -f2)"
   remote_ip="$(printf '%s' "$result" | cut -d'|' -f3)"
   [[ "$code" == '200' ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=http_code code=$code mode=$probe_mode" >&2; cleanup; exit 1; }
-  case "$effective" in
-    https://nuvanx.com/*|https://nuvanx.com) ;;
-    *) echo "PRODUCTION_PROBE_FAIL route=$route final=$effective mode=$probe_mode" >&2; cleanup; exit 1 ;;
-  esac
-  if [[ "$probe_mode" == 'public-edge' ]]; then
+  if [[ "$probe_mode" == 'origin' ]]; then
+    case "$effective" in
+      http://localhost/*|http://localhost) ;;
+      *) echo "PRODUCTION_PROBE_FAIL route=$route final=$effective mode=$probe_mode" >&2; cleanup; exit 1 ;;
+    esac
+    [[ "$remote_ip" == '127.0.0.1' || "$remote_ip" == '::1' ]] \
+      || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_not_loopback remote_ip=$remote_ip" >&2; cleanup; exit 1; }
+  else
+    case "$effective" in
+      https://nuvanx.com/*|https://nuvanx.com) ;;
+      *) echo "PRODUCTION_PROBE_FAIL route=$route final=$effective mode=$probe_mode" >&2; cleanup; exit 1 ;;
+    esac
     [[ -n "$remote_ip" && "$remote_ip" != '127.0.0.1' && "$remote_ip" != '::1' ]] \
       || { echo "PRODUCTION_PROBE_FAIL route=$route reason=public_edge_loopback remote_ip=$remote_ip" >&2; cleanup; exit 1; }
   fi
@@ -375,7 +382,7 @@ async function fetchSameHost(url, maxRedirects = 5) {
       redirect: 'manual',
       signal: AbortSignal.timeout(requestTimeoutMs),
       headers: {
-        'user-agent': 'NUVANX-Production-Boundary/1.6',
+        'user-agent': 'NUVANX-Production-Boundary/1.7',
         accept: 'text/html,application/xhtml+xml',
         'cache-control': 'no-cache',
         pragma: 'no-cache',
