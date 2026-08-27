@@ -139,6 +139,9 @@
   --nvx-header-height: 80px;
   --nvx-header-height-mobile: 72px;
   --nvx-touch-target-min: 48px;
+  /* Compact inline-link targets are intentionally smaller than form controls. */
+  --nvx-touch-target-text-min: 44px;
+  --nvx-card-index-size: 40px;
   --nvx-control-size: var(--nvx-touch-target-min);
   --nvx-logo-height: 40px;
   --nvx-logo-height-mobile: 36px;
@@ -233,6 +236,9 @@
   --nvx-lh-caption: 1.5;
   --nvx-lh-nav: 1;
   --nvx-lh-nav-submenu: 1.35;
+  /* Shared editorial roles; do not substitute by numeric coincidence. */
+  --nvx-lh-prose: 1.7;
+  --nvx-lh-heading-editorial: 1.2;
 
   --nvx-track-display: -0.02em;
   --nvx-track-h1: -0.02em;
@@ -247,6 +253,9 @@
   --nvx-track-nav-submenu: 0.02em;
   --nvx-track-wide: 0.22em;
   --nvx-track-data: 0.16em;
+  --nvx-track-section-label: 0.1em;
+  --nvx-track-data-label: 0.05em;
+  --nvx-track-indication: 0.18em;
 
   /* Sequential indices are UI labels, not display metrics */
   --nvx-index-number-size: var(--nvx-type-caption);

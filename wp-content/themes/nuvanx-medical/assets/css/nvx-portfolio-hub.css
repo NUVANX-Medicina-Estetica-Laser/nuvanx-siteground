@@ -119,7 +119,7 @@
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-display);
   color: var(--nvx-ink);
-  line-height: 0.8;
+  line-height: 0.8; /* nvx-token-exception: EXCEPTION_DOCUMENTED — portfolio index display leading */
   margin-bottom: var(--nvx-space-4);
   opacity: 0.9;
 }
@@ -135,7 +135,7 @@
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-small);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--nvx-track-data-label);
   color: var(--nvx-ink);
   font-weight: var(--nvx-fw-medium);
   margin-bottom: var(--nvx-space-4);
@@ -168,7 +168,7 @@
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-caption);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--nvx-track-section-label);
   color: var(--nvx-text-muted);
   margin-bottom: var(--nvx-space-2);
 }
@@ -195,7 +195,7 @@
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-small);
   font-weight: var(--nvx-fw-medium);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--nvx-track-data-label);
   text-transform: uppercase;
 }
 

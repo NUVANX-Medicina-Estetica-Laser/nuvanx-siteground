@@ -190,7 +190,7 @@
 	font-family: var(--nvx-sans);
 	font-size: var(--nvx-type-caption);
 	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	letter-spacing: var(--nvx-track-section-label);
 	color: var(--nvx-text-muted);
 	margin-bottom: var(--nvx-space-4);
 }
@@ -199,7 +199,7 @@
 	font-family: var(--nvx-serif);
 	font-size: var(--nvx-type-h2);
 	font-weight: 300;
-	line-height: 1.4;
+	line-height: 1.4; /* nvx-token-exception: EXCEPTION_DOCUMENTED — home philosophy title leading */
 	color: var(--nvx-ink);
 	margin-bottom: var(--nvx-space-4);
 }
@@ -311,7 +311,7 @@
 	font-family: var(--nvx-sans);
 	font-size: var(--nvx-type-caption);
 	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	letter-spacing: var(--nvx-track-section-label);
 	color: var(--nvx-text-muted);
 }
 
@@ -394,7 +394,7 @@
 }
 
 .nvx-home-evidence__image-col {
-	min-height: clamp(280px, 35vh, 450px);
+	min-height: clamp(280px, 35vh, 450px); /* nvx-token-exception: STRUCTURAL_ALLOWED — evidence media stage reserve */
 	background-color: var(--nvx-charcoal);
 }
 
@@ -509,7 +509,7 @@
 	font-family: var(--nvx-sans);
 	font-size: var(--nvx-type-caption);
 	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	letter-spacing: var(--nvx-track-section-label);
 	color: var(--nvx-text-muted);
 	margin-bottom: var(--nvx-space-6);
 }
@@ -555,7 +555,7 @@
 .nvx-home-seo__list .nvx-text-link {
 	display: inline-flex;
 	align-items: center;
-	min-height: 44px;
+	min-height: var(--nvx-touch-target-text-min);
 	padding-block: var(--nvx-space-1);
 	color: var(--nvx-ink);
 	text-decoration: underline;
@@ -624,7 +624,7 @@
 	border-radius: var(--nvx-radius-card);
 	overflow: hidden;
 	margin-bottom: var(--nvx-space-4);
-	height: 200px;
+	height: 200px; /* nvx-token-exception: STRUCTURAL_ALLOWED — location map geometry */
 	background: var(--nvx-surface-base);
 	line-height: 0;
 }
@@ -647,7 +647,7 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-height: 44px;
+	min-height: var(--nvx-touch-target-text-min);
 	padding-block: var(--nvx-space-1);
 	font-family: var(--nvx-sans);
 	font-size: var(--nvx-type-small);
