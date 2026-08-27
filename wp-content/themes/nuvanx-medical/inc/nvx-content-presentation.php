@@ -707,8 +707,9 @@ function nvx_content_map_ipl_body_to_brand( string $content ): string {
 }
 
 /**
- * Collapse every interior hero shell to pure .nvx-brand-hero.
- * Strips page modifiers (--laser/--medical/--btl/…) and legacy skin classes.
+ * Normalize every interior hero shell to the canonical brand stage.
+ * Legacy page skins are removed, while explicitly authorized structural and
+ * semantic BEM modifiers survive the normalization pipeline.
  */
 function nvx_content_normalize_interior_hero_shells( string $content ): string {
 	if ( '' === trim( $content ) ) {
@@ -755,9 +756,13 @@ function nvx_content_normalize_interior_hero_shells( string $content ): string {
 				if ( '' === $token ) {
 					continue;
 				}
-				// Drop BEM modifiers on the brand hero, except the authorized media opt-in.
+				// Preserve only canonical brand-hero modifiers with an explicit contract.
 				if ( preg_match( '/^nvx-brand-hero--/u', $token ) ) {
-					if ( 'nvx-brand-hero--has-media' !== $token ) {
+					$authorized_modifiers = array(
+						'nvx-brand-hero--has-media',
+						'nvx-brand-hero--surface-ink',
+					);
+					if ( ! in_array( $token, $authorized_modifiers, true ) ) {
 						continue;
 					}
 				}
