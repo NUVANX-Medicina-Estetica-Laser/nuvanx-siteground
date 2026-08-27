@@ -634,7 +634,10 @@ jobs:
         run: |
           set -euo pipefail
           rm -f scripts/seo/credentials.json
-          if [[ "${WIF_AUTH_OUTCOME:-}" == 'success' && -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" && -s "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]; then
+          if [[ "${WIF_AUTH_OUTCOME:-}" == 'failure' ]]; then
+            echo 'SEARCH_CONSOLE_AUTH=SKIPPED wif_auth_failure_degraded'
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          elif [[ "${WIF_AUTH_OUTCOME:-}" == 'success' && -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" && -s "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]; then
             echo 'SEARCH_CONSOLE_AUTH=WIF_ADC'
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           elif [[ -n "$STATIC_SEARCH_CONSOLE_JSON" ]]; then

@@ -281,11 +281,10 @@ function nvx_valoracion_prepare_direct_success(): void {
 	}
 
 	$key = 'nvx_success_' . hash( 'sha256', $token );
-	if ( ! get_transient( $key ) ) {
+	if ( ! delete_transient( $key ) ) {
 		return;
 	}
 
-	delete_transient( $key );
 	$GLOBALS['nvx_valoracion_direct_success_ready'] = true;
 }
 add_action( 'template_redirect', 'nvx_valoracion_prepare_direct_success', 1 );

@@ -63,7 +63,10 @@ step_assignment_count="$(printf '%s\n' "$upload_step" | grep -Ec '^[[:space:]]*r
 consumer_count="$(printf '%s\n' "$upload_step" | grep -Fc 'for migration in "${required_migrations[@]}"; do' || true)"
 (( consumer_count > 0 )) || fail 'production_upload_required_migrations_not_consumed'
 
-mapfile -t required_migrations < <(
+required_migrations=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && required_migrations+=("$line")
+done < <(
   printf '%s\n' "$upload_step" | awk '
     /^[[:space:]]*required_migrations=\(/ { in_required = 1; next }
     in_required && /^[[:space:]]*\)/ { exit }
@@ -78,7 +81,10 @@ mapfile -t required_migrations < <(
 
 # Derive the owner set from deploy-to-prod.sh itself: every migration assigned
 # from $candidate_dir to a *_SCRIPT variable must also be guarded by -f.
-mapfile -t deploy_pairs < <(
+deploy_pairs=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && deploy_pairs+=("$line")
+done < <(
   sed -nE 's/^[[:space:]]*([A-Z0-9_]+_SCRIPT)="\$candidate_dir\/([^"[:space:]]+\.php)"[[:space:]]*$/\1|\2/p' "$DEPLOY"
 )
 (( ${#deploy_pairs[@]} > 0 )) || fail 'production_deploy_migration_assignments_empty'

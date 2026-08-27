@@ -604,7 +604,7 @@ jobs:
           set -e
           if [[ "$result" -eq 75 ]]; then
             origin_headers="$RUNNER_TEMP/goya-alias-origin-headers.txt"
-            ssh nvx-staging2 '
+            ssh nvx-staging2 'bash -se' << 'EOF' > "$origin_headers"
               is_valid_ipv4() {
                 local ip="$1" a b c d extra octet
                 IFS=. read -r a b c d extra <<< "$ip"
@@ -633,7 +633,7 @@ jobs:
                 fi
               fi
               exit "$rc"
-            ' > "$origin_headers"
+EOF
             origin_result=$?
             if [[ "$origin_result" -eq 75 ]] || [[ "$origin_result" -eq 28 ]]; then
               echo "STAGING_ACCEPTANCE_TRANSIENT=1" >> "$GITHUB_ENV"
