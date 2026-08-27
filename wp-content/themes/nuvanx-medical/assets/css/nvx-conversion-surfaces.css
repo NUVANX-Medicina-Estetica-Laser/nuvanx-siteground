@@ -61,7 +61,7 @@
 
 /* Reset native <dialog> box metrics before applying the NUVANX modal layout.
  * Safari otherwise keeps its intrinsic dialog width/margins while the custom
- * absolute backdrop fills that box, producing the large opaque grey slab.
+ * absolute backdrop fills that box and obscures the intended panel.
  */
 .nvx-valoracion-modal {
   width: 100%;
