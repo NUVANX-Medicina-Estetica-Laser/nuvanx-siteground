@@ -17,11 +17,12 @@ POSSIBLE_SECRET = re.compile(
     r"(?i)(?:password|secret|token|access_token|refresh_token|client_secret|api_key|authorization|bearer|private_key)"
 )
 SECRET_LITERAL = re.compile(
-    r"(?i)(?:password|secret|token|access_token|refresh_token|client_secret|api_key|private_key)"
+    r"(?i)['\"]?(?:password|secret|token|access_token|refresh_token|client_secret|api_key|authorization|private_key)['\"]?"
     r"\s*(?:=>|:|=|,)\s*['\"][^'\"]{8,}['\"]"
 )
 AUTH_LITERAL = re.compile(
-    r"(?i)(?:authorization\s*[:=]\s*['\"]?bearer\s+|bearer\s+)[A-Z0-9._~+/=-]{12,}"
+    r"(?i)(?:authorization\s*[:=]\s*['\"]?(?:bearer|basic|token|api[-_]?key)\s+|bearer\s+)"
+    r"[A-Z0-9._~+/=-]{12,}"
 )
 ENVIRONMENT = re.compile(r"(?:staging2\.nuvanx\.com|nuvanx\.com|/home/customer/|/home/ubuntu/)", re.I)
 STABLE_PATTERNS = (
