@@ -124,7 +124,7 @@
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-micro);
   font-weight: var(--nvx-fw-bold);
-  letter-spacing: 0.14em;
+  letter-spacing: var(--nvx-track-button);
   list-style: none;
   text-transform: uppercase;
 }
