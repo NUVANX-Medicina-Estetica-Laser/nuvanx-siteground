@@ -198,8 +198,8 @@ assert.match(
 );
 assert.doesNotMatch(
   conversionEvents,
-  new RegExp(formId),
-  'attribution runtime must not duplicate the canonical HubSpot form ID literal'
+  new RegExp(formId, 'i'),
+  'attribution runtime must not duplicate the canonical HubSpot form ID literal in any letter case'
 );
 assert.match(
   conversionEvents,
