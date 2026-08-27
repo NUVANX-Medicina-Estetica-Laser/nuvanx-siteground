@@ -59,7 +59,7 @@ function nvx_gbp_review_url( string $clinic_key ): string {
 }
 
 /**
- * Approved editorial photographs for a clinic landing (max 4).
+ * Approved editorial photographs for a clinic landing.
  *
  * Missing files are skipped rather than replaced with vendor packshots or
  * unverified theme JPEGs.
@@ -86,18 +86,6 @@ function nvx_clinic_editorial_photo_map( string $clinic_key ): array {
 				'uploads_path' => '2026/06/nvx-fachada-goya-900.webp',
 				'alt'          => __( 'Fachada de NUVANX Salamanca–Goya, Madrid', 'nuvanx-medical' ),
 				'caption'      => __( 'Fachada', 'nuvanx-medical' ),
-			),
-			array(
-				'id'           => 0,
-				'uploads_path' => '2026/07/gosia-1.webp',
-				'alt'          => __( 'Gosia, equipo clínico de NUVANX Salamanca–Goya', 'nuvanx-medical' ),
-				'caption'      => __( 'Gosia', 'nuvanx-medical' ),
-			),
-			array(
-				'id'           => 0,
-				'uploads_path' => '2026/07/WhatsApp-Image-2026-07-04-at-1.39.33-PM.webp',
-				'alt'          => __( 'Eva, equipo clínico de NUVANX Salamanca–Goya', 'nuvanx-medical' ),
-				'caption'      => __( 'Eva', 'nuvanx-medical' ),
 			),
 		),
 		'chamberi' => array(
@@ -131,6 +119,11 @@ function nvx_clinic_editorial_photo_map( string $clinic_key ): array {
 	return $photos[ $clinic_key ];
 }
 
+/** Expected number of verified editorial sede photographs per clinic landing. */
+function nvx_clinic_landing_gallery_expected_count( string $clinic_key ): int {
+	return 'goya' === $clinic_key ? 2 : 4;
+}
+
 /**
  * Theme-owned gallery for a clinic landing. It uses readable attachments and
  * an explicitly versioned editorial fallback when a governed attachment no
@@ -141,6 +134,7 @@ function nvx_clinic_editorial_photo_map( string $clinic_key ): array {
 function nvx_clinic_landing_photos( string $clinic_key ): array {
 	$clinic_key = 'goya' === $clinic_key ? 'goya' : 'chamberi';
 	$photos     = array();
+	$expected_count = nvx_clinic_landing_gallery_expected_count( $clinic_key );
 
 	foreach ( nvx_clinic_editorial_photo_map( $clinic_key ) as $item ) {
 		$uploads_path = isset( $item['uploads_path'] ) ? ltrim( (string) $item['uploads_path'], '/' ) : '';
@@ -213,7 +207,7 @@ function nvx_clinic_landing_photos( string $clinic_key ): array {
 			'caption' => (string) $item['caption'],
 		);
 
-		if ( count( $photos ) >= 4 ) {
+		if ( count( $photos ) >= $expected_count ) {
 			break;
 		}
 	}
@@ -222,12 +216,12 @@ function nvx_clinic_landing_photos( string $clinic_key ): array {
 }
 
 /**
- * A sede gallery is valid only when all four approved editorial assets render.
+ * A sede gallery is valid only when its governed editorial asset set renders.
  *
  * @param array<int,array{id:int,file:string,alt:string,caption:string}> $photos Resolved photos.
  */
-function nvx_clinic_landing_gallery_is_complete( array $photos ): bool {
-	return 4 === count( $photos );
+function nvx_clinic_landing_gallery_is_complete( array $photos, string $clinic_key = 'chamberi' ): bool {
+	return nvx_clinic_landing_gallery_expected_count( $clinic_key ) === count( $photos );
 }
 
 /**
@@ -397,8 +391,8 @@ function nvx_clinic_strip_vendor_packshots( string $content ): string {
 		return $content;
 	}
 
-	// Sede photo set is the theme gallery (max 4). CMS figures are vendor
-	// packshots or duplicate clinic shots and must not add to the count.
+	// Sede photo set is the governed per-clinic theme gallery. CMS figures are
+	// vendor packshots or duplicate clinic shots and must not add to the count.
 	$updated = preg_replace( '/<figure\b[^>]*>[\s\S]*?<\/figure>/iu', '', $content );
 	if ( ! is_string( $updated ) ) {
 		$updated = $content;
