@@ -17,14 +17,12 @@
     "wp_live_blocks_chamberi_goya": "keep"
   },
   "approved_editorial_overrides": {
-    "approved_at": "2026-08-26",
+    "approved_at": "2026-08-27",
     "source": "operator_explicit",
     "clinic_landing_galleries": {
       "goya": [
         {"role": "box", "uploads_path": "2026/03/nuvanx-medicina-estetica1.webp"},
-        {"role": "facade", "uploads_path": "2026/06/nvx-fachada-goya-900.webp"},
-        {"role": "team_member", "uploads_path": "2026/07/gosia-1.webp"},
-        {"role": "team_member", "uploads_path": "2026/07/WhatsApp-Image-2026-07-04-at-1.39.33-PM.webp"}
+        {"role": "facade", "uploads_path": "2026/06/nvx-fachada-goya-900.webp"}
       ],
       "chamberi": [
         {"role": "box", "uploads_path": "2026/03/nuvanx-medicina-estetica7.webp"},
