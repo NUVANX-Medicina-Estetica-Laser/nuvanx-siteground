@@ -260,7 +260,9 @@ function nvx_valoracion_prepare_direct_success(): void {
 	$is_thank_you = function_exists( 'nvx_theme_thank_you_page_slugs' )
 		? is_page( nvx_theme_thank_you_page_slugs() )
 		: is_page( 'gracias' );
-	if ( ! $is_thank_you || ! isset( $_GET['nvx_success'] ) ) {
+		
+	$raw_token = filter_input( INPUT_GET, 'nvx_success' );
+	if ( ! $is_thank_you || empty( $raw_token ) ) {
 		return;
 	}
 
@@ -269,7 +271,7 @@ function nvx_valoracion_prepare_direct_success(): void {
 	}
 	nocache_headers();
 
-	$token = sanitize_text_field( wp_unslash( (string) $_GET['nvx_success'] ) );
+	$token = sanitize_text_field( wp_unslash( (string) $raw_token ) );
 	if ( 1 !== preg_match( '/^[a-f0-9]{64}$/D', $token ) ) {
 		return;
 	}
