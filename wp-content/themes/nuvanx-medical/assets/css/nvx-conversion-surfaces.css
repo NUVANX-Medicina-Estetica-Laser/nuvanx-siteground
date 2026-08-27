@@ -78,6 +78,10 @@
   justify-content: center;
 }
 
+.nvx-valoracion-modal[open] {
+  display: flex;
+}
+
 .nvx-valoracion-modal::backdrop {
   background: transparent;
 }
