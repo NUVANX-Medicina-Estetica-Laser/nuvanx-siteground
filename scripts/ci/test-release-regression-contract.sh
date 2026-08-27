@@ -24,11 +24,13 @@ CONVERSION_OWNERSHIP_CONTRACT="$ROOT/scripts/lint/test-conversion-ownership-cont
 META_BROWSER_OWNER_CONTRACT="$ROOT/scripts/lint/test-meta-browser-owner-retirement.php"
 SEO_OWNERSHIP_CONTRACT="$ROOT/scripts/lint/test-seo-catalog-ownership.php"
 WORDPRESS_SECURITY_CONTRACT="$ROOT/scripts/lint/test-wordpress-security-contract.php"
+FORENSIC_SCANNER="$ROOT/tools/migrations/scan-forensic-source.py"
+HUBSPOT_ZERO_SUBMIT_CONTRACT="$ROOT/scripts/staging2/h1-hubspot-e2e.mjs"
 SEO_GEO_AUDIT="$ROOT/scripts/production/seo-geo-origin-audit.sh"
 SEO_TOOLING_DIR="$ROOT/scripts/seo"
 THEME_DIR="$ROOT/wp-content/themes/nuvanx-medical"
 
-for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$PREMERGE_CONTRACT" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$CONVERSION_OWNERSHIP_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$WORDPRESS_SECURITY_CONTRACT" "$SEO_GEO_AUDIT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock" "$THEME_DIR/composer.json" "$THEME_DIR/phpcs.xml.dist"; do
+for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$PREMERGE_CONTRACT" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$CONVERSION_OWNERSHIP_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$WORDPRESS_SECURITY_CONTRACT" "$FORENSIC_SCANNER" "$HUBSPOT_ZERO_SUBMIT_CONTRACT" "$SEO_GEO_AUDIT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock" "$THEME_DIR/composer.json" "$THEME_DIR/phpcs.xml.dist"; do
   [[ -s "$required" ]] || fail "missing_file:$required"
 done
 
@@ -163,6 +165,12 @@ pass_assert 'indexnow-github-202-siteground-public-edge'
 
 node "$VALORACION_FORM_CONTRACT_TEST" || fail 'valoracion_form_structural_boundary_behavior'
 pass_assert 'valoracion-form-structural-boundary'
+
+python3 -m py_compile "$FORENSIC_SCANNER" || fail 'forensic_scanner_syntax'
+pass_assert 'forensic-scanner-syntax'
+
+EXPECTED_SHA="$(git -C "$ROOT" rev-parse HEAD)" node "$HUBSPOT_ZERO_SUBMIT_CONTRACT" || fail 'hubspot_zero_submit_contract'
+pass_assert 'hubspot-zero-submit-contract'
 
 # Shell-local variables inside the origin String.raw script must not use
 # JavaScript template interpolation syntax. Dynamic values used in ERE matches

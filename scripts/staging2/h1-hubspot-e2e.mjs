@@ -188,8 +188,18 @@ assert.match(
 );
 assert.match(
   conversionEvents,
+  /var forms = attributionConfig\.forms \|\| \{\};/,
+  'attribution runtime must resolve the canonical HubSpot form from localized configuration'
+);
+assert.match(
+  conversionEvents,
+  /var FORM_ID = String\(forms\.valoracion \|\| ''\)\.toLowerCase\(\);/,
+  'attribution runtime must scope Google attribution to forms.valoracion'
+);
+assert.doesNotMatch(
+  conversionEvents,
   new RegExp(formId),
-  'attribution runtime must remain scoped to the canonical HubSpot form'
+  'attribution runtime must not duplicate the canonical HubSpot form ID literal'
 );
 assert.match(
   conversionEvents,
