@@ -110,6 +110,18 @@ nvx_assert_contains( 'Política de cookies', $template_url, 'template_title_fall
 $already_concrete = '<a href="/custom-privacy-document/" data-relative_url="/politica-privacidad/">Política de privacidad</a>';
 nvx_assert_same( $already_concrete, nvx_rewrite_complianz_policy_links( $already_concrete ), 'concrete_href_not_overwritten' );
 
+$label_only_privacy = nvx_rewrite_complianz_policy_links( '<a class="cmplz-link" href="#">Política de privacidad</a>' );
+nvx_assert_contains( 'href="https://nuvanx.com/politica-privacidad/"', $label_only_privacy, 'label_only_privacy_hash' );
+
+$label_only_cookies = nvx_rewrite_complianz_policy_links( '<a class="cmplz-link" href="#">Política de cookies</a>' );
+nvx_assert_contains( 'href="https://nuvanx.com/politica-de-cookies-ue/"', $label_only_cookies, 'label_only_cookies_hash' );
+
+$label_only_legal = nvx_rewrite_complianz_policy_links( '<a class="cmplz-link" href="#">Aviso legal</a>' );
+nvx_assert_contains( 'href="https://nuvanx.com/aviso-legal/"', $label_only_legal, 'label_only_legal_hash' );
+
+$label_only_empty_href = nvx_rewrite_complianz_policy_links( '<a class="cmplz-link" href="">Política de privacidad</a>' );
+nvx_assert_contains( 'href="https://nuvanx.com/politica-privacidad/"', $label_only_empty_href, 'label_only_empty_href' );
+
 nvx_assert_filter_registration(
 	array( 'cmplz_banner_html', 'nvx_sanitize_complianz_banner_html', 20 ),
 	$GLOBALS['nvx_removed_filters'],
@@ -131,4 +143,4 @@ nvx_assert_filter_registration(
 	'canonical_template_filter_registered'
 );
 
-fwrite( STDOUT, "COMPLIANZ_POLICY_ROUTING=PASS cases=15 privacy=canonical cookies=canonical legal=canonical metadata=authoritative js_controls=preserved template_url=preserved owner=single\n" );
+fwrite( STDOUT, "COMPLIANZ_POLICY_ROUTING=PASS cases=19 privacy=canonical cookies=canonical legal=canonical metadata=authoritative js_controls=preserved template_url=preserved owner=single\n" );

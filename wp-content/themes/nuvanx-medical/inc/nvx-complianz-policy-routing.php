@@ -77,10 +77,10 @@ function nvx_complianz_anchor_attribute( string $attributes, string $name ): str
  */
 function nvx_rewrite_complianz_policy_links( string $html ): string {
 	$has_template_token = false !== strpos( $html, '{title}' ) || false !== strpos( $html, '{url}' );
-	$has_relative_link  = false !== strpos( $html, 'data-relative_url' );
-	$has_hash_anchor    = false !== strpos( $html, 'href="#"' );
+	$has_relative_link  = false !== stripos( $html, 'data-relative_url' );
+	$has_anchor         = false !== stripos( $html, '<a' );
 
-	if ( ! $has_template_token && ! $has_relative_link && ! $has_hash_anchor ) {
+	if ( ! $has_template_token && ! $has_relative_link && ! $has_anchor ) {
 		return $html;
 	}
 
@@ -111,14 +111,8 @@ function nvx_rewrite_complianz_policy_links( string $html ): string {
 
 			// Canonicalize only unresolved hash/empty policy hrefs. Existing concrete
 			// URLs and Complianz's {url} template placeholder are preserved verbatim.
-			if ( ( '#' === $href || '' === $href ) && '' !== $relative_url && '' !== $destination ) {
+			if ( ( '#' === $href || '' === $href ) && '' !== $destination ) {
 				$href = esc_url( $destination );
-			} elseif ( ( '#' === $href || '' === $href ) && '' === $relative_url ) {
-				// Allow label-based fallback for policy anchors without data-relative_url
-				$label_destination = nvx_complianz_policy_destination( $inner_html );
-				if ( '' !== $label_destination ) {
-					$href = esc_url( $label_destination );
-				}
 			}
 
 			return '<a ' . $attr_before . 'href=' . $quote . $href . $quote . $attr_after . '>' . $inner_html . '</a>';
