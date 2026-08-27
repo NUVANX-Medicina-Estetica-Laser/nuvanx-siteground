@@ -159,7 +159,7 @@ function nvx_valoracion_is_uuid_v4( string $value ): bool {
  */
 function nvx_valoracion_lead_id(): string {
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- called only after the direct-form nonce is validated.
-	$posted = isset( $_POST['nvx_lead_id'] ) ? strtolower( trim( sanitize_text_field( wp_unslash( (string) $_POST['nvx_lead_id'] ) ) ) ) : '';
+	$posted = isset( $_POST['nvx_lead_id'] ) ? strtolower( trim( sanitize_text_field( wp_unslash( (string) $_POST['nvx_lead_id'] ) ) ) : '';
 	if ( '' !== $posted && nvx_valoracion_is_uuid_v4( $posted ) ) {
 		return $posted;
 	}
@@ -228,6 +228,93 @@ function nvx_valoracion_log_outcome( string $outcome, string $reason = '', int $
 	}
 	error_log( $line );
 }
+
+/**
+ * Build a single-use thank-you redirect for a successful first-party submission.
+ *
+ * The raw token is returned only in the redirect URL. WordPress stores only its
+ * SHA-256 hash, which is consumed once on the thank-you request.
+ */
+function nvx_valoracion_direct_success_redirect_url(): string {
+	try {
+		$token = bin2hex( random_bytes( 32 ) );
+		$hash  = hash( 'sha256', $token );
+		if ( ! set_transient( 'nvx_success_' . $hash, 1, 10 * MINUTE_IN_SECONDS ) ) {
+			return home_url( '/gracias/' );
+		}
+		return add_query_arg( 'nvx_success', $token, home_url( '/gracias/' ) );
+	} catch ( Throwable $error ) {
+		unset( $error );
+		return home_url( '/gracias/' );
+	}
+}
+
+/**
+ * Consume the first-party success token before rendering the thank-you page.
+ * Any request carrying the token is non-cacheable so a cached page can never
+ * replay a conversion. Invalid or already-consumed tokens do not emit anything.
+ */
+function nvx_valoracion_prepare_direct_success(): void {
+	$GLOBALS['nvx_valoracion_direct_success_ready'] = false;
+
+	$is_thank_you = function_exists( 'nvx_theme_thank_you_page_slugs' )
+		? is_page( nvx_theme_thank_you_page_slugs() )
+		: is_page( 'gracias' );
+	if ( ! $is_thank_you || ! isset( $_GET['nvx_success'] ) ) {
+		return;
+	}
+
+	if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+		define( 'DONOTCACHEPAGE', true );
+	}
+	nocache_headers();
+
+	$token = sanitize_text_field( wp_unslash( (string) $_GET['nvx_success'] ) );
+	if ( 1 !== preg_match( '/^[a-f0-9]{64}$/D', $token ) ) {
+		return;
+	}
+
+	$key = 'nvx_success_' . hash( 'sha256', $token );
+	if ( ! get_transient( $key ) ) {
+		return;
+	}
+
+	delete_transient( $key );
+	$GLOBALS['nvx_valoracion_direct_success_ready'] = true;
+}
+add_action( 'template_redirect', 'nvx_valoracion_prepare_direct_success', 1 );
+
+/**
+ * Emit the current canonical conversion contract after a server-side form win.
+ *
+ * This only queues a dataLayer event; Site Kit/GTM remains the Google tag owner
+ * and Consent Mode remains responsible for network-level measurement behavior.
+ */
+function nvx_valoracion_emit_direct_success(): void {
+	if ( empty( $GLOBALS['nvx_valoracion_direct_success_ready'] ) ) {
+		return;
+	}
+	$GLOBALS['nvx_valoracion_direct_success_ready'] = false;
+
+	$form_id = function_exists( 'nvx_hubspot_secure_form_id' )
+		? nvx_hubspot_secure_form_id()
+		: ( defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) NVX_VALORACION_HS_FRAME_FORM_ID : '5042522a-0bc5-4381-ac3e-5aee8649b69c' );
+	$event = array(
+		'event'             => 'nvx_conversion_signal',
+		'nvx_event_name'    => 'generate_lead',
+		'page_path'         => '/gracias/',
+		'event_source'      => 'nuvanx_theme',
+		'form_id'           => $form_id,
+		'form_context'      => 'valoracion',
+		'lead_source'       => 'first_party_form',
+		'form_event_source' => 'server_redirect',
+	);
+	$payload = wp_json_encode( $event, JSON_UNESCAPED_SLASHES );
+	if ( is_string( $payload ) ) {
+		wp_print_inline_script_tag( 'window.dataLayer=window.dataLayer||[];window.dataLayer.push(' . $payload . ');' );
+	}
+}
+add_action( 'wp_head', 'nvx_valoracion_emit_direct_success', 5 );
 
 /**
  * Handle a first-party valoración POST and forward it to HubSpot.
@@ -390,7 +477,7 @@ function nvx_valoracion_maybe_handle_direct_submit(): void {
 	$result = nvx_valoracion_forward_to_hubspot( $fields, $context );
 	if ( $result['ok'] ) {
 		nvx_valoracion_log_outcome( 'SUCCESS', '', $result['status'], $qa_context );
-		wp_safe_redirect( home_url( '/gracias/' ) );
+		wp_safe_redirect( nvx_valoracion_direct_success_redirect_url() );
 		exit;
 	}
 
