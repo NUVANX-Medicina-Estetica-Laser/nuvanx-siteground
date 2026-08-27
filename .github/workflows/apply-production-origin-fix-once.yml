@@ -1,0 +1,121 @@
+name: Apply Production Origin Fix Once
+
+on:
+  push:
+    branches:
+      - fix/production-origin-local-ip-fallback-20260827
+    paths:
+      - .github/workflows/apply-production-origin-fix-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/production-origin-local-ip-fallback-20260827
+          persist-credentials: true
+      - name: Apply fail-closed local-IP origin fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          boundary = Path('scripts/production/verify-production-boundary.mjs')
+          source = boundary.read_text()
+          old_transport = r'''  if [[ "$probe_mode" == 'origin' ]]; then
+            result="$(curl -sS -L --max-redirs 5 --max-time 30 -k --resolve "$EXPECTED_HOST:443:127.0.0.1" -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
+          else
+            result="$(curl -sS -L --max-redirs 5 --max-time 30 --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
+          fi
+          code="$(printf '%s' "$result" | cut -d'|' -f1)"
+          effective="$(printf '%s' "$result" | cut -d'|' -f2)"
+          remote_ip="$(printf '%s' "$result" | cut -d'|' -f3)"
+          [[ "$code" == '200' ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=http_code code=$code mode=$probe_mode" >&2; cleanup; exit 1; }
+          case "$effective" in
+            https://nuvanx.com/*|https://nuvanx.com) ;;
+            *) echo "PRODUCTION_PROBE_FAIL route=$route final=$effective mode=$probe_mode" >&2; cleanup; exit 1 ;;
+          esac
+          if [[ "$probe_mode" == 'public-edge' ]]; then
+            [[ -n "$remote_ip" && "$remote_ip" != '127.0.0.1' && "$remote_ip" != '::1' ]] \
+              || { echo "PRODUCTION_PROBE_FAIL route=$route reason=public_edge_loopback remote_ip=$remote_ip" >&2; cleanup; exit 1; }
+          fi'''
+          new_transport = r'''  fallback_ip=''
+          if [[ "$probe_mode" == 'origin' ]]; then
+            is_valid_ipv4() {
+              local ip="$1" a b c d extra octet
+              IFS=. read -r a b c d extra <<< "$ip"
+              [[ -z "${extra:-}" && -n "$a" && -n "$b" && -n "$c" && -n "$d" ]] || return 1
+              for octet in "$a" "$b" "$c" "$d"; do
+                [[ "$octet" =~ ^[0-9]{1,3}$ ]] || return 1
+                (( 10#$octet <= 255 )) || return 1
+              done
+            }
+            set +e
+            result="$(curl -4 -k -sS -L --max-redirs 5 --connect-timeout 10 --max-time 30 --resolve "$EXPECTED_HOST:443:127.0.0.1" --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -b 'wpSGCacheBypass=1' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
+            curl_rc=$?
+            if [[ "$curl_rc" -eq 7 ]]; then
+              for candidate in $(hostname -I 2>/dev/null || true); do
+                if is_valid_ipv4 "$candidate" && [[ "$candidate" != 127.* ]]; then
+                  fallback_ip="$candidate"
+                  break
+                fi
+              done
+              [[ -n "$fallback_ip" ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_fallback_ip_unavailable" >&2; cleanup; exit 1; }
+              : > "$headers"
+              : > "$body"
+              result="$(curl -4 -k -sS -L --max-redirs 5 --connect-timeout 10 --max-time 30 --resolve "$EXPECTED_HOST:443:$fallback_ip" --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -b 'wpSGCacheBypass=1' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
+              curl_rc=$?
+            fi
+            set -e
+            [[ "$curl_rc" -eq 0 ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_curl_exit_$curl_rc" >&2; cleanup; exit 1; }
+          else
+            result="$(curl -sS -L --max-redirs 5 --max-time 30 --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
+          fi
+          code="$(printf '%s' "$result" | cut -d'|' -f1)"
+          effective="$(printf '%s' "$result" | cut -d'|' -f2)"
+          remote_ip="$(printf '%s' "$result" | cut -d'|' -f3)"
+          [[ "$code" == '200' ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=http_code code=$code mode=$probe_mode" >&2; cleanup; exit 1; }
+          case "$effective" in
+            https://nuvanx.com/*|https://nuvanx.com) ;;
+            *) echo "PRODUCTION_PROBE_FAIL route=$route final=$effective mode=$probe_mode" >&2; cleanup; exit 1 ;;
+          esac
+          if [[ "$probe_mode" == 'origin' ]]; then
+            if [[ -n "$fallback_ip" ]]; then
+              [[ "$remote_ip" == "$fallback_ip" ]] \
+                || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_remote_ip_mismatch expected=$fallback_ip actual=$remote_ip" >&2; cleanup; exit 1; }
+            else
+              [[ "$remote_ip" == '127.0.0.1' ]] \
+                || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_remote_ip_mismatch expected=127.0.0.1 actual=$remote_ip" >&2; cleanup; exit 1; }
+            fi
+          else
+            [[ -n "$remote_ip" && "$remote_ip" != '127.0.0.1' && "$remote_ip" != '::1' ]] \
+              || { echo "PRODUCTION_PROBE_FAIL route=$route reason=public_edge_loopback remote_ip=$remote_ip" >&2; cleanup; exit 1; }
+          fi'''
+          if source.count(old_transport) != 1:
+              raise SystemExit(f'Expected exactly one production origin transport block, found {source.count(old_transport)}')
+          boundary.write_text(source.replace(old_transport, new_transport, 1))
+
+          contract = Path('scripts/ci/test-release-regression-contract.sh')
+          test_source = contract.read_text()
+          anchor = """pass_assert 'siteground-antibot-public-edge-fallback'\n\n# IndexNow public-key check"""
+          insertion = """pass_assert 'siteground-antibot-public-edge-fallback'\n\n# Production origin verification must preserve Host/SNI while tolerating SiteGround\n# hosts with no HTTPS listener on 127.0.0.1. Only curl exit 7 may activate a\n# validated non-loopback local IPv4; DNS/public edge is never an origin fallback.\ngrep -Fq 'hostname -I 2>/dev/null || true' \"$BOUNDARY\" || fail 'production_origin_local_ip_discovery_missing'\ngrep -Fq 'origin_fallback_ip_unavailable' \"$BOUNDARY\" || fail 'production_origin_local_ip_fail_closed_missing'\ngrep -Fq \"-b 'wpSGCacheBypass=1'\" \"$BOUNDARY\" || fail 'production_origin_cache_bypass_missing'\ngrep -Fq 'origin_remote_ip_mismatch' \"$BOUNDARY\" || fail 'production_origin_remote_ip_guard_missing'\ngrep -Fq '[[ \"$curl_rc\" -eq 7 ]]' \"$BOUNDARY\" || fail 'production_origin_exit7_fallback_guard_missing'\n! grep -Eq 'getent[[:space:]]+(ahosts|hosts)|dig[[:space:]]|nslookup[[:space:]]' \"$BOUNDARY\" || fail 'production_origin_dns_fallback_forbidden'\npass_assert 'production-origin-local-ip-fallback'\n\n# IndexNow public-key check"""
+          if test_source.count(anchor) != 1:
+              raise SystemExit(f'Expected exactly one release-contract anchor, found {test_source.count(anchor)}')
+          contract.write_text(test_source.replace(anchor, insertion, 1))
+          PY
+
+          node --check scripts/production/verify-production-boundary.mjs
+          bash -n scripts/ci/test-release-regression-contract.sh
+          bash scripts/ci/test-release-regression-contract.sh
+          rm -f .github/workflows/apply-production-origin-fix-once.yml
+          git config user.name 'Nuvanx Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/production/verify-production-boundary.mjs scripts/ci/test-release-regression-contract.sh .github/workflows/apply-production-origin-fix-once.yml
+          git diff --cached --check
+          git commit -m 'fix(production): tolerate closed loopback origin port'
+          git push origin HEAD:fix/production-origin-local-ip-fallback-20260827
