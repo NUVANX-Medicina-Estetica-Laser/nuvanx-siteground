@@ -19,80 +19,31 @@ jobs:
           ref: fix/production-origin-local-ip-fallback-20260827
           persist-credentials: true
       - name: Apply fail-closed local-IP origin fallback
+        env:
+          TRANSPORT_B64: ICBmYWxsYmFja19pcD0nJwogIGlmIFtbICIkcHJvYmVfbW9kZSIgPT0gJ29yaWdpbicgXV07IHRoZW4KICAgIGlzX3ZhbGlkX2lwdjQoKSB7CiAgICAgIGxvY2FsIGlwPSIkMSIgYSBiIGMgZCBleHRyYSBvY3RldAogICAgICBJRlM9LiByZWFkIC1yIGEgYiBjIGQgZXh0cmEgPDw8ICIkaXAiCiAgICAgIFtbIC16ICIke2V4dHJhOi19IiAmJiAtbiAiJGEiICYmIC1uICIkYiIgJiYgLW4gIiRjIiAmJiAtbiAiJGQiIF1dIHx8IHJldHVybiAxCiAgICAgIGZvciBvY3RldCBpbiAiJGEiICIkYiIgIiRjIiAiJGQiOyBkbwogICAgICAgIFtbICIkb2N0ZXQiID1+IF5bMC05XXsxLDN9JCBdXSB8fCByZXR1cm4gMQogICAgICAgICgoIDEwIyRvY3RldCA8PSAyNTUgKSkgfHwgcmV0dXJuIDEKICAgICAgZG9uZQogICAgfQogICAgc2V0ICtlCiAgICByZXN1bHQ9IiQoY3VybCAtNCAtayAtc1MgLUwgLS1tYXgtcmVkaXJzIDUgLS1jb25uZWN0LXRpbWVvdXQgMTAgLS1tYXgtdGltZSAzMCAtLXJlc29sdmUgIiRFWFBFQ1RFRF9IT1NUOjQ0MzoxMjcuMC4wLjEiIC0tcHJvdG8gJz1odHRwcycgLS1wcm90by1yZWRpciAnPWh0dHBzJyAtQSAiJHVhIiAtSCAnQWNjZXB0OiB0ZXh0L2h0bWwsYXBwbGljYXRpb24veGh0bWwreG1sJyAtSCAnQ2FjaGUtQ29udHJvbDogbm8tY2FjaGUnIC1iICd3cFNHQ2FjaGVCeXBhc3M9MScgLUQgIiRoZWFkZXJzIiAtbyAiJGJvZHkiIC13ICcle2h0dHBfY29kZX18JXt1cmxfZWZmZWN0aXZlfXwle3JlbW90ZV9pcH0nICIkQkFTRV9VUkwkcm91dGUiKSIKICAgIGN1cmxfcmM9JD8KICAgIGlmIFtbICIkY3VybF9yYyIgLWVxIDcgXV07IHRoZW4KICAgICAgZm9yIGNhbmRpZGF0ZSBpbiAkKGhvc3RuYW1lIC1JIDI+L2Rldi9udWxsIHx8IHRydWUpOyBkbwogICAgICAgIGlmIGlzX3ZhbGlkX2lwdjQgIiRjYW5kaWRhdGUiICYmIFtbICIkY2FuZGlkYXRlIiAhPSAxMjcuKiBdXTsgdGhlbgogICAgICAgICAgZmFsbGJhY2tfaXA9IiRjYW5kaWRhdGUiCiAgICAgICAgICBicmVhawogICAgICAgIGZpCiAgICAgIGRvbmUKICAgICAgW1sgLW4gIiRmYWxsYmFja19pcCIgXV0gfHwgeyBlY2hvICJQUk9EVUNUSU9OX1BST0JFX0ZBSUwgcm91dGU9JHJvdXRlIHJlYXNvbj1vcmlnaW5fZmFsbGJhY2tfaXBfdW5hdmFpbGFibGUiID4mMjsgY2xlYW51cDsgZXhpdCAxOyB9CiAgICAgIDogPiAiJGhlYWRlcnMiCiAgICAgIDogPiAiJGJvZHkiCiAgICAgIHJlc3VsdD0iJChjdXJsIC00IC1rIC1zUyAtTCAtLW1heC1yZWRpcnMgNSAtLWNvbm5lY3QtdGltZW91dCAxMCAtLW1heC10aW1lIDMwIC0tcmVzb2x2ZSAiJEVYUEVDVEVEX0hPU1Q6NDQzOiRmYWxsYmFja19pcCIgLS1wcm90byAnPWh0dHBzJyAtLXByb3RvLXJlZGlyICc9aHR0cHMnIC1BICIkdWEiIC1IICdBY2NlcHQ6IHRleHQvaHRtbCxhcHBsaWNhdGlvbi94aHRtbCt4bWwnIC1IICdDYWNoZS1Db250cm9sOiBuby1jYWNoZScgLWIgJ3dwU0dDYWNoZUJ5cGFzcz0xJyAtRCAiJGhlYWRlcnMiIC1vICIkYm9keSIgLXcgJyV7aHR0cF9jb2RlfXwle3VybF9lZmZlY3RpdmV9fCV7cmVtb3RlX2lwfScgIiRCQVNFX1VSTCRyb3V0ZSIpIgogICAgICBjdXJsX3JjPSQ/CiAgICBmaQogICAgc2V0IC1lCiAgICBbWyAiJGN1cmxfcmMiIC1lcSAwIF1dIHx8IHsgZWNobyAiUFJPRFVDVElPTl9QUk9CRV9GQUlMIHJvdXRlPSRyb3V0ZSByZWFzb249b3JpZ2luX2N1cmxfZXhpdF8kY3VybF9yYyIgPiYyOyBjbGVhbnVwOyBleGl0IDE7IH0KICBlbHNlCiAgICByZXN1bHQ9IiQoY3VybCAtc1MgLUwgLS1tYXgtcmVkaXJzIDUgLS1tYXgtdGltZSAzMCAtLXByb3RvICc9aHR0cHMnIC0tcHJvdG8tcmVkaXIgJz1odHRwcycgLUEgIiR1YSIgLUggJ0FjY2VwdDogdGV4dC9odG1sLGFwcGxpY2F0aW9uL3hodG1sK3htbCcgLUggJ0NhY2hlLUNvbnRyb2w6IG5vLWNhY2hlJyAtRCAiJGhlYWRlcnMiIC1vICIkYm9keSIgLXcgJyV7aHR0cF9jb2RlfXwle3VybF9lZmZlY3RpdmV9fCV7cmVtb3RlX2lwfScgIiRCQVNFX1VSTCRyb3V0ZSIpIgogIGZpCiAgY29kZT0iJChwcmludGYgJyVzJyAiJHJlc3VsdCIgfCBjdXQgLWQnfCcgLWYxKSIKICBlZmZlY3RpdmU9IiQocHJpbnRmICclcycgIiRyZXN1bHQiIHwgY3V0IC1kJ3wnIC1mMikiCiAgcmVtb3RlX2lwPSIkKHByaW50ZiAnJXMnICIkcmVzdWx0IiB8IGN1dCAtZCd8JyAtZjMpIgogIFtbICIkY29kZSIgPT0gJzIwMCcgXV0gfHwgeyBlY2hvICJQUk9EVUNUSU9OX1BST0JFX0ZBSUwgcm91dGU9JHJvdXRlIHJlYXNvbj1odHRwX2NvZGUgY29kZT0kY29kZSBtb2RlPSRwcm9iZV9tb2RlIiA+JjI7IGNsZWFudXA7IGV4aXQgMTsgfQogIGNhc2UgIiRlZmZlY3RpdmUiIGluCiAgICBodHRwczovL251dmFueC5jb20vKnxodHRwczovL251dmFueC5jb20pIDs7CiAgICAqKSBlY2hvICJQUk9EVUNUSU9OX1BST0JFX0ZBSUwgcm91dGU9JHJvdXRlIGZpbmFsPSRlZmZlY3RpdmUgbW9kZT0kcHJvYmVfbW9kZSIgPiYyOyBjbGVhbnVwOyBleGl0IDEgOzsKICBlc2FjCiAgaWYgW1sgIiRwcm9iZV9tb2RlIiA9PSAnb3JpZ2luJyBdXTsgdGhlbgogICAgaWYgW1sgLW4gIiRmYWxsYmFja19pcCIgXV07IHRoZW4KICAgICAgW1sgIiRyZW1vdGVfaXAiID09ICIkZmFsbGJhY2tfaXAiIF1dIFwKICAgICAgICB8fCB7IGVjaG8gIlBST0RVQ1RJT05fUFJPQkVfRkFJTCByb3V0ZT0kcm91dGUgcmVhc29uPW9yaWdpbl9yZW1vdGVfaXBfbWlzbWF0Y2ggZXhwZWN0ZWQ9JGZhbGxiYWNrX2lwIGFjdHVhbD0kcmVtb3RlX2lwIiA+JjI7IGNsZWFudXA7IGV4aXQgMTsgfQogICAgZWxzZQogICAgICBbWyAiJHJlbW90ZV9pcCIgPT0gJzEyNy4wLjAuMScgXV0gXAogICAgICAgIHx8IHsgZWNobyAiUFJPRFVDVElPTl9QUk9CRV9GQUlMIHJvdXRlPSRyb3V0ZSByZWFzb249b3JpZ2luX3JlbW90ZV9pcF9taXNtYXRjaCBleHBlY3RlZD0xMjcuMC4wLjEgYWN0dWFsPSRyZW1vdGVfaXAiID4mMjsgY2xlYW51cDsgZXhpdCAxOyB9CiAgICBmaQogIGVsc2UKICAgIFtbIC1uICIkcmVtb3RlX2lwIiAmJiAiJHJlbW90ZV9pcCIgIT0gJzEyNy4wLjAuMScgJiYgIiRyZW1vdGVfaXAiICE9ICc6OjEnIF1dIFwKICAgICAgfHwgeyBlY2hvICJQUk9EVUNUSU9OX1BST0JFX0ZBSUwgcm91dGU9JHJvdXRlIHJlYXNvbj1wdWJsaWNfZWRnZV9sb29wYmFjayByZW1vdGVfaXA9JHJlbW90ZV9pcCIgPiYyOyBjbGVhbnVwOyBleGl0IDE7IH0KICBmaQo=
+          INSERTION_B64: cGFzc19hc3NlcnQgJ3NpdGVncm91bmQtYW50aWJvdC1wdWJsaWMtZWRnZS1mYWxsYmFjaycKCiMgUHJvZHVjdGlvbiBvcmlnaW4gdmVyaWZpY2F0aW9uIG11c3QgcHJlc2VydmUgSG9zdC9TTkkgd2hpbGUgdG9sZXJhdGluZyBTaXRlR3JvdW5kCiMgaG9zdHMgd2l0aCBubyBIVFRQUyBsaXN0ZW5lciBvbiAxMjcuMC4wLjEuIE9ubHkgY3VybCBleGl0IDcgbWF5IGFjdGl2YXRlIGEKIyB2YWxpZGF0ZWQgbm9uLWxvb3BiYWNrIGxvY2FsIElQdjQ7IEROUy9wdWJsaWMgZWRnZSBpcyBuZXZlciBhbiBvcmlnaW4gZmFsbGJhY2suCmdyZXAgLUZxICdob3N0bmFtZSAtSSAyPi9kZXYvbnVsbCB8fCB0cnVlJyAiJEJPVU5EQVJZIiB8fCBmYWlsICdwcm9kdWN0aW9uX29yaWdpbl9sb2NhbF9pcF9kaXNjb3ZlcnlfbWlzc2luZycKZ3JlcCAtRnEgJ29yaWdpbl9mYWxsYmFja19pcF91bmF2YWlsYWJsZScgIiRCT1VOREFSWSIgfHwgZmFpbCAncHJvZHVjdGlvbl9vcmlnaW5fbG9jYWxfaXBfZmFpbF9jbG9zZWRfbWlzc2luZycKZ3JlcCAtRnEgIndwU0dDYWNoZUJ5cGFzcz0xIiAiJEJPVU5EQVJZIiB8fCBmYWlsICdwcm9kdWN0aW9uX29yaWdpbl9jYWNoZV9ieXBhc3NfbWlzc2luZycKZ3JlcCAtRnEgJ29yaWdpbl9yZW1vdGVfaXBfbWlzbWF0Y2gnICIkQk9VTkRBUlkiIHx8IGZhaWwgJ3Byb2R1Y3Rpb25fb3JpZ2luX3JlbW90ZV9pcF9ndWFyZF9taXNzaW5nJwpncmVwIC1GcSAnW1sgIiRjdXJsX3JjIiAtZXEgNyBdXScgIiRCT1VOREFSWSIgfHwgZmFpbCAncHJvZHVjdGlvbl9vcmlnaW5fZXhpdDdfZmFsbGJhY2tfZ3VhcmRfbWlzc2luZycKISBncmVwIC1FcSAnZ2V0ZW50W1s6c3BhY2U6XV0rKGFob3N0c3xob3N0cyl8ZGlnW1s6c3BhY2U6XV18bnNsb29rdXBbWzpzcGFjZTpdXScgIiRCT1VOREFSWSIgfHwgZmFpbCAncHJvZHVjdGlvbl9vcmlnaW5fZG5zX2ZhbGxiYWNrX2ZvcmJpZGRlbicKcGFzc19hc3NlcnQgJ3Byb2R1Y3Rpb24tb3JpZ2luLWxvY2FsLWlwLWZhbGxiYWNrJwoKIyBJbmRleE5vdyBwdWJsaWMta2V5IGNoZWNr
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
+          import base64, os
           from pathlib import Path
 
           boundary = Path('scripts/production/verify-production-boundary.mjs')
           source = boundary.read_text()
-          start_marker = '''  if [[ "$probe_mode" == 'origin' ]]; then\n    result='''
-          end_marker = '''  ! grep -Fq '${SITEGROUND_CAPTCHA_PATH}' "$body"'''
+          start_marker = "  if [[ \"$probe_mode\" == 'origin' ]]; then\n    result="
+          end_marker = "  ! grep -Fq '${SITEGROUND_CAPTCHA_PATH}' \"$body\""
           start = source.find(start_marker)
           end = source.find(end_marker, start + 1) if start >= 0 else -1
           if start < 0 or end < 0 or end <= start:
               raise SystemExit(f'Production origin transport boundaries not found: start={start} end={end}')
-
-          new_transport = r'''  fallback_ip=''
-          if [[ "$probe_mode" == 'origin' ]]; then
-            is_valid_ipv4() {
-              local ip="$1" a b c d extra octet
-              IFS=. read -r a b c d extra <<< "$ip"
-              [[ -z "${extra:-}" && -n "$a" && -n "$b" && -n "$c" && -n "$d" ]] || return 1
-              for octet in "$a" "$b" "$c" "$d"; do
-                [[ "$octet" =~ ^[0-9]{1,3}$ ]] || return 1
-                (( 10#$octet <= 255 )) || return 1
-              done
-            }
-            set +e
-            result="$(curl -4 -k -sS -L --max-redirs 5 --connect-timeout 10 --max-time 30 --resolve "$EXPECTED_HOST:443:127.0.0.1" --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -b 'wpSGCacheBypass=1' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
-            curl_rc=$?
-            if [[ "$curl_rc" -eq 7 ]]; then
-              for candidate in $(hostname -I 2>/dev/null || true); do
-                if is_valid_ipv4 "$candidate" && [[ "$candidate" != 127.* ]]; then
-                  fallback_ip="$candidate"
-                  break
-                fi
-              done
-              [[ -n "$fallback_ip" ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_fallback_ip_unavailable" >&2; cleanup; exit 1; }
-              : > "$headers"
-              : > "$body"
-              result="$(curl -4 -k -sS -L --max-redirs 5 --connect-timeout 10 --max-time 30 --resolve "$EXPECTED_HOST:443:$fallback_ip" --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -b 'wpSGCacheBypass=1' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
-              curl_rc=$?
-            fi
-            set -e
-            [[ "$curl_rc" -eq 0 ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_curl_exit_$curl_rc" >&2; cleanup; exit 1; }
-          else
-            result="$(curl -sS -L --max-redirs 5 --max-time 30 --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
-          fi
-          code="$(printf '%s' "$result" | cut -d'|' -f1)"
-          effective="$(printf '%s' "$result" | cut -d'|' -f2)"
-          remote_ip="$(printf '%s' "$result" | cut -d'|' -f3)"
-          [[ "$code" == '200' ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=http_code code=$code mode=$probe_mode" >&2; cleanup; exit 1; }
-          case "$effective" in
-            https://nuvanx.com/*|https://nuvanx.com) ;;
-            *) echo "PRODUCTION_PROBE_FAIL route=$route final=$effective mode=$probe_mode" >&2; cleanup; exit 1 ;;
-          esac
-          if [[ "$probe_mode" == 'origin' ]]; then
-            if [[ -n "$fallback_ip" ]]; then
-              [[ "$remote_ip" == "$fallback_ip" ]] \
-                || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_remote_ip_mismatch expected=$fallback_ip actual=$remote_ip" >&2; cleanup; exit 1; }
-            else
-              [[ "$remote_ip" == '127.0.0.1' ]] \
-                || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_remote_ip_mismatch expected=127.0.0.1 actual=$remote_ip" >&2; cleanup; exit 1; }
-            fi
-          else
-            [[ -n "$remote_ip" && "$remote_ip" != '127.0.0.1' && "$remote_ip" != '::1' ]] \
-              || { echo "PRODUCTION_PROBE_FAIL route=$route reason=public_edge_loopback remote_ip=$remote_ip" >&2; cleanup; exit 1; }
-          fi
-'''
-          boundary.write_text(source[:start] + new_transport + source[end:])
+          transport = base64.b64decode(os.environ['TRANSPORT_B64']).decode()
+          boundary.write_text(source[:start] + transport + source[end:])
 
           contract = Path('scripts/ci/test-release-regression-contract.sh')
           test_source = contract.read_text()
           anchor = "pass_assert 'siteground-antibot-public-edge-fallback'\n\n# IndexNow public-key check"
-          insertion = """pass_assert 'siteground-antibot-public-edge-fallback'\n\n# Production origin verification must preserve Host/SNI while tolerating SiteGround\n# hosts with no HTTPS listener on 127.0.0.1. Only curl exit 7 may activate a\n# validated non-loopback local IPv4; DNS/public edge is never an origin fallback.\ngrep -Fq 'hostname -I 2>/dev/null || true' \"$BOUNDARY\" || fail 'production_origin_local_ip_discovery_missing'\ngrep -Fq 'origin_fallback_ip_unavailable' \"$BOUNDARY\" || fail 'production_origin_local_ip_fail_closed_missing'\ngrep -Fq \"wpSGCacheBypass=1\" \"$BOUNDARY\" || fail 'production_origin_cache_bypass_missing'\ngrep -Fq 'origin_remote_ip_mismatch' \"$BOUNDARY\" || fail 'production_origin_remote_ip_guard_missing'\ngrep -Fq '[[ \"$curl_rc\" -eq 7 ]]' \"$BOUNDARY\" || fail 'production_origin_exit7_fallback_guard_missing'\n! grep -Eq 'getent[[:space:]]+(ahosts|hosts)|dig[[:space:]]|nslookup[[:space:]]' \"$BOUNDARY\" || fail 'production_origin_dns_fallback_forbidden'\npass_assert 'production-origin-local-ip-fallback'\n\n# IndexNow public-key check"""
+          insertion = base64.b64decode(os.environ['INSERTION_B64']).decode()
           if test_source.count(anchor) != 1:
               raise SystemExit(f'Expected one release-contract anchor, found {test_source.count(anchor)}')
           contract.write_text(test_source.replace(anchor, insertion, 1))
