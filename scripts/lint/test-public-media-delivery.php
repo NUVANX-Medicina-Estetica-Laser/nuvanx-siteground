@@ -92,12 +92,18 @@ foreach ( array( 3068, 2093, 2446, 2894 ) as $replacement_id ) {
 	}
 }
 
-// 2892 may remain as an internal rollback reference in the clinic map, but its
-// public/Schema URL must resolve to optimized attachment 2877.
-foreach ( array( 'chamberi', 'goya' ) as $clinic_key ) {
+// Clinic gallery cardinality is governed per sede. Chamberí has four verified
+// site photographs; Goya intentionally exposes only Box + Fachada. Legacy
+// attachment 2892 may remain as an internal rollback reference where present,
+// but its public/Schema URL must resolve to optimized attachment 2877.
+$clinic_expected_counts = array(
+	'chamberi' => 4,
+	'goya'     => 2,
+);
+foreach ( $clinic_expected_counts as $clinic_key => $expected_count ) {
 	$map = nvx_clinic_editorial_photo_map( $clinic_key );
-	if ( 4 !== count( $map ) ) {
-		$fail( 'clinic_map_count:' . $clinic_key );
+	if ( $expected_count !== count( $map ) ) {
+		$fail( 'clinic_map_count:' . $clinic_key . ':expected=' . $expected_count . ':actual=' . count( $map ) );
 	}
 	foreach ( $map as $image ) {
 		$id = (int) ( $image['id'] ?? 0 );
