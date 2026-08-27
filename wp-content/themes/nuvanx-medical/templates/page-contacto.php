@@ -43,7 +43,7 @@ $goya_maps = ! empty( $clinics['goya']['hasMap'] )
 ?>
 
 <div class="nvx-brand-page">
-	<section class="nvx-brand-hero" aria-labelledby="nvx-contact-h1" aria-label="<?php esc_attr_e( 'Contacto NUVANX', 'nuvanx-medical' ); ?>">
+	<section class="nvx-brand-hero nvx-brand-hero--surface-ink" aria-labelledby="nvx-contact-h1" aria-label="<?php esc_attr_e( 'Contacto NUVANX', 'nuvanx-medical' ); ?>">
 		<div class="nvx-brand-hero__inner">
 			<div class="nvx-brand-hero__copy">
 				<p class="nvx-brand-kicker"><?php esc_html_e( 'Clínicas NUVANX · Madrid', 'nuvanx-medical' ); ?></p>
