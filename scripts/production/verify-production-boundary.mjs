@@ -250,8 +250,35 @@ do
   headers="$(mktemp)"
   body="$(mktemp)"
   cleanup() { rm -f "$headers" "$body"; }
+  fallback_ip=''
   if [[ "$probe_mode" == 'origin' ]]; then
-    result="$(curl -sS -L --max-redirs 5 --max-time 30 -k --resolve "$EXPECTED_HOST:443:127.0.0.1" -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
+    is_valid_ipv4() {
+      local ip="$1" a b c d extra octet
+      IFS=. read -r a b c d extra <<< "$ip"
+      [[ -z "$extra" && -n "$a" && -n "$b" && -n "$c" && -n "$d" ]] || return 1
+      for octet in "$a" "$b" "$c" "$d"; do
+        [[ "$octet" =~ ^[0-9]{1,3}$ ]] || return 1
+        (( 10#$octet <= 255 )) || return 1
+      done
+    }
+    set +e
+    result="$(curl -4 -k -sS -L --max-redirs 5 --connect-timeout 10 --max-time 30 --resolve "$EXPECTED_HOST:443:127.0.0.1" --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -b 'wpSGCacheBypass=1' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
+    curl_rc=$?
+    if [[ "$curl_rc" -eq 7 ]]; then
+      for candidate in $(hostname -I 2>/dev/null || true); do
+        if is_valid_ipv4 "$candidate" && [[ "$candidate" != 127.* ]]; then
+          fallback_ip="$candidate"
+          break
+        fi
+      done
+      [[ -n "$fallback_ip" ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_fallback_ip_unavailable" >&2; cleanup; exit 1; }
+      : > "$headers"
+      : > "$body"
+      result="$(curl -4 -k -sS -L --max-redirs 5 --connect-timeout 10 --max-time 30 --resolve "$EXPECTED_HOST:443:$fallback_ip" --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -b 'wpSGCacheBypass=1' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
+      curl_rc=$?
+    fi
+    set -e
+    [[ "$curl_rc" -eq 0 ]] || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_curl_exit_$curl_rc" >&2; cleanup; exit 1; }
   else
     result="$(curl -sS -L --max-redirs 5 --max-time 30 --proto '=https' --proto-redir '=https' -A "$ua" -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' -D "$headers" -o "$body" -w '%{http_code}|%{url_effective}|%{remote_ip}' "$BASE_URL$route")"
   fi
@@ -263,7 +290,15 @@ do
     https://nuvanx.com/*|https://nuvanx.com) ;;
     *) echo "PRODUCTION_PROBE_FAIL route=$route final=$effective mode=$probe_mode" >&2; cleanup; exit 1 ;;
   esac
-  if [[ "$probe_mode" == 'public-edge' ]]; then
+  if [[ "$probe_mode" == 'origin' ]]; then
+    if [[ -n "$fallback_ip" ]]; then
+      [[ "$remote_ip" == "$fallback_ip" ]] \
+        || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_remote_ip_mismatch expected=$fallback_ip actual=$remote_ip" >&2; cleanup; exit 1; }
+    else
+      [[ "$remote_ip" == '127.0.0.1' ]] \
+        || { echo "PRODUCTION_PROBE_FAIL route=$route reason=origin_remote_ip_mismatch expected=127.0.0.1 actual=$remote_ip" >&2; cleanup; exit 1; }
+    fi
+  else
     [[ -n "$remote_ip" && "$remote_ip" != '127.0.0.1' && "$remote_ip" != '::1' ]] \
       || { echo "PRODUCTION_PROBE_FAIL route=$route reason=public_edge_loopback remote_ip=$remote_ip" >&2; cleanup; exit 1; }
   fi

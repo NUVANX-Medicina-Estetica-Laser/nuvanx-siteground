@@ -141,6 +141,17 @@ grep -Fq 'report.external.inconclusiveAntiBot && report.sitegroundPublicEdge.pas
 ! grep -Fq 'report.external.pass || report.external.inconclusiveAntiBot' "$BOUNDARY" || fail 'siteground_challenge_direct_pass_forbidden'
 pass_assert 'siteground-antibot-public-edge-fallback'
 
+# Production origin verification must preserve Host/SNI while tolerating SiteGround
+# hosts with no HTTPS listener on 127.0.0.1. Only curl exit 7 may activate a
+# validated non-loopback local IPv4; DNS/public edge is never an origin fallback.
+grep -Fq 'hostname -I 2>/dev/null || true' "$BOUNDARY" || fail 'production_origin_local_ip_discovery_missing'
+grep -Fq 'origin_fallback_ip_unavailable' "$BOUNDARY" || fail 'production_origin_local_ip_fail_closed_missing'
+grep -Fq "wpSGCacheBypass=1" "$BOUNDARY" || fail 'production_origin_cache_bypass_missing'
+grep -Fq 'origin_remote_ip_mismatch' "$BOUNDARY" || fail 'production_origin_remote_ip_guard_missing'
+grep -Fq '[[ "$curl_rc" -eq 7 ]]' "$BOUNDARY" || fail 'production_origin_exit7_fallback_guard_missing'
+! grep -Eq 'getent[[:space:]]+(ahosts|hosts)|dig[[:space:]]|nslookup[[:space:]]' "$BOUNDARY" || fail 'production_origin_dns_fallback_forbidden'
+pass_assert 'production-origin-local-ip-fallback'
+
 # IndexNow public-key check must not treat a GitHub-runner HTTP 202 as a
 # public-edge PASS. It may only continue when the SiteGround host already
 # verified the same public URL (non-loopback) during cutover.
