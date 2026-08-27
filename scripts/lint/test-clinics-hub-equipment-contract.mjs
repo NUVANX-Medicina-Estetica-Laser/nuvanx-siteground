@@ -26,8 +26,6 @@ const galleryPaths = {
   goya: [
     '2026/03/nuvanx-medicina-estetica1.webp',
     '2026/06/nvx-fachada-goya-900.webp',
-    '2026/07/gosia-1.webp',
-    '2026/07/WhatsApp-Image-2026-07-04-at-1.39.33-PM.webp',
   ],
   chamberi: [
     '2026/03/nuvanx-medicina-estetica7.webp',
@@ -53,15 +51,23 @@ const galleryMap = gbp.slice(galleryStart, galleryEnd);
 for (const [clinic, paths] of Object.entries(galleryPaths)) {
   for (const assetPath of paths) requireExact(galleryMap, assetPath, 1, `gallery_path:${clinic}:${assetPath}`);
 }
-requireExact(galleryMap, "'uploads_path'", 8, 'gallery_path_count');
+requireExact(galleryMap, "'uploads_path'", 6, 'gallery_path_count');
+for (const forbiddenGoyaTeamPath of [
+  '2026/07/gosia-1.webp',
+  '2026/07/WhatsApp-Image-2026-07-04-at-1.39.33-PM.webp',
+]) {
+  if (galleryMap.includes(forbiddenGoyaTeamPath)) fail(`goya_team_portrait_in_gallery:${forbiddenGoyaTeamPath}`);
+}
 for (const retiredId of ['1077', '1078', '1630', '1632']) {
   if (galleryMap.includes(`'id'           => ${retiredId}`)) fail(`retired_gallery_attachment:${retiredId}`);
 }
 for (const token of [
   'wp_getimagesize( $source_path )',
   "'srcset'  => $url . ' ' . (int) $image_size[0] . 'w'",
+  'function nvx_clinic_landing_gallery_expected_count',
+  "return 'goya' === $clinic_key ? 2 : 4;",
   'function nvx_clinic_landing_gallery_is_complete',
-  'return 4 === count( $photos );',
+  'nvx_clinic_landing_gallery_expected_count( $clinic_key ) === count( $photos )',
 ]) {
   if (!gbp.includes(token)) fail(`gallery_runtime_contract_missing:${token}`);
 }
@@ -70,9 +76,11 @@ for (const token of [
   'data-nvx-gallery-contract="incomplete"',
   'Galería de la sede temporalmente no disponible',
   'if ( $clinic_gallery_complete )',
+  'nvx_clinic_landing_gallery_is_complete( $clinic_photos, $clinic_key )',
 ]) {
   if (!sedeTemplate.includes(token)) fail(`gallery_visible_failure_state_missing:${token}`);
 }
+if (sedeTemplate.includes('consulta-medica-personalizada-nuvanx-madrid')) fail('goya_generic_filler_reintroduced');
 
 const catalogStart = hub.indexOf('function nvx_clinics_hub_equipment_catalog');
 const catalogEnd = hub.indexOf('function nvx_clinics_hub_equipment_image_markup');
@@ -100,7 +108,10 @@ for (const token of [
   'equipment_card_count:',
   'equipment_selected_resource_invalid:',
   'equipment_current_src_cross_origin:',
-  "if (initial.gallery.imageCount !== 4)",
+  "{ key: 'chamberi', path: '/medicina-estetica-chamberi/', expectedGalleryCount: 4 }",
+  "{ key: 'goya', path: '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/', expectedGalleryCount: 2 }",
+  'initial.gallery.imageCount !== clinic.expectedGalleryCount',
+  'images.length !== clinic.expectedGalleryCount',
 ]) {
   if (!runtime.includes(token)) fail(`runtime_acceptance_contract_missing:${token}`);
 }
@@ -117,4 +128,4 @@ for (const prohibitedUse of ['GBP', 'individual sede landing galleries', 'proof 
   if (!override?.clinics_hub_equipment_section?.prohibited_uses?.includes(prohibitedUse)) fail(`registry_equipment_prohibition_missing:${prohibitedUse}`);
 }
 
-console.log('CLINICS_HUB_EQUIPMENT_CONTRACT=PASS galleries=8 equipment=7 scope=clinic-hub-v1');
+console.log('CLINICS_HUB_EQUIPMENT_CONTRACT=PASS galleries=6 goya=2 chamberi=4 equipment=7 scope=clinic-hub-v1');
