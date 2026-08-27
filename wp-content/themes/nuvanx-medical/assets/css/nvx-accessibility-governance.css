@@ -73,6 +73,35 @@
   z-index: var(--nvx-z-local-base);
 }
 
+/* Interior hero surface contract. Surface decides foreground/background;
+ * title and lead consume semantic component variables instead of inferring
+ * contrast from page slug, body state or source order. */
+.nvx-brand-hero--surface-ink {
+  --nvx-hero-bg: var(--nvx-ink);
+  --nvx-hero-fg: var(--nvx-light);
+  --nvx-hero-muted: var(--nvx-text-on-dark-90);
+  background: var(--nvx-hero-bg);
+  color: var(--nvx-hero-fg);
+}
+
+.nvx-brand-hero--surface-media-light {
+  --nvx-hero-bg: var(--nvx-light);
+  --nvx-hero-fg: var(--nvx-ink);
+  --nvx-hero-muted: var(--nvx-text-body);
+  background: var(--nvx-hero-bg);
+  color: var(--nvx-hero-fg);
+}
+
+.nvx-brand-hero--surface-ink .nvx-brand-hero__title,
+.nvx-brand-hero--surface-media-light .nvx-brand-hero__title {
+  color: var(--nvx-hero-fg);
+}
+
+.nvx-brand-hero--surface-ink .nvx-brand-hero__lead,
+.nvx-brand-hero--surface-media-light .nvx-brand-hero__lead {
+  color: var(--nvx-hero-muted);
+}
+
 /* The governance layer is concatenated after nvx-patterns-editorial.css.
  * Keep the effective interior-hero stack on semantic tokens without rewriting
  * the large legacy pattern source solely for its two local stacking constants. */
