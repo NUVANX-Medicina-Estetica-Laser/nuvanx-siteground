@@ -1,0 +1,78 @@
+name: Apply Production Origin Fix V4
+
+on:
+  push:
+    branches:
+      - fix/production-origin-local-ip-fallback-20260827
+    paths:
+      - .github/workflows/apply-production-origin-fix-v4.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/production-origin-local-ip-fallback-20260827
+          persist-credentials: true
+      - name: Apply and validate production origin transport fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import re
+          from pathlib import Path
+
+          carrier = Path('.github/workflows/apply-production-origin-fix-once.yml').read_text()
+          transport_match = re.search(r'^\s+TRANSPORT_B64:\s+([A-Za-z0-9+/=]+)\s*$', carrier, re.M)
+          insertion_match = re.search(r'^\s+INSERTION_B64:\s+([A-Za-z0-9+/=]+)\s*$', carrier, re.M)
+          if not transport_match or not insertion_match:
+              raise SystemExit('encoded patch payload missing')
+
+          transport = base64.b64decode(transport_match.group(1)).decode()
+          transport = transport.replace('$' + '{extra:-}', '$extra')
+          if '$' + '{extra:-}' in transport:
+              raise SystemExit('template-literal collision still present')
+
+          boundary = Path('scripts/production/verify-production-boundary.mjs')
+          source = boundary.read_text()
+          start_marker = "  if [[ \"$probe_mode\" == 'origin' ]]; then\n    result="
+          end_marker = "  ! grep -Fq '${SITEGROUND_CAPTCHA_PATH}' \"$body\""
+          start = source.find(start_marker)
+          end = source.find(end_marker, start + 1) if start >= 0 else -1
+          if start < 0 or end < 0 or end <= start:
+              raise SystemExit(f'production transport boundaries not found: start={start} end={end}')
+          boundary.write_text(source[:start] + transport + source[end:])
+
+          contract = Path('scripts/ci/test-release-regression-contract.sh')
+          test_source = contract.read_text()
+          anchor = "pass_assert 'siteground-antibot-public-edge-fallback'\n\n# IndexNow public-key check"
+          insertion = base64.b64decode(insertion_match.group(1)).decode()
+          if test_source.count(anchor) != 1:
+              raise SystemExit(f'expected one release-contract anchor, found {test_source.count(anchor)}')
+          contract.write_text(test_source.replace(anchor, insertion, 1))
+          PY
+
+          node --check scripts/production/verify-production-boundary.mjs
+          bash -n scripts/ci/test-release-regression-contract.sh
+          bash scripts/ci/test-release-regression-contract.sh
+
+          rm -f \
+            .github/workflows/apply-production-origin-fix-once.yml \
+            .github/workflows/apply-production-origin-fix-v4.yml
+
+          git config user.name 'Nuvanx Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add \
+            scripts/production/verify-production-boundary.mjs \
+            scripts/ci/test-release-regression-contract.sh \
+            .github/workflows/apply-production-origin-fix-once.yml \
+            .github/workflows/apply-production-origin-fix-v4.yml
+          git diff --cached --check
+          test "$(git diff --cached --name-only | sort | tr '\n' ' ')" = "scripts/ci/test-release-regression-contract.sh scripts/production/verify-production-boundary.mjs "
+          git commit -m 'fix(production): tolerate closed loopback origin port'
+          git push origin HEAD:fix/production-origin-local-ip-fallback-20260827
