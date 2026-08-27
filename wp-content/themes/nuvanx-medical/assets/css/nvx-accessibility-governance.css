@@ -73,9 +73,11 @@
   z-index: var(--nvx-z-local-base);
 }
 
-/* Interior hero surface contract. Surface decides foreground/background;
- * title and lead consume semantic component variables instead of inferring
- * contrast from page slug, body state or source order. */
+/* First migrated interior-hero surface. The existing first-paint foundation
+ * currently enforces the same ink/light surface after the canonical bundle, so
+ * expose only this safe variant until that foundation becomes variable-aware.
+ * Title and lead consume semantic component variables; page slugs do not own
+ * contrast. */
 .nvx-brand-hero--surface-ink {
   --nvx-hero-bg: var(--nvx-ink);
   --nvx-hero-fg: var(--nvx-light);
@@ -84,21 +86,11 @@
   color: var(--nvx-hero-fg);
 }
 
-.nvx-brand-hero--surface-media-light {
-  --nvx-hero-bg: var(--nvx-light);
-  --nvx-hero-fg: var(--nvx-ink);
-  --nvx-hero-muted: var(--nvx-text-body);
-  background: var(--nvx-hero-bg);
+.nvx-brand-hero--surface-ink .nvx-brand-hero__title {
   color: var(--nvx-hero-fg);
 }
 
-.nvx-brand-hero--surface-ink .nvx-brand-hero__title,
-.nvx-brand-hero--surface-media-light .nvx-brand-hero__title {
-  color: var(--nvx-hero-fg);
-}
-
-.nvx-brand-hero--surface-ink .nvx-brand-hero__lead,
-.nvx-brand-hero--surface-media-light .nvx-brand-hero__lead {
+.nvx-brand-hero--surface-ink .nvx-brand-hero__lead {
   color: var(--nvx-hero-muted);
 }
 
