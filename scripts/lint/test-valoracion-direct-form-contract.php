@@ -9,12 +9,15 @@ declare(strict_types=1);
 
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'HOUR_IN_SECONDS', 3600 );
+define( 'MINUTE_IN_SECONDS', 60 );
 
 final class WP_Error {
 }
 
 $GLOBALS['nvx_test_http_responses'] = array();
 $GLOBALS['nvx_test_http_requests']  = array();
+$GLOBALS['nvx_test_transients']     = array();
+$GLOBALS['nvx_test_inline_scripts'] = array();
 
 function add_action( ...$args ): bool {
 	unset( $args );
@@ -22,6 +25,10 @@ function add_action( ...$args ): bool {
 }
 function home_url( $path = '' ): string {
 	return 'https://example.test' . (string) $path;
+}
+function add_query_arg( $key, $value, $url ): string {
+	$separator = str_contains( (string) $url, '?' ) ? '&' : '?';
+	return (string) $url . $separator . rawurlencode( (string) $key ) . '=' . rawurlencode( (string) $value );
 }
 function esc_url( $value ): string {
 	return (string) $value;
@@ -33,12 +40,18 @@ function esc_html__( $value, $domain = null ): string {
 function esc_attr( $value ): string {
 	return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' );
 }
+function sanitize_text_field( $value ): string {
+	return trim( (string) $value );
+}
+function wp_unslash( $value ) {
+	return $value;
+}
 function wp_nonce_field( $action, $name, $referer, $display ): string {
 	unset( $action, $referer, $display );
 	return '<input type="hidden" name="' . $name . '" value="nonce">';
 }
-function wp_json_encode( $value ) {
-	$encoded = json_encode( $value );
+function wp_json_encode( $value, $flags = 0 ) {
+	$encoded = json_encode( $value, (int) $flags );
 	return is_string( $encoded ) ? $encoded : false;
 }
 function wp_remote_post( $url, $args ) {
@@ -53,6 +66,34 @@ function is_wp_error( $response ): bool {
 }
 function wp_remote_retrieve_response_code( $response ): int {
 	return (int) ( $response['status'] ?? 0 );
+}
+function set_transient( $key, $value, $expiration ): bool {
+	$GLOBALS['nvx_test_transients'][ (string) $key ] = array(
+		'value'      => $value,
+		'expiration' => (int) $expiration,
+	);
+	return true;
+}
+function get_transient( $key ) {
+	return $GLOBALS['nvx_test_transients'][ (string) $key ]['value'] ?? false;
+}
+function delete_transient( $key ): bool {
+	$key    = (string) $key;
+	$exists = array_key_exists( $key, $GLOBALS['nvx_test_transients'] );
+	unset( $GLOBALS['nvx_test_transients'][ $key ] );
+	return $exists;
+}
+function is_page( $page = null ): bool {
+	unset( $page );
+	return true;
+}
+function nvx_theme_thank_you_page_slugs(): array {
+	return array( 'gracias' );
+}
+function nocache_headers(): void {
+}
+function wp_print_inline_script_tag( $script ): void {
+	$GLOBALS['nvx_test_inline_scripts'][] = (string) $script;
 }
 
 $root   = dirname( __DIR__, 2 );
@@ -142,6 +183,46 @@ $result                             = nvx_valoracion_forward_to_hubspot( $fields
 $assert( false === $result['ok'] && 'hubspot_http' === $result['reason'] && 503 === $result['status'], 'NO_RETRY_AFTER_5XX' );
 $assert( 1 === count( $GLOBALS['nvx_test_http_requests'] ), 'NO_RETRY_AFTER_5XX_ONCE' );
 
+// Behavioral proof for the first-party success bridge.
+$GLOBALS['nvx_test_transients']     = array();
+$GLOBALS['nvx_test_inline_scripts'] = array();
+$success_url                        = nvx_valoracion_direct_success_redirect_url();
+$query                              = array();
+parse_str( (string) parse_url( $success_url, PHP_URL_QUERY ), $query );
+$token = (string) ( $query['nvx_success'] ?? '' );
+$assert( 1 === preg_match( '/^[a-f0-9]{64}$/D', $token ), 'SUCCESS_TOKEN_FORMAT' );
+$success_key = 'nvx_success_' . hash( 'sha256', $token );
+$assert( isset( $GLOBALS['nvx_test_transients'][ $success_key ] ), 'SUCCESS_TOKEN_HASH_STORED' );
+$assert( 600 === (int) $GLOBALS['nvx_test_transients'][ $success_key ]['expiration'], 'SUCCESS_TOKEN_TTL' );
+$assert( false === array_key_exists( 'nvx_success_' . $token, $GLOBALS['nvx_test_transients'] ), 'SUCCESS_TOKEN_RAW_NOT_STORED' );
+
+$_GET['nvx_success'] = $token;
+nvx_valoracion_prepare_direct_success();
+$assert( true === (bool) ( $GLOBALS['nvx_valoracion_direct_success_ready'] ?? false ), 'SUCCESS_TOKEN_CONSUMED' );
+$assert( ! isset( $GLOBALS['nvx_test_transients'][ $success_key ] ), 'SUCCESS_TOKEN_DELETED' );
+$assert( defined( 'DONOTCACHEPAGE' ) && true === DONOTCACHEPAGE, 'SUCCESS_PAGE_NONCACHEABLE' );
+
+nvx_valoracion_emit_direct_success();
+$assert( 1 === count( $GLOBALS['nvx_test_inline_scripts'] ), 'SUCCESS_SIGNAL_ONCE' );
+$signal = $GLOBALS['nvx_test_inline_scripts'][0];
+foreach (
+	array(
+		'"event":"nvx_conversion_signal"',
+		'"nvx_event_name":"generate_lead"',
+		'"form_context":"valoracion"',
+		'"lead_source":"first_party_form"',
+		'"form_event_source":"server_redirect"',
+	) as $index => $required_signal
+) {
+	$assert( false !== strpos( $signal, $required_signal ), 'SUCCESS_SIGNAL_FIELD_' . $index );
+}
+nvx_valoracion_emit_direct_success();
+$assert( 1 === count( $GLOBALS['nvx_test_inline_scripts'] ), 'SUCCESS_SIGNAL_NO_DOUBLE_RENDER' );
+
+nvx_valoracion_prepare_direct_success();
+$assert( false === (bool) ( $GLOBALS['nvx_valoracion_direct_success_ready'] ?? false ), 'SUCCESS_TOKEN_REPLAY_BLOCKED' );
+unset( $_GET['nvx_success'] );
+
 $source = (string) file_get_contents( $real );
 $required_log_calls = array(
 	"/nvx_valoracion_log_outcome\\(\\s*'FAILURE'\\s*,\\s*'nonce'\\s*,\\s*0\\s*,\\s*array\\(\\)\\s*\\);/",
@@ -155,13 +236,15 @@ foreach ( $required_log_calls as $index => $pattern ) {
 }
 foreach (
 	array(
-		"wp_safe_redirect( home_url( '/gracias/' ) )",
+		'wp_safe_redirect( nvx_valoracion_direct_success_redirect_url() )',
 		"nvx_valoracion_name_length( \$lastname )",
+		"'event'             => 'nvx_conversion_signal'",
+		"'nvx_event_name'    => 'generate_lead'",
 	) as $index => $required
 ) {
 	$assert( false !== strpos( $source, $required ), 'HANDLER_BRANCH_' . $index );
 }
-
+$assert( false === strpos( $source, "'event' => 'nvx_valoracion_success'" ), 'NO_LEGACY_SUCCESS_EVENT' );
 $assert( false === strpos( $source, '$attempts' ), 'NO_RETRY_ATTEMPTS_ARRAY' );
 
 $logger_start = strpos( $source, 'function nvx_valoracion_log_outcome' );
@@ -177,4 +260,5 @@ echo 'VALORACION_DIRECT_FORM_HUBSPOT_2XX=PASS' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_FAILURE_BRANCHES=PASS nonce,rate_limit,validation,hubspot_transport,hubspot_http' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_NO_AMBIGUOUS_RETRY=PASS' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_LOGGING_NO_PII=PASS' . PHP_EOL;
+echo 'VALORACION_DIRECT_FORM_GA4_SUCCESS_BRIDGE=PASS single_use=1 canonical_signal=1 replay_blocked=1' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_QA07_GATE=PASS qa06_preserved=1 qa07_not_executed=1' . PHP_EOL;
