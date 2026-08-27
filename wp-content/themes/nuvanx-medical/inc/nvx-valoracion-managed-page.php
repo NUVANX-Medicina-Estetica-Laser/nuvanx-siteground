@@ -159,7 +159,7 @@ function nvx_valoracion_managed_page_markup(): string {
 	$html = '<div class="nvx-brand-page nvx-valoracion-page" id="nvx-valoracion-main" aria-labelledby="nvx-valoracion-h1">';
 
 	// Conversion-first page header: site header/menu -> concise page heading -> form.
-	$html .= '<section class="nvx-brand-hero nvx-valoracion-hero" aria-labelledby="nvx-valoracion-h1">';
+	$html .= '<section class="nvx-brand-hero nvx-brand-hero--surface-ink nvx-valoracion-hero" aria-labelledby="nvx-valoracion-h1">';
 	$html .= '<div class="nvx-brand-hero__inner">';
 	$html .= '<div class="nvx-brand-hero__copy">';
 	$html .= '<p class="nvx-brand-kicker">' . esc_html__( 'VALORACIÓN MÉDICA · MADRID', 'nuvanx-medical' ) . '</p>';
