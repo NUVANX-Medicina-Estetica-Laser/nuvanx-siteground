@@ -24,8 +24,8 @@ const performanceRoutes = [
 ];
 
 const clinicRoutes = [
-  { key: 'chamberi', path: '/medicina-estetica-chamberi/' },
-  { key: 'goya', path: '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' },
+  { key: 'chamberi', path: '/medicina-estetica-chamberi/', expectedGalleryCount: 4 },
+  { key: 'goya', path: '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/', expectedGalleryCount: 2 },
 ];
 
 const requiredViewportKeys = new Set([
@@ -304,7 +304,9 @@ async function inspectClinic(browser, clinic, viewport) {
     });
 
     if (!initial.gallery) fail(`gallery_missing:${clinic.key}:${viewport.key}`);
-    if (initial.gallery.imageCount !== 4) fail(`gallery_image_count:${clinic.key}:${viewport.key}:${initial.gallery.imageCount}`);
+    if (initial.gallery.imageCount !== clinic.expectedGalleryCount) {
+      fail(`gallery_image_count:${clinic.key}:${viewport.key}:${initial.gallery.imageCount}:expected=${clinic.expectedGalleryCount}`);
+    }
     assertInitialPerf(initial.perf, clinic, viewport);
     if (initial.perf.lcp.element?.inClinicGallery) fail(`gallery_is_initial_lcp:${clinic.key}:${viewport.key}`);
 
@@ -335,7 +337,9 @@ async function inspectClinic(browser, clinic, viewport) {
       };
     }));
 
-    if (images.length !== 4) fail(`gallery_image_count_after_load:${clinic.key}:${viewport.key}:${images.length}`);
+    if (images.length !== clinic.expectedGalleryCount) {
+      fail(`gallery_image_count_after_load:${clinic.key}:${viewport.key}:${images.length}:expected=${clinic.expectedGalleryCount}`);
+    }
 
     for (const [index, image] of images.entries()) {
       if (image.loading !== 'lazy') fail(`gallery_not_lazy:${clinic.key}:${viewport.key}:${index}`);
@@ -371,6 +375,7 @@ async function inspectClinic(browser, clinic, viewport) {
       route: clinic.path,
       viewport,
       finalUrl: page.url(),
+      expectedGalleryCount: clinic.expectedGalleryCount,
       initialLcp: initial.perf.lcp,
       initialCls: initial.perf.cls,
       initialClsEntries: initial.perf.clsEntries,
@@ -418,6 +423,8 @@ try {
       results.push(result);
       console.log(
         `CLINIC_MEDIA_RUNTIME_CASE=PASS kind=clinic clinic=${clinic.key} viewport=${viewport.key}`
+        + ` gallery_count=${result.images.length}`
+        + ` expected_gallery_count=${result.expectedGalleryCount}`
         + ` lcp_tag=${result.initialLcp.element?.tagName || 'unknown'}`
         + ` lcp_gallery=${result.initialLcp.element?.inClinicGallery ? 1 : 0}`
         + ` cls=${result.initialCls.toFixed(4)}`
