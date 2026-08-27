@@ -39,8 +39,6 @@ $gallery_paths = array(
     'goya' => array(
         '2026/03/nuvanx-medicina-estetica1.webp',
         '2026/06/nvx-fachada-goya-900.webp',
-        '2026/07/gosia-1.webp',
-        '2026/07/WhatsApp-Image-2026-07-04-at-1.39.33-PM.webp',
     ),
     'chamberi' => array(
         '2026/03/nuvanx-medicina-estetica7.webp',
@@ -72,23 +70,26 @@ foreach ($gallery_paths as $clinic => $paths) {
         }
     }
 }
-if (substr_count($map, "'uploads_path'") !== 8) {
-    $fail('gallery_path_count_not_eight');
+if (6 !== substr_count($map, "'uploads_path'")) {
+    $fail('gallery_path_count_not_six');
+}
+foreach (array('2026/07/gosia-1.webp', '2026/07/WhatsApp-Image-2026-07-04-at-1.39.33-PM.webp') as $team_path) {
+    if (false !== strpos($map, $team_path)) {
+        $fail('goya_team_portrait_in_gallery:' . $team_path);
+    }
 }
 foreach (array('1077', '1078', '1630', '1632') as $retired_id) {
     if (false !== strpos($map, "'id'           => {$retired_id}")) {
         $fail('retired_gallery_attachment_reintroduced:' . $retired_id);
     }
 }
-if (false === strpos($gbp, 'wp_getimagesize( $source_path )')) {
-    $fail('gallery_intrinsic_dimensions_not_resolved');
-}
-if (false === strpos($gbp, "'srcset'  => \$url . ' ' . (int) \$image_size[0] . 'w'")) {
-    $fail('gallery_srcset_contract_missing');
-}
 foreach (array(
+    'wp_getimagesize( $source_path )',
+    "'srcset'  => \$url . ' ' . (int) \$image_size[0] . 'w'",
+    'function nvx_clinic_landing_gallery_expected_count',
+    "return 'goya' === \$clinic_key ? 2 : 4;",
     'function nvx_clinic_landing_gallery_is_complete',
-    'return 4 === count( $photos );',
+    'nvx_clinic_landing_gallery_expected_count( $clinic_key ) === count( $photos )',
 ) as $needle) {
     if (false === strpos($gbp, $needle)) {
         $fail('gallery_runtime_contract_missing:' . $needle);
@@ -98,10 +99,14 @@ foreach (array(
     'data-nvx-gallery-contract="incomplete"',
     'Galería de la sede temporalmente no disponible',
     'if ( $clinic_gallery_complete )',
+    'nvx_clinic_landing_gallery_is_complete( $clinic_photos, $clinic_key )',
 ) as $needle) {
     if (false === strpos($sede, $needle)) {
         $fail('gallery_visible_failure_state_missing:' . $needle);
     }
+}
+if (false !== strpos($sede, 'consulta-medica-personalizada-nuvanx-madrid')) {
+    $fail('goya_generic_filler_reintroduced');
 }
 
 $catalog_start = strpos($hub, 'function nvx_clinics_hub_equipment_catalog');
@@ -110,10 +115,10 @@ if (false === $catalog_start || false === $catalog_end || $catalog_end <= $catal
     $fail('equipment_catalog_missing');
 }
 $catalog = substr($hub, $catalog_start, $catalog_end - $catalog_start);
-if (substr_count($catalog, "'uploads_path'") !== 7) {
+if (7 !== substr_count($catalog, "'uploads_path'")) {
     $fail('equipment_path_count_not_seven');
 }
-if (substr_count($catalog, "'alt'") !== 7 || substr_count($catalog, "'description'") !== 7) {
+if (7 !== substr_count($catalog, "'alt'") || 7 !== substr_count($catalog, "'description'")) {
     $fail('equipment_alt_or_description_count');
 }
 foreach ($equipment_paths as $path) {
@@ -143,7 +148,10 @@ foreach (array(
     'equipment_card_count:',
     'equipment_selected_resource_invalid:',
     'equipment_current_src_cross_origin:',
-    'if (initial.gallery.imageCount !== 4)',
+    "{ key: 'chamberi', path: '/medicina-estetica-chamberi/', expectedGalleryCount: 4 }",
+    "{ key: 'goya', path: '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/', expectedGalleryCount: 2 }",
+    'initial.gallery.imageCount !== clinic.expectedGalleryCount',
+    'images.length !== clinic.expectedGalleryCount',
 ) as $needle) {
     if (false === strpos($runtime, $needle)) {
         $fail('runtime_acceptance_contract_missing:' . $needle);
@@ -156,7 +164,7 @@ if (!is_array($override) || 'operator_explicit' !== ($override['source'] ?? null
 }
 foreach ($gallery_paths as $clinic => $paths) {
     $entries = $override['clinic_landing_galleries'][$clinic] ?? null;
-    if (!is_array($entries) || count($entries) !== 4) {
+    if (!is_array($entries) || count($entries) !== count($paths)) {
         $fail('registry_gallery_count:' . $clinic);
     }
     $actual = array_map(static fn(array $entry): string => (string) ($entry['uploads_path'] ?? ''), $entries);
@@ -178,4 +186,4 @@ foreach (array('GBP', 'individual sede landing galleries', 'proof of physical av
     }
 }
 
-echo "CLINICS_HUB_EQUIPMENT_CONTRACT=PASS galleries=8 equipment=7 scope=clinic-hub-v1\n";
+echo "CLINICS_HUB_EQUIPMENT_CONTRACT=PASS galleries=6 goya=2 chamberi=4 equipment=7 scope=clinic-hub-v1\n";
