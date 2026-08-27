@@ -64,12 +64,12 @@ function nvx_valoracion_modal_hubspot_config(): array {
 }
 
 /**
- * Add the modal/button presentation layer to the same inline critical bundle as
- * the canonical components CSS. Public requests intentionally suppress local
- * theme stylesheet links, so a conventional wp_enqueue_style() would be dropped.
+ * Add conversion-control and modal presentation rules to the same inline
+ * critical bundle as the canonical components CSS. The control contract must
+ * remain available even when the modal is disabled and CTAs navigate normally.
  */
 function nvx_valoracion_modal_enqueue_presentation_styles(): void {
-	if ( ! nvx_valoracion_modal_enabled() ) {
+	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || is_feed() ) {
 		return;
 	}
 
