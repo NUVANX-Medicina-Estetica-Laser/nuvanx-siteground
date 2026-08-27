@@ -51,7 +51,7 @@
   font-size: var(--nvx-space-2);
   font-weight: var(--nvx-fw-medium);
   line-height: var(--nvx-lh-nav);
-  letter-spacing: 0.24em;
+  letter-spacing: 0.24em; /* nvx-token-exception: EXCEPTION_DOCUMENTED — logo wordmark tracking */
 }
 
 .nvx-logo__tagline {
@@ -312,7 +312,7 @@
   border-bottom: var(--nvx-border-hairline) solid var(--nvx-color-line);
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-nav-mobile);
-  line-height: 1.4;
+  line-height: 1.4; /* nvx-token-exception: EXCEPTION_DOCUMENTED — mobile navigation leading */
   color: var(--nvx-ink);
   text-decoration: none;
   border-radius: var(--nvx-radius-button);

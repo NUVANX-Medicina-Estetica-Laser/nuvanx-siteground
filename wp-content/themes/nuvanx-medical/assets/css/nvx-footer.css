@@ -54,7 +54,7 @@
   font-family: var(--nvx-serif);
   font-size: var(--nvx-type-h3);
   font-weight: var(--nvx-fw-regular);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.01em; /* nvx-token-exception: EXCEPTION_DOCUMENTED — footer wordmark tracking */
 }
 
 .nvx-footer__brand .nvx-logo__tagline {
@@ -62,7 +62,7 @@
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-micro);
   font-weight: var(--nvx-fw-regular);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.1em; /* nvx-token-exception: EXCEPTION_DOCUMENTED — footer brand tagline tracking */
 }
 
 .nvx-footer__cities {
@@ -90,8 +90,8 @@
 }
 
 .nvx-footer__social-icon {
-  width: 20px;
-  height: 20px;
+  width: 20px; /* nvx-token-exception: EXCEPTION_DOCUMENTED — footer social-icon geometry */
+  height: 20px; /* nvx-token-exception: EXCEPTION_DOCUMENTED — footer social-icon geometry */
 }
 
 /* The section nodes sit directly in the desktop 12-column grid. */
@@ -175,7 +175,7 @@
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-button);
   font-weight: var(--nvx-fw-regular);
-  line-height: 1.45;
+  line-height: 1.45; /* nvx-token-exception: EXCEPTION_DOCUMENTED — footer link compact leading */
 }
 
 .nvx-footer__clinic {

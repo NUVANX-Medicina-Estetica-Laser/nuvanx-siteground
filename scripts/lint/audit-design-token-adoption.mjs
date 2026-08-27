@@ -33,22 +33,7 @@ const STRICT_CATEGORIES = new Set([
 // Closed categories become default blocking ratchets even while the broader
 // adoption audit remains report-only. Add a category here only after CI has
 // demonstrated a zero baseline on protected master.
-const DEFAULT_BLOCKING_CATEGORIES = new Set(['motion', 'z-index', 'shadow', 'radius', 'spacing']);
-
-// Exact legacy literals whose effective runtime values are governed by a later
-// semantic owner, plus structural values that are not the design category they
-// superficially resemble. This allowlist is deliberately file+line+property+
-// value bound: any source drift or additional literal must reopen the finding.
-const GOVERNED_LEGACY_LITERAL_EXCEPTIONS = new Set([
-  'wp-content/themes/nuvanx-medical/assets/css/nvx-patterns-editorial.css:170:z-index:2',
-  'wp-content/themes/nuvanx-medical/assets/css/nvx-patterns-editorial.css:209:z-index:1',
-  'wp-content/themes/nuvanx-medical/assets/css/nvx-components.css:244:padding-bottom:80px',
-  'wp-content/themes/nuvanx-medical/assets/css/nvx-components.css:723:box-shadow:0 0 0 3px var(--nvx-accent-glow)',
-  'wp-content/themes/nuvanx-medical/assets/css/nvx-components.css:999:margin:-1px',
-  'wp-content/themes/nuvanx-medical/assets/css/nvx-components.css:1467:margin-bottom:2px',
-  'wp-content/themes/nuvanx-medical/assets/css/nvx-posts.css:784:box-shadow:inset 0 0 0 var(--nvx-border-hairline) var(--nvx-color-line)',
-  'wp-content/themes/nuvanx-medical/assets/css/nvx-site-layout.css:417:border-radius:16px',
-]);
+const DEFAULT_BLOCKING_CATEGORIES = new Set(['motion', 'z-index', 'shadow', 'radius', 'spacing', 'typography-metric', 'dimension-review', 'position-review']);
 
 const SPACING_PROPERTIES = /^(?:margin(?:-(?:top|right|bottom|left|inline|inline-start|inline-end|block|block-start|block-end))?|padding(?:-(?:top|right|bottom|left|inline|inline-start|inline-end|block|block-start|block-end))?|gap|row-gap|column-gap)$/;
 const DIMENSION_PROPERTIES = /^(?:width|height|min-width|max-width|min-height|max-height)$/;
@@ -67,12 +52,6 @@ function lineNumberAt(source, index) {
     if (source.charCodeAt(i) === 10) line += 1;
   }
   return line;
-}
-
-function isGovernedLegacyLiteralException(file, line, property, value) {
-  const relativeFile = path.relative(ROOT, file);
-  const key = `${relativeFile}:${line}:${property}:${value.trim()}`;
-  return GOVERNED_LEGACY_LITERAL_EXCEPTIONS.has(key);
 }
 
 /**
@@ -238,21 +217,6 @@ function auditParserSelfTest() {
   if (!classifyDeclaration(transition.property, transition.value).some((item) => item.category === 'motion' && item.literal === '.15s')) throw new Error('parser_self_test_seconds_motion_not_reported');
   if (!classifyDeclaration(animation.property, animation.value).some((item) => item.category === 'motion' && item.literal === '300ms')) throw new Error('parser_self_test_animation_shorthand_not_reported');
 
-  const editorialFile = path.join(CSS_DIR, 'nvx-patterns-editorial.css');
-  const componentsFile = path.join(CSS_DIR, 'nvx-components.css');
-  const postsFile = path.join(CSS_DIR, 'nvx-posts.css');
-  const layoutFile = path.join(CSS_DIR, 'nvx-site-layout.css');
-  if (!isGovernedLegacyLiteralException(editorialFile, 170, 'z-index', '2')) throw new Error('parser_self_test_governed_legacy_z_overlay_missing');
-  if (!isGovernedLegacyLiteralException(editorialFile, 209, 'z-index', '1')) throw new Error('parser_self_test_governed_legacy_z_base_missing');
-  if (isGovernedLegacyLiteralException(editorialFile, 171, 'z-index', '2')) throw new Error('parser_self_test_governed_legacy_z_exception_too_broad');
-  if (!isGovernedLegacyLiteralException(componentsFile, 244, 'padding-bottom', '80px')) throw new Error('parser_self_test_governed_footer_spacing_missing');
-  if (!isGovernedLegacyLiteralException(componentsFile, 723, 'box-shadow', '0 0 0 3px var(--nvx-accent-glow)')) throw new Error('parser_self_test_governed_focus_shadow_missing');
-  if (!isGovernedLegacyLiteralException(componentsFile, 999, 'margin', '-1px')) throw new Error('parser_self_test_structural_hidden_margin_missing');
-  if (!isGovernedLegacyLiteralException(componentsFile, 1467, 'margin-bottom', '2px')) throw new Error('parser_self_test_governed_factsheet_spacing_missing');
-  if (!isGovernedLegacyLiteralException(postsFile, 784, 'box-shadow', 'inset 0 0 0 var(--nvx-border-hairline) var(--nvx-color-line)')) throw new Error('parser_self_test_structural_inset_shadow_missing');
-  if (!isGovernedLegacyLiteralException(layoutFile, 417, 'border-radius', '16px')) throw new Error('parser_self_test_governed_legal_radius_missing');
-  if (isGovernedLegacyLiteralException(layoutFile, 418, 'border-radius', '16px')) throw new Error('parser_self_test_governed_legacy_radius_exception_too_broad');
-  if (isGovernedLegacyLiteralException(componentsFile, 245, 'padding-bottom', '80px')) throw new Error('parser_self_test_governed_spacing_exception_too_broad');
 }
 
 async function cssFiles() {
@@ -278,7 +242,6 @@ async function main() {
       const line = lineNumberAt(source, match.index ?? 0);
       const originalLine = originalLines[line - 1] ?? '';
       if (originalLine.includes('nvx-token-exception')) continue;
-      if (isGovernedLegacyLiteralException(file, line, property, value)) continue;
 
       for (const finding of classifyDeclaration(property, value)) {
         const candidates = tokenCandidatesForLiteral(definitions, finding.literal);

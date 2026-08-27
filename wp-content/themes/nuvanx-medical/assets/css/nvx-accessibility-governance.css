@@ -150,7 +150,7 @@
 /* Wide desktop: give the full navigation enough horizontal room and keep the drawer inactive. */
 @media (min-width: 120rem) {
   .nvx-header__inner {
-    width: min(1600px, calc(100vw - var(--nvx-gutter)));
+    width: min(1600px, calc(100vw - var(--nvx-gutter))); /* nvx-token-exception: STRUCTURAL_ALLOWED — desktop navigation canvas contract */
   }
 
   .nvx-mobile-nav,
