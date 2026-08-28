@@ -201,6 +201,12 @@ node "$ROOT/scripts/staging2/test-staging-boundary-origin-contract.mjs"
 # aggregation point until the workflow exposes a dedicated release-test step.
 bash "$ROOT/scripts/ci/test-release-regression-contract.sh"
 
+# Complianz policy routing is a release-blocking pre-production invariant.
+# Execute both structural ownership and behavioral routing contracts here so
+# translated href="#" policy links cannot bypass the protected quality job.
+node "$ROOT/scripts/lint/test-complianz-policy-routing.mjs"
+php "$ROOT/scripts/lint/test-complianz-policy-routing.php"
+
 # Design-token adoption blocks the zero-baseline ratcheted categories by
 # default; --strict additionally blocks every category in STRICT_CATEGORIES.
 node "$ROOT/scripts/lint/audit-design-token-adoption.mjs"
