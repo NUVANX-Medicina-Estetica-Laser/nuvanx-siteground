@@ -14,6 +14,7 @@ import { isExpectedClientResourceAbort } from './browser-request-failure-classif
 import {
   BLOCK_C_BROWSER_CONFIG,
   BLOCK_C_BROWSER_UA,
+  BLOCK_C_VIEWPORTS,
   getCanonicalViewport,
 } from './block-c-browser-config.mjs';
 import {
@@ -57,6 +58,33 @@ function positiveIntegerEnv(name, fallback) {
 
 function sanitize(value) {
   return String(value ?? '').replace(/\s+/g, '_').slice(0, 600);
+}
+
+// Current Block C artifacts carry viewport.key. The exact-dimension fallback is
+// intentionally limited to historical artifacts where key is absent. An explicit
+// but unknown key is rejected rather than guessed from dimensions.
+function canonicalViewportKey(result) {
+  const explicitKey = String(result?.viewport?.key || '').trim();
+  if (explicitKey) {
+    try {
+      getCanonicalViewport(explicitKey);
+      return explicitKey;
+    } catch {
+      return '';
+    }
+  }
+
+  const width = Number(result?.viewport?.width || 0);
+  const height = Number(result?.viewport?.height || 0);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return '';
+  const matches = BLOCK_C_VIEWPORTS.filter((viewport) => viewport.width === width && viewport.height === height);
+  return matches.length === 1 ? matches[0].key : '';
+}
+
+function resultIdentityKey(result) {
+  const route = String(result?.route || '');
+  const viewportKey = canonicalViewportKey(result);
+  return route && viewportKey ? `${route}::${viewportKey}` : '';
 }
 
 function logTransient(reason) {
@@ -217,7 +245,7 @@ async function evaluateVisualContract({
 }
 
 function targetIsEligible(result) {
-  if (!result || !result.route || !result.viewport?.key) return false;
+  if (!result || !result.route || !canonicalViewportKey(result)) return false;
   if (result.route === '/') return false; // Home keeps its stricter dedicated recovery contract.
   if (result.externalInconclusive === true && result.originVerified === true) return true;
   return result.status !== 'PASS';
@@ -225,9 +253,10 @@ function targetIsEligible(result) {
 
 async function recoverTarget(browser, target) {
   const route = String(target.route || '');
+  const viewportKey = canonicalViewportKey(target);
   let viewport;
   try {
-    viewport = getCanonicalViewport(target.viewport?.key || '');
+    viewport = getCanonicalViewport(viewportKey);
   } catch (error) {
     return { type: 'config', error: error instanceof Error ? error.message : String(error) };
   }
@@ -388,6 +417,7 @@ async function recoverTarget(browser, target) {
         type: 'pass',
         recovered: {
           ...target,
+          viewport: { ...target.viewport, key: viewport.key, label: target.viewport?.label || viewport.label, width: viewport.width, height: viewport.height },
           status: 'PASS',
           httpStatus: edgeHttpStatus,
           edgeHttpStatus,
@@ -458,29 +488,36 @@ async function main() {
   const recoveredByKey = new Map();
   try {
     for (const target of targets) {
+      const targetViewportKey = canonicalViewportKey(target);
       const outcome = await recoverTarget(browser, target);
-      const key = `${target.route}::${target.viewport?.key || ''}`;
+      const key = `${target.route}::${targetViewportKey}`;
       if (outcome.type === 'pass') {
         recoveredByKey.set(key, outcome.recovered);
-        console.log(`BLOCK_C_TRANSIENT_RECOVERY=CASE_PASS route=${target.route} viewport=${target.viewport?.key || 'unknown'} candidate_defect=not_established`);
+        console.log(`BLOCK_C_TRANSIENT_RECOVERY=CASE_PASS route=${target.route} viewport=${targetViewportKey || 'unknown'} candidate_defect=not_established`);
         continue;
       }
       if (outcome.type === 'config') {
-        console.error(`BLOCK_C_TRANSIENT_RECOVERY=FAIL_CONFIG route=${target.route} viewport=${target.viewport?.key || 'unknown'} reason=${sanitize(outcome.error)} wrapper_exit=78`);
+        console.error(`BLOCK_C_TRANSIENT_RECOVERY=FAIL_CONFIG route=${target.route} viewport=${targetViewportKey || 'unknown'} reason=${sanitize(outcome.error)} wrapper_exit=78`);
         return EX_CONFIG;
       }
-      if (outcome.type === 'real') return logRealFailure(`route=${target.route} viewport=${target.viewport?.key || 'unknown'} ${outcome.reason}`);
-      return logTransient(`route=${target.route} viewport=${target.viewport?.key || 'unknown'} ${outcome.reason}`);
+      if (outcome.type === 'real') return logRealFailure(`route=${target.route} viewport=${targetViewportKey || 'unknown'} ${outcome.reason}`);
+      return logTransient(`route=${target.route} viewport=${targetViewportKey || 'unknown'} ${outcome.reason}`);
     }
   } finally {
     await browser.close().catch(() => {});
   }
 
-  const recoveredResults = results.map((result) => recoveredByKey.get(`${result.route}::${result.viewport?.key || ''}`) || result);
+  const recoveredResults = results.map((result) => {
+    const identity = resultIdentityKey(result);
+    return (identity && recoveredByKey.get(identity)) || result;
+  });
   const remaining = recoveredResults.filter((result) => result.status !== 'PASS' || result.externalInconclusive === true);
   if (remaining.length > 0) return logTransient(`remaining_incomplete_cases count=${remaining.length}`);
 
-  const recoverySummary = targets.map((target) => `- \`${target.route}\` · ${target.viewport?.label || target.viewport?.key || 'unknown'}: prior SiteGround/transient evidence revalidated through the public browser; candidate defect was not established by the transient event.`);
+  const recoverySummary = targets.map((target) => {
+    const viewportKey = canonicalViewportKey(target);
+    return `- \`${target.route}\` · ${target.viewport?.label || viewportKey || 'unknown'}: prior SiteGround/transient evidence revalidated through the public browser; candidate defect was not established by the transient event.`;
+  });
   const derived = renderBlockCEvidence(recoveredResults, {
     expectedSha,
     recoverySummary,
