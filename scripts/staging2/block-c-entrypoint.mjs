@@ -10,6 +10,7 @@ import { renderBlockCEvidence, writeEvidenceBundle } from './block-c-evidence.mj
 const coreScript = fileURLToPath(new URL('./block-c-entrypoint-core.mjs', import.meta.url));
 const clinicMediaRuntimeScript = fileURLToPath(new URL('./clinic-media-runtime.mjs', import.meta.url));
 const targetedVisualRecoveryScript = fileURLToPath(new URL('./block-c-home-mobile-recovery.mjs', import.meta.url));
+const genericTransientVisualRecoveryScript = fileURLToPath(new URL('./block-c-transient-visual-recovery.mjs', import.meta.url));
 const targetedVisualRecoveryTargets = Object.freeze(Object.keys(BLOCK_C_RECOVERY_TARGETS));
 const artifactsDir = fileURLToPath(new URL('./block-c-artifacts/', import.meta.url));
 const resultsPath = path.join(artifactsDir, 'block-c-results.json');
@@ -34,7 +35,10 @@ const parsedLegacyTimeoutMs = Number.parseInt(process.env.BLOCK_C_SUBPROCESS_TIM
 const hasLegacyTimeoutOverride = Number.isInteger(parsedLegacyTimeoutMs) && parsedLegacyTimeoutMs > 0;
 const legacyTimeoutMs = hasLegacyTimeoutOverride ? parsedLegacyTimeoutMs : null;
 const DEFAULT_CORE_TIMEOUT_MS = 30 * 60 * 1000;
-const DEFAULT_RECOVERY_TIMEOUT_MS = 10 * 60 * 1000;
+// Targeted recovery must finish comfortably inside the PR wrapper's bounded
+// acceptance budget. If it cannot, EX_TEMPFAIL (75) means infrastructure is
+// inconclusive; it does not establish a candidate regression.
+const DEFAULT_RECOVERY_TIMEOUT_MS = 6 * 60 * 1000;
 const DEFAULT_CLINIC_MEDIA_TIMEOUT_MS = 5 * 60 * 1000;
 // BLOCK_C_SUBPROCESS_TIMEOUT_MS is the historical global subprocess budget. For
 // compatibility it remains the core fallback when explicitly set, and recovery
@@ -63,15 +67,12 @@ class ProcessSignalError extends Error {
   }
 }
 
-
 const activeChildren = new Set();
 ['SIGTERM', 'SIGINT'].forEach((sig) => {
   process.once(sig, () => {
-    console.error(`BLOCK_C_ORCHESTRATOR=TERMINATED signal=${sig} active_children=${activeChildren.size}`);
+    console.error(`BLOCK_C_ORCHESTRATOR=TERMINATED signal=${sig} active_children=${activeChildren.size} classification=transient_infrastructure candidate_defect=not_established`);
     for (const child of activeChildren) {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill('SIGKILL');
-      }
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     }
     process.exit(sig === 'SIGINT' ? 130 : 143);
   });
@@ -90,7 +91,7 @@ function runProcess(script, env = process.env, timeoutMs = SUBPROCESS_CONFIG.cor
 
     const timeoutTimer = setTimeout(() => {
       timedOut = true;
-      console.error(`BLOCK_C_SUBPROCESS=TIMEOUT script=${path.basename(script)} timeout_ms=${timeoutMs}`);
+      console.error(`BLOCK_C_SUBPROCESS=TIMEOUT script=${path.basename(script)} timeout_ms=${timeoutMs} classification=transient_infrastructure candidate_defect=not_established`);
       child.kill('SIGTERM');
       hardKillTimer = setTimeout(() => {
         if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
@@ -134,7 +135,7 @@ async function runCore() {
     }, SUBPROCESS_CONFIG.coreTimeoutMs);
   } catch (error) {
     if (error instanceof ProcessSignalError) {
-      console.error(`BLOCK_C_CORE=TRANSIENT_SIGNAL signal=${error.signal}`);
+      console.error(`BLOCK_C_CORE=TRANSIENT_SIGNAL signal=${error.signal} candidate_defect=not_established`);
       return EX_TEMPFAIL;
     }
     throw error;
@@ -146,7 +147,7 @@ async function runClinicMediaRuntime() {
     return await runProcess(clinicMediaRuntimeScript, process.env, SUBPROCESS_CONFIG.clinicMediaTimeoutMs);
   } catch (error) {
     if (error instanceof ProcessSignalError) {
-      console.error(`CLINIC_MEDIA_RUNTIME=TRANSIENT_SIGNAL signal=${error.signal}`);
+      console.error(`CLINIC_MEDIA_RUNTIME=TRANSIENT_SIGNAL signal=${error.signal} candidate_defect=not_established`);
       return EX_TEMPFAIL;
     }
     throw error;
@@ -162,7 +163,7 @@ async function tryTargetedVisualRecovery(recoveryTarget) {
     }, SUBPROCESS_CONFIG.recoveryTimeoutMs);
   } catch (error) {
     if (error instanceof ProcessSignalError) {
-      console.error(`BLOCK_C_TARGETED_VISUAL_RECOVERY=TRANSIENT_SIGNAL target=${recoveryTarget} signal=${error.signal}`);
+      console.error(`BLOCK_C_TARGETED_VISUAL_RECOVERY=TRANSIENT_SIGNAL target=${recoveryTarget} signal=${error.signal} candidate_defect=not_established`);
       return { recovered: false, applicable: true, transient: true, recoveryTarget };
     }
     throw error;
@@ -174,7 +175,7 @@ async function tryTargetedVisualRecovery(recoveryTarget) {
     return { recovered: false, applicable: false, transient: false, recoveryTarget };
   }
   if (code === EX_TEMPFAIL) {
-    console.error(`BLOCK_C_TARGETED_VISUAL_RECOVERY=TRANSIENT target=${recoveryTarget} wrapper=continue`);
+    console.error(`BLOCK_C_TARGETED_VISUAL_RECOVERY=TRANSIENT_INFRASTRUCTURE target=${recoveryTarget} wrapper=continue candidate_defect=not_established`);
     return { recovered: false, applicable: true, transient: true, recoveryTarget };
   }
   if (code === EX_CONFIG) {
@@ -183,6 +184,35 @@ async function tryTargetedVisualRecovery(recoveryTarget) {
   }
   console.error(`BLOCK_C_TARGETED_VISUAL_RECOVERY=FAIL_REAL target=${recoveryTarget} wrapper_exit=${code}`);
   return { recovered: false, applicable: true, transient: false, realFailure: true, code, recoveryTarget };
+}
+
+async function tryGenericTransientVisualRecovery() {
+  let code;
+  try {
+    code = await runProcess(genericTransientVisualRecoveryScript, process.env, SUBPROCESS_CONFIG.recoveryTimeoutMs);
+  } catch (error) {
+    if (error instanceof ProcessSignalError) {
+      console.error(`BLOCK_C_GENERIC_TRANSIENT_RECOVERY=TRANSIENT_SIGNAL signal=${error.signal} candidate_defect=not_established`);
+      return { recovered: false, applicable: true, transient: true };
+    }
+    throw error;
+  }
+
+  if (code === 0) return { recovered: true, applicable: true, transient: false };
+  if (code === EX_NOT_APPLICABLE) {
+    console.error('BLOCK_C_GENERIC_TRANSIENT_RECOVERY=NOT_APPLICABLE wrapper=continue');
+    return { recovered: false, applicable: false, transient: false };
+  }
+  if (code === EX_TEMPFAIL) {
+    console.error('BLOCK_C_GENERIC_TRANSIENT_RECOVERY=TRANSIENT_INFRASTRUCTURE wrapper=continue candidate_defect=not_established');
+    return { recovered: false, applicable: true, transient: true };
+  }
+  if (code === EX_CONFIG) {
+    console.error('BLOCK_C_GENERIC_TRANSIENT_RECOVERY=FAIL_CONFIG wrapper_exit=78');
+    return { recovered: false, applicable: true, transient: false, realFailure: true, configFailure: true, code };
+  }
+  console.error(`BLOCK_C_GENERIC_TRANSIENT_RECOVERY=FAIL_REAL wrapper_exit=${code}`);
+  return { recovered: false, applicable: true, transient: false, realFailure: true, code };
 }
 
 function isRecoverableCompletedVisualTransient(result) {
@@ -288,12 +318,12 @@ async function tryExactOriginNetworkRecovery() {
 async function propagateTransientFailureState() {
   if (realGithubEnv) {
     await fs.appendFile(realGithubEnv, 'STAGING_MUTATION_ARMED=0\n', 'utf8');
-    console.error('BLOCK_C_STAGING_ROLLBACK=DISARMED reason=transient-exhausted-after-origin-verification');
+    console.error('BLOCK_C_STAGING_ROLLBACK=DISARMED reason=transient-infrastructure-exhausted candidate_defect=not_established');
   }
   if (realStepSummary) {
     await fs.appendFile(
       realStepSummary,
-      '\n### Block C transient exhaustion\n\nThe public browser could not complete the visual contract and exact-SHA origin verification could not safely recover the case. No production-eligible completion marker is allowed.\n',
+      '\n### Block C transient infrastructure — no candidate defect established\n\nThe public browser could not complete the visual contract after targeted recovery and exact-SHA origin checks. This is **EX_TEMPFAIL (75)**: infrastructure/edge evidence is inconclusive, not a demonstrated application regression. No production-eligible completion marker is allowed; a fresh exact-SHA acceptance run is required.\n',
       'utf8'
     );
   }
@@ -315,6 +345,7 @@ try {
       visualRecovery = await tryTargetedVisualRecovery(recoveryTarget);
       if (visualRecovery.recovered || visualRecovery.realFailure) break;
     }
+
     if (visualRecovery.recovered) {
       console.log(`BLOCK_C_RESILIENT=PASS_PUBLIC_BROWSER_RECOVERY target=${visualRecovery.recoveryTarget} visual_contract=complete`);
       process.exitCode = 0;
@@ -322,14 +353,23 @@ try {
       console.error(`BLOCK_C_RESILIENT=${visualRecovery.configFailure ? 'FAIL_CONFIG' : 'FAIL_REAL'} fallback=public-browser-recovery target=${visualRecovery.recoveryTarget}`);
       process.exitCode = visualRecovery.code || 1;
     } else {
-      const recovered = await tryExactOriginNetworkRecovery();
-      if (recovered) {
-        console.log('BLOCK_C_RESILIENT=PASS_EXACT_ORIGIN_NETWORK_RECOVERY visual_contract=complete');
+      const genericRecovery = await tryGenericTransientVisualRecovery();
+      if (genericRecovery.recovered) {
+        console.log('BLOCK_C_RESILIENT=PASS_TARGETED_TRANSIENT_RECOVERY visual_contract=complete full_matrix_replay=avoided');
         process.exitCode = 0;
+      } else if (genericRecovery.realFailure) {
+        console.error(`BLOCK_C_RESILIENT=${genericRecovery.configFailure ? 'FAIL_CONFIG' : 'FAIL_REAL'} fallback=targeted-transient-recovery`);
+        process.exitCode = genericRecovery.code || 1;
       } else {
-        await propagateTransientFailureState();
-        console.error('BLOCK_C_RESILIENT=FAIL_TRANSIENT_EXHAUSTED fallback=public-browser-and-origin-verification-unavailable-or-inapplicable');
-        process.exitCode = EX_TEMPFAIL;
+        const recovered = await tryExactOriginNetworkRecovery();
+        if (recovered) {
+          console.log('BLOCK_C_RESILIENT=PASS_EXACT_ORIGIN_NETWORK_RECOVERY visual_contract=complete');
+          process.exitCode = 0;
+        } else {
+          await propagateTransientFailureState();
+          console.error('BLOCK_C_RESILIENT=FAIL_TRANSIENT_EXHAUSTED classification=transient_infrastructure candidate_defect=not_established fallback=targeted-public-browser-and-origin-verification-unavailable-or-inapplicable');
+          process.exitCode = EX_TEMPFAIL;
+        }
       }
     }
   }
@@ -339,7 +379,7 @@ try {
     if (clinicMediaCode === 0) {
       console.log('BLOCK_C_CLINIC_MEDIA_RUNTIME=PASS');
     } else if (clinicMediaCode === EX_TEMPFAIL) {
-      console.error('BLOCK_C_CLINIC_MEDIA_RUNTIME=TRANSIENT wrapper_exit=75');
+      console.error('BLOCK_C_CLINIC_MEDIA_RUNTIME=TRANSIENT_INFRASTRUCTURE wrapper_exit=75 candidate_defect=not_established');
       process.exitCode = EX_TEMPFAIL;
     } else {
       console.error(`BLOCK_C_CLINIC_MEDIA_RUNTIME=FAIL_REAL wrapper_exit=${clinicMediaCode}`);
