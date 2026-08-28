@@ -35,7 +35,10 @@ const baseUrl = (process.env.BASE_URL || 'https://staging2.nuvanx.com').replace(
 const baseOrigin = new URL(baseUrl).origin;
 const expectedHost = process.env.EXPECTED_HOST || new URL(baseUrl).hostname;
 const expectedSha = (process.env.EXPECTED_SHA || '').trim();
-const maxRecoveryCases = positiveIntegerEnv('BLOCK_C_TARGETED_RECOVERY_MAX_CASES', 12);
+// Keep targeted recovery intentionally small. A larger cluster of transient cases
+// is treated as infrastructure instability and escalated to a fresh exact-SHA run
+// instead of consuming an unbounded browser budget inside one runner.
+const maxRecoveryCases = positiveIntegerEnv('BLOCK_C_TARGETED_RECOVERY_MAX_CASES', 3);
 
 const shortContentRoutes = new Set([
   '/gracias/',
