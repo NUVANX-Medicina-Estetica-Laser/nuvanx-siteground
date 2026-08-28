@@ -80,9 +80,7 @@ if ( ! class_exists( 'WP_Post' ) ) {
 	}
 }
 
-function nvx_page_id_by_slug( string $slug ): int {
-	return 'gracias' === $slug ? (int) $GLOBALS['nvx_test_page_id'] : 0;
-}
+
 
 function wp_parse_url( string $value, int $component = -1 ) {
 	return parse_url( $value, $component );
@@ -97,6 +95,34 @@ function get_permalink( int $post_id ): string {
 	return (string) $GLOBALS['nvx_test_permalink'];
 }
 
+defined( 'OBJECT' ) || define( 'OBJECT', 'OBJECT' );
+defined( 'NVX_HOOK_PRIO_INTERNAL_LINKS' ) || define( 'NVX_HOOK_PRIO_INTERNAL_LINKS', 10 );
+defined( 'NVX_HOOK_PRIO_BUSINESS_RULES' ) || define( 'NVX_HOOK_PRIO_BUSINESS_RULES', 10 );
+defined( 'NVX_HOOK_PRIO_TRUST_BADGES' ) || define( 'NVX_HOOK_PRIO_TRUST_BADGES', 10 );
+
+function add_action( string $hook_name, $callback, int $priority = 10, int $accepted_args = 1 ): bool {
+	return add_filter( $hook_name, $callback, $priority, $accepted_args );
+}
+
+function apply_filters( string $hook_name, $value ) {
+	if ( ! isset( $GLOBALS['nvx_test_filters'] ) ) {
+		return $value;
+	}
+	foreach ( $GLOBALS['nvx_test_filters'] as $filter ) {
+		if ( $filter['hook'] === $hook_name && is_callable( $filter['callback'] ) ) {
+			$value = call_user_func( $filter['callback'], $value );
+		}
+	}
+	return $value;
+}
+
+function get_page_by_path( string $page_path, string $output = 'OBJECT', string $post_type = 'page' ) {
+	if ( 'gracias' === $page_path ) {
+		return new WP_Post( (int) $GLOBALS['nvx_test_page_id'], (string) $GLOBALS['nvx_test_status'] );
+	}
+	return null;
+}
+
 function add_filter( string $hook_name, $callback, int $priority = 10, int $accepted_args = 1 ): bool {
 	$GLOBALS['nvx_test_filters'][] = array(
 		'hook'          => $hook_name,
@@ -108,6 +134,7 @@ function add_filter( string $hook_name, $callback, int $priority = 10, int $acce
 }
 
 defined( 'ABSPATH' ) || define( 'ABSPATH', $root . '/' );
+require $root . '/wp-content/themes/nuvanx-medical/inc/nvx-page-hygiene.php';
 require $governance;
 
 $registered = array();
@@ -124,19 +151,24 @@ isset( $registered['nvx_noindex_page_ids'] ) || $fail( $scenario . ':noindex_fil
 'nvx_gracias_robots_keep_noindex' === $registered['nvx_noindex_page_ids']['callback'] || $fail( $scenario . ':noindex_callback_invalid' );
 
 $page_id = (int) $GLOBALS['nvx_test_page_id'];
-$nofollow_input = array( 77, $page_id, 88 );
-$noindex_input  = array( 77, 77 );
+$sentinel1 = $page_id + 1;
+$sentinel2 = $page_id + 2;
+$nofollow_input = array( $sentinel1, $page_id, $sentinel2 );
+$noindex_input  = array( $sentinel1, $sentinel1 );
 $nofollow_actual = nvx_gracias_robots_remove_nofollow( $nofollow_input );
 $noindex_actual  = nvx_gracias_robots_keep_noindex( $noindex_input );
 
 if ( 'valid' === $scenario ) {
 	true === nvx_gracias_manifest_declares_noindex_follow() || $fail( 'valid:not_authorized' );
-	array( 77, 88 ) === $nofollow_actual || $fail( 'valid:nofollow_not_removed' );
-	array( 77, $page_id ) === $noindex_actual || $fail( 'valid:noindex_not_retained' );
+	array( $sentinel1, $sentinel2 ) === $nofollow_actual || $fail( 'valid:nofollow_not_removed' );
+	array( $sentinel1, $page_id ) === $noindex_actual || $fail( 'valid:noindex_not_retained' );
 } else {
 	false === nvx_gracias_manifest_declares_noindex_follow() || $fail( $scenario . ':unexpected_authorization' );
 	$nofollow_input === $nofollow_actual || $fail( $scenario . ':nofollow_fail_closed_broken' );
 	$noindex_input === $noindex_actual || $fail( $scenario . ':noindex_fail_closed_broken' );
 }
+
+$navigable_bucket = nvx_noindex_but_navigable_page_ids();
+in_array( $page_id, $navigable_bucket, true ) && $fail( $scenario . ':page_found_in_navigable_bucket' );
 
 echo "GRACIAS_ROBOTS_SCENARIO=PASS scenario={$scenario}\n";
