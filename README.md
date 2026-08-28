@@ -13,6 +13,12 @@ Canonical source repository for the NUVANX WordPress theme and the operational t
 
 Git history is the archive for retired audits, diagnostics and incident-era implementation details. They are intentionally not kept in the active tree.
 
+## Agent and CI diagnosis rule
+
+Repository agents must read [`AGENTS.md`](AGENTS.md) before diagnosing Staging2 or deployment failures and use [`docs/operations/staging-transient-classification.md`](docs/operations/staging-transient-classification.md) as the canonical classifier contract.
+
+A red or incomplete workflow is not, by itself, evidence of an application regression. Exit `75`/`EX_TEMPFAIL`, SiteGround `202`/antibot challenges, exit `78`/`EX_CONFIG`, and SSH transport `255` mean the candidate defect is **not established** unless independent `FAIL_REAL` application/contract evidence exists. These states remain release NO-GO until exact-SHA evidence completes; they must not be mislabeled as code defects.
+
 ## Permanent GitHub Actions
 
 Exactly two workflows are persistent:
@@ -74,7 +80,9 @@ Mutating scripts require their explicit confirmation guard. Production deploymen
 
 ## Documentation
 
+- Agent instructions: `AGENTS.md`
 - Architecture: `docs/architecture.md`
 - Deployment/runbook: `docs/operations/deployment.md`
+- Staging transient classification: `docs/operations/staging-transient-classification.md`
 - Global document governance: `docs/operations/global-document-governance.md`
 - Security policy: `SECURITY.md`
