@@ -151,6 +151,31 @@
   box-shadow: var(--nvx-shadow-button-hover);
 }
 
+/* Keep disabled and aria-disabled conversion controls visually inert even
+ * though the hover/focus contract is declared in this later governance layer. */
+.nvx-brand-btn:disabled,
+.nvx-btn:disabled,
+.nvx-button:disabled,
+.nvx-brand-btn[aria-disabled="true"],
+.nvx-btn[aria-disabled="true"],
+.nvx-button[aria-disabled="true"] {
+  background: var(--button-bg, var(--nvx-ink));
+  color: var(--button-color, var(--nvx-light));
+  border-color: var(--button-border, var(--nvx-ink));
+  transform: none;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.nvx-brand-btn:disabled:focus-visible,
+.nvx-btn:disabled:focus-visible,
+.nvx-button:disabled:focus-visible,
+.nvx-brand-btn[aria-disabled="true"]:focus-visible,
+.nvx-btn[aria-disabled="true"]:focus-visible,
+.nvx-button[aria-disabled="true"]:focus-visible {
+  outline: none;
+}
+
 /* Valoración dialog geometry. Native dialog metrics are fully reset so Safari
  * cannot size the custom backdrop to an intrinsic dialog box. Desktop centers
  * the panel; mobile intentionally becomes a bottom sheet. */
