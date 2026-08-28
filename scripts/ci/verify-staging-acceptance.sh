@@ -18,6 +18,10 @@ api_headers=(
   -H 'Accept: application/vnd.github+json'
   -H 'X-GitHub-Api-Version: 2022-11-28'
 )
+public_api_headers=(
+  -H 'Accept: application/vnd.github+json'
+  -H 'X-GitHub-Api-Version: 2022-11-28'
+)
 
 # Fail closed on repository-governance bypasses. A production candidate must be
 # a GitHub-verified commit produced by a merged PR into the canonical branch.
@@ -68,11 +72,29 @@ if [[ ! "$merged_pr_number" =~ ^[0-9]+$ || ! "$merged_pr_head_sha" =~ ^[0-9a-f]{
   exit 1
 fi
 
+# The reviews endpoint can be read without authentication for public repositories.
+# Production intentionally keeps a least-privilege GITHUB_TOKEN without
+# pull-requests:read, so assert the repository is public and use the public REST
+# surface for review evidence. If visibility ever changes, this gate fails closed
+# rather than silently weakening workflow permissions.
+if ! repository_response="$(curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 --proto '=https' --proto-redir '=https' "${api_headers[@]}" "https://api.github.com/repos/${GITHUB_REPOSITORY}")"; then
+  echo "STAGING_ACCEPTANCE=FAIL reason=github_api_repository_query_failed" >&2
+  exit 1
+fi
+repository_visibility="$(printf '%s' "$repository_response" | jq -er 'select(type == "object") | .visibility | select(type == "string")' 2>/dev/null)" || {
+  echo "STAGING_ACCEPTANCE=FAIL reason=invalid_repository_visibility_response" >&2
+  exit 1
+}
+if [[ "$repository_visibility" != 'public' ]]; then
+  echo "STAGING_ACCEPTANCE=FAIL reason=review_probe_requires_public_repository visibility=$repository_visibility" >&2
+  exit 1
+fi
+
 # The repository ruleset currently requires one approval, but administrators can
 # bypass it. Mirror that requirement in the release gate and require an approval
 # that is still the reviewer's latest decisive state, is anchored to the exact PR
-# head merged into this candidate, and comes from somebody other than the author.
-# Every review page is schema-validated before it can influence authorization.
+# head merged into this candidate, comes from somebody other than the author, and
+# belongs to a real user with write-or-higher repository permission.
 reviews_json='[]'
 review_page=1
 while :; do
@@ -80,8 +102,8 @@ while :; do
     echo "STAGING_ACCEPTANCE=FAIL reason=review_pagination_limit_exceeded pr=$merged_pr_number" >&2
     exit 1
   fi
-  if ! reviews_response="$(curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 --proto '=https' --proto-redir '=https' "${api_headers[@]}" "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${merged_pr_number}/reviews?per_page=100&page=${review_page}")"; then
-    echo "STAGING_ACCEPTANCE=FAIL reason=github_api_pr_reviews_query_failed pr=$merged_pr_number page=$review_page" >&2
+  if ! reviews_response="$(curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 --proto '=https' --proto-redir '=https' "${public_api_headers[@]}" "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${merged_pr_number}/reviews?per_page=100&page=${review_page}")"; then
+    echo "STAGING_ACCEPTANCE=FAIL reason=github_api_public_pr_reviews_query_failed pr=$merged_pr_number page=$review_page" >&2
     exit 1
   fi
   review_count="$(printf '%s' "$reviews_response" | jq -er '
@@ -92,7 +114,8 @@ while :; do
         and (.state | type) == "string"
         and (.user | type) == "object"
         and (.user.login | type) == "string"
-        and (.user.login | length) > 0
+        and (.user.login | test("^[A-Za-z0-9-]+$"))
+        and (.user.type | type) == "string"
         and ((.commit_id == null) or ((.commit_id | type) == "string" and (.commit_id | test("^[0-9a-f]{40}$"))))
         and ((.submitted_at == null) or ((.submitted_at | type) == "string"))
       ))
@@ -113,7 +136,7 @@ while :; do
   review_page=$((review_page + 1))
 done
 
-approved_review_count="$(printf '%s' "$reviews_json" | jq -er --arg head "$merged_pr_head_sha" --arg author "$merged_pr_author" '
+eligible_reviewers_json="$(printf '%s' "$reviews_json" | jq -cer --arg head "$merged_pr_head_sha" --arg author "$merged_pr_author" '
   [
     .[]
     | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED" or .state == "DISMISSED")
@@ -127,15 +150,42 @@ approved_review_count="$(printf '%s' "$reviews_json" | jq -er --arg head "$merge
           .state == "APPROVED"
           and .commit_id == $head
           and .user.login != $author
+          and .user.type == "User"
         )
+      | .user.login
     ]
-  | length
+  | unique
 ' 2>/dev/null)" || {
   echo "STAGING_ACCEPTANCE=FAIL reason=review_state_resolution_failed pr=$merged_pr_number" >&2
   exit 1
 }
-if [[ ! "$approved_review_count" =~ ^[0-9]+$ ]] || (( approved_review_count < 1 )); then
+mapfile -t eligible_reviewers < <(printf '%s' "$eligible_reviewers_json" | jq -r '.[]')
+if (( ${#eligible_reviewers[@]} < 1 )); then
   echo "STAGING_ACCEPTANCE=FAIL reason=missing_current_head_approval pr=$merged_pr_number sha=$CANDIDATE_SHA pr_head=$merged_pr_head_sha" >&2
+  exit 1
+fi
+
+approved_review_count=0
+for reviewer in "${eligible_reviewers[@]}"; do
+  if ! permission_response="$(curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 --proto '=https' --proto-redir '=https' "${api_headers[@]}" "https://api.github.com/repos/${GITHUB_REPOSITORY}/collaborators/${reviewer}/permission")"; then
+    echo "STAGING_ACCEPTANCE=FAIL reason=github_api_reviewer_permission_query_failed pr=$merged_pr_number reviewer=$reviewer" >&2
+    exit 1
+  fi
+  reviewer_permission="$(printf '%s' "$permission_response" | jq -er 'select(type == "object") | .permission | select(type == "string")' 2>/dev/null)" || {
+    echo "STAGING_ACCEPTANCE=FAIL reason=invalid_reviewer_permission_response pr=$merged_pr_number reviewer=$reviewer" >&2
+    exit 1
+  }
+  case "$reviewer_permission" in
+    admin|maintain|write)
+      approved_review_count=$((approved_review_count + 1))
+      ;;
+    *)
+      echo "STAGING_ACCEPTANCE_REVIEWER_SKIPPED pr=$merged_pr_number reviewer=$reviewer permission=$reviewer_permission reason=insufficient_permission" >&2
+      ;;
+  esac
+done
+if (( approved_review_count < 1 )); then
+  echo "STAGING_ACCEPTANCE=FAIL reason=missing_authorized_current_head_approval pr=$merged_pr_number sha=$CANDIDATE_SHA pr_head=$merged_pr_head_sha" >&2
   exit 1
 fi
 
