@@ -38,16 +38,42 @@ if ! prs_response="$(curl -fsSL --retry 3 --retry-all-errors --connect-timeout 1
   echo "STAGING_ACCEPTANCE=FAIL reason=github_api_commit_pr_query_failed sha=$CANDIDATE_SHA" >&2
   exit 1
 fi
-merged_pr_number="$(printf '%s' "$prs_response" | jq -r --arg sha "$CANDIDATE_SHA" --arg branch "$STAGING_ACCEPTANCE_BRANCH" '[.[] | select(.merged_at != null and .base.ref == $branch and .merge_commit_sha == $sha)] | sort_by(.number) | last | .number // empty')"
-if [[ ! "$merged_pr_number" =~ ^[0-9]+$ ]]; then
+merged_pr_fields="$(printf '%s' "$prs_response" | jq -cer --arg sha "$CANDIDATE_SHA" --arg branch "$STAGING_ACCEPTANCE_BRANCH" '
+  if type != "array" then error("expected PR array") else . end
+  | [
+      .[]
+      | select(
+          (.number | type) == "number"
+          and (.merged_at | type) == "string"
+          and .base.ref == $branch
+          and .merge_commit_sha == $sha
+          and (.head.sha | type) == "string"
+          and (.head.sha | test("^[0-9a-f]{40}$"))
+          and (.user.login | type) == "string"
+          and (.user.login | length) > 0
+        )
+    ]
+  | sort_by(.number)
+  | last
+  | select(. != null)
+  | [.number, .head.sha, .user.login]
+  | @tsv
+' 2>/dev/null)" || {
   echo "STAGING_ACCEPTANCE=FAIL reason=candidate_not_merged_pr_head sha=$CANDIDATE_SHA branch=$STAGING_ACCEPTANCE_BRANCH" >&2
+  exit 1
+}
+IFS=$'\t' read -r merged_pr_number merged_pr_head_sha merged_pr_author <<< "$merged_pr_fields"
+if [[ ! "$merged_pr_number" =~ ^[0-9]+$ || ! "$merged_pr_head_sha" =~ ^[0-9a-f]{40}$ || -z "$merged_pr_author" ]]; then
+  echo "STAGING_ACCEPTANCE=FAIL reason=invalid_merged_pr_identity sha=$CANDIDATE_SHA" >&2
   exit 1
 fi
 
 # The repository ruleset currently requires one approval, but administrators can
-# bypass it. Mirror that approval requirement in the release gate so a bypassed
-# merge cannot become a Production candidate. Paginate reviews and fail closed.
-approved_review_count=0
+# bypass it. Mirror that requirement in the release gate and require an approval
+# that is still the reviewer's latest decisive state, is anchored to the exact PR
+# head merged into this candidate, and comes from somebody other than the author.
+# Every review page is schema-validated before it can influence authorization.
+reviews_json='[]'
 review_page=1
 while :; do
   if (( review_page > 100 )); then
@@ -58,22 +84,62 @@ while :; do
     echo "STAGING_ACCEPTANCE=FAIL reason=github_api_pr_reviews_query_failed pr=$merged_pr_number page=$review_page" >&2
     exit 1
   fi
-  review_count="$(printf '%s' "$reviews_response" | jq -r 'length')"
-  page_approvals="$(printf '%s' "$reviews_response" | jq -r '[.[] | select(.state == "APPROVED")] | length')"
-  if [[ ! "$review_count" =~ ^[0-9]+$ || ! "$page_approvals" =~ ^[0-9]+$ ]]; then
+  review_count="$(printf '%s' "$reviews_response" | jq -er '
+    if type != "array" then error("expected review array") else . end
+    | select(all(.[ ];
+        type == "object"
+        and (.id | type) == "number"
+        and (.state | type) == "string"
+        and (.user | type) == "object"
+        and (.user.login | type) == "string"
+        and (.user.login | length) > 0
+        and ((.commit_id == null) or ((.commit_id | type) == "string" and (.commit_id | test("^[0-9a-f]{40}$"))))
+        and ((.submitted_at == null) or ((.submitted_at | type) == "string"))
+      ))
+    | length
+  ' 2>/dev/null)" || {
+    echo "STAGING_ACCEPTANCE=FAIL reason=invalid_pr_reviews_response pr=$merged_pr_number page=$review_page" >&2
+    exit 1
+  }
+  if [[ ! "$review_count" =~ ^[0-9]+$ ]]; then
     echo "STAGING_ACCEPTANCE=FAIL reason=invalid_pr_reviews_response pr=$merged_pr_number page=$review_page" >&2
     exit 1
   fi
-  approved_review_count=$((approved_review_count + page_approvals))
+  reviews_json="$(jq -cn --argjson accumulated "$reviews_json" --argjson page "$reviews_response" '$accumulated + $page')" || {
+    echo "STAGING_ACCEPTANCE=FAIL reason=review_accumulation_failed pr=$merged_pr_number page=$review_page" >&2
+    exit 1
+  }
   (( review_count < 100 )) && break
   review_page=$((review_page + 1))
 done
-if (( approved_review_count < 1 )); then
-  echo "STAGING_ACCEPTANCE=FAIL reason=missing_required_approval pr=$merged_pr_number sha=$CANDIDATE_SHA" >&2
+
+approved_review_count="$(printf '%s' "$reviews_json" | jq -er --arg head "$merged_pr_head_sha" --arg author "$merged_pr_author" '
+  [
+    .[]
+    | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED" or .state == "DISMISSED")
+  ]
+  | sort_by(.user.login, .id)
+  | group_by(.user.login)
+  | map(max_by(.id))
+  | [
+      .[]
+      | select(
+          .state == "APPROVED"
+          and .commit_id == $head
+          and .user.login != $author
+        )
+    ]
+  | length
+' 2>/dev/null)" || {
+  echo "STAGING_ACCEPTANCE=FAIL reason=review_state_resolution_failed pr=$merged_pr_number" >&2
+  exit 1
+}
+if [[ ! "$approved_review_count" =~ ^[0-9]+$ ]] || (( approved_review_count < 1 )); then
+  echo "STAGING_ACCEPTANCE=FAIL reason=missing_current_head_approval pr=$merged_pr_number sha=$CANDIDATE_SHA pr_head=$merged_pr_head_sha" >&2
   exit 1
 fi
 
-echo "STAGING_ACCEPTANCE_GOVERNANCE=PASS sha=$CANDIDATE_SHA verified=1 merged_pr=$merged_pr_number approvals=$approved_review_count branch=$STAGING_ACCEPTANCE_BRANCH"
+echo "STAGING_ACCEPTANCE_GOVERNANCE=PASS sha=$CANDIDATE_SHA verified=1 merged_pr=$merged_pr_number approvals=$approved_review_count pr_head=$merged_pr_head_sha branch=$STAGING_ACCEPTANCE_BRANCH"
 
 # Production candidates must carry the zero-submit HubSpot verification contract.
 # This permanently rejects historical SHAs whose production QA filled and
