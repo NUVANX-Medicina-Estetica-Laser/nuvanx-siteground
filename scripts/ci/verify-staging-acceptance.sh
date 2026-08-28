@@ -43,7 +43,37 @@ if [[ ! "$merged_pr_number" =~ ^[0-9]+$ ]]; then
   echo "STAGING_ACCEPTANCE=FAIL reason=candidate_not_merged_pr_head sha=$CANDIDATE_SHA branch=$STAGING_ACCEPTANCE_BRANCH" >&2
   exit 1
 fi
-echo "STAGING_ACCEPTANCE_GOVERNANCE=PASS sha=$CANDIDATE_SHA verified=1 merged_pr=$merged_pr_number branch=$STAGING_ACCEPTANCE_BRANCH"
+
+# The repository ruleset currently requires one approval, but administrators can
+# bypass it. Mirror that approval requirement in the release gate so a bypassed
+# merge cannot become a Production candidate. Paginate reviews and fail closed.
+approved_review_count=0
+review_page=1
+while :; do
+  if (( review_page > 100 )); then
+    echo "STAGING_ACCEPTANCE=FAIL reason=review_pagination_limit_exceeded pr=$merged_pr_number" >&2
+    exit 1
+  fi
+  if ! reviews_response="$(curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 --proto '=https' --proto-redir '=https' "${api_headers[@]}" "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${merged_pr_number}/reviews?per_page=100&page=${review_page}")"; then
+    echo "STAGING_ACCEPTANCE=FAIL reason=github_api_pr_reviews_query_failed pr=$merged_pr_number page=$review_page" >&2
+    exit 1
+  fi
+  review_count="$(printf '%s' "$reviews_response" | jq -r 'length')"
+  page_approvals="$(printf '%s' "$reviews_response" | jq -r '[.[] | select(.state == "APPROVED")] | length')"
+  if [[ ! "$review_count" =~ ^[0-9]+$ || ! "$page_approvals" =~ ^[0-9]+$ ]]; then
+    echo "STAGING_ACCEPTANCE=FAIL reason=invalid_pr_reviews_response pr=$merged_pr_number page=$review_page" >&2
+    exit 1
+  fi
+  approved_review_count=$((approved_review_count + page_approvals))
+  (( review_count < 100 )) && break
+  review_page=$((review_page + 1))
+done
+if (( approved_review_count < 1 )); then
+  echo "STAGING_ACCEPTANCE=FAIL reason=missing_required_approval pr=$merged_pr_number sha=$CANDIDATE_SHA" >&2
+  exit 1
+fi
+
+echo "STAGING_ACCEPTANCE_GOVERNANCE=PASS sha=$CANDIDATE_SHA verified=1 merged_pr=$merged_pr_number approvals=$approved_review_count branch=$STAGING_ACCEPTANCE_BRANCH"
 
 # Production candidates must carry the zero-submit HubSpot verification contract.
 # This permanently rejects historical SHAs whose production QA filled and
