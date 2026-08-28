@@ -73,6 +73,27 @@
   z-index: var(--nvx-z-local-base);
 }
 
+/* First migrated interior-hero surface. The existing first-paint foundation
+ * currently enforces the same ink/light surface after the canonical bundle, so
+ * expose only this safe variant until that foundation becomes variable-aware.
+ * Title and lead consume semantic component variables; page slugs do not own
+ * contrast. */
+.nvx-brand-hero--surface-ink {
+  --nvx-hero-bg: var(--nvx-ink);
+  --nvx-hero-fg: var(--nvx-light);
+  --nvx-hero-muted: var(--nvx-text-on-dark-90);
+  background: var(--nvx-hero-bg);
+  color: var(--nvx-hero-fg);
+}
+
+.nvx-brand-hero--surface-ink .nvx-brand-hero__title {
+  color: var(--nvx-hero-fg);
+}
+
+.nvx-brand-hero--surface-ink .nvx-brand-hero__lead {
+  color: var(--nvx-hero-muted);
+}
+
 /* The governance layer is concatenated after nvx-patterns-editorial.css.
  * Keep the effective interior-hero stack on semantic tokens without rewriting
  * the large legacy pattern source solely for its two local stacking constants. */
