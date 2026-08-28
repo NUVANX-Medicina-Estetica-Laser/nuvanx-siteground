@@ -896,7 +896,7 @@ body:not(.home) .nvx-page-hero__copy h1,
 }
 
 .nvx-endolift-compare-table thead th {
-  background: var(--nvx-surface-soft, var(--nvx-color-soft));
+  background: var(--nvx-surface-soft);
   font-weight: var(--nvx-fw-semibold);
   text-align: left;
   letter-spacing: var(--nvx-track-wide);
