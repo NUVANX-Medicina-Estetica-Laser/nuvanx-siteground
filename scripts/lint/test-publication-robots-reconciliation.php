@@ -16,6 +16,7 @@ $seo_metadata  = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-seo-metadata
 	$seo_retirement = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-seo-legacy-retirement.php';
 	$sitemap_from_xml = $root . '/scripts/staging2/verify-publication-sitemap-from-xml.mjs';
 	$page_hygiene  = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-page-hygiene.php';
+$gracias_behavior = $root . '/scripts/lint/test-gracias-robots-governance.php';
 $staging       = $root . '/.github/workflows/staging.yml';
 $production    = $root . '/.github/workflows/production.yml';
 $deploy        = $root . '/tools/deploy/deploy-to-prod.sh';
@@ -73,7 +74,7 @@ foreach ( $manifest['routes'] as $route => $config ) {
 	}
 }
 
-foreach ( array( $migration, $indexables_migration, $yoast_rebuild, $sitemap_selection_audit, $sitemap_cache_invalidation, $runtime_indexables_audit, $seo_metadata, $seo_retirement, $sitemap_from_xml, $page_hygiene, $staging, $production, $deploy ) as $path ) {
+foreach ( array( $migration, $indexables_migration, $yoast_rebuild, $sitemap_selection_audit, $sitemap_cache_invalidation, $runtime_indexables_audit, $seo_metadata, $seo_retirement, $sitemap_from_xml, $page_hygiene, $gracias_behavior, $staging, $production, $deploy ) as $path ) {
 	if ( ! is_file( $path ) || false === file_get_contents( $path ) ) {
 		fwrite( STDERR, "PUBLICATION_ROBOTS_RECONCILIATION_STATIC=FAIL reason=unreadable_dependency\n" );
 		exit( 1 );
@@ -169,6 +170,18 @@ foreach ( $required as $pair ) {
 		fwrite( STDERR, "PUBLICATION_ROBOTS_RECONCILIATION_STATIC=FAIL reason=missing_contract_marker marker={$pair[1]}\n" );
 		exit( 1 );
 	}
+}
+
+$behavior_output = array();
+$behavior_code   = 0;
+exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $gracias_behavior ), $behavior_output, $behavior_code );
+if ( 0 !== $behavior_code ) {
+	fwrite( STDERR, implode( "\n", $behavior_output ) . "\n" );
+	fwrite( STDERR, "PUBLICATION_ROBOTS_RECONCILIATION_STATIC=FAIL reason=gracias_behavioral_contract\n" );
+	exit( 1 );
+}
+foreach ( $behavior_output as $line ) {
+	echo $line . "\n";
 }
 
 printf(

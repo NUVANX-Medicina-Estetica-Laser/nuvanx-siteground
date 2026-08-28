@@ -8,6 +8,8 @@ declare(strict_types=1);
 $root       = dirname( __DIR__, 2 );
 $runtime    = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-meta-browser-governance.php';
 $bootstrap  = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-environment-flags.php';
+$boundary   = $root . '/scripts/production/verify-production-boundary.mjs';
+$route_gate = __DIR__ . '/test-production-meta-local-boundary.mjs';
 
 $fail = static function ( string $reason ): never {
 	fwrite( STDERR, "META_BROWSER_OWNER_RETIREMENT=FAIL reason={$reason}\n" );
@@ -16,6 +18,8 @@ $fail = static function ( string $reason ): never {
 
 is_file( $runtime ) || $fail( 'runtime_missing' );
 is_file( $bootstrap ) || $fail( 'bootstrap_missing' );
+is_file( $boundary ) || $fail( 'production_boundary_missing' );
+is_file( $route_gate ) || $fail( 'production_local_route_gate_missing' );
 
 $runtime_source   = file_get_contents( $runtime );
 $bootstrap_source = file_get_contents( $bootstrap );
@@ -51,10 +55,18 @@ foreach ( array( 'connect.facebook.net', 'fbevents.js', "fbq('init'", '149794065
 	! str_contains( $runtime_source, $forbidden_browser_owner ) || $fail( 'browser_meta_loader_forbidden:' . $forbidden_browser_owner );
 }
 
-// Execute browser-level JS assertion
-exec('node ' . __DIR__ . '/test-meta-browser-dynamic-loader.mjs', $output, $code);
+// Execute browser-level JS assertion.
+exec('node ' . escapeshellarg( __DIR__ . '/test-meta-browser-dynamic-loader.mjs' ), $output, $code);
 if ($code !== 0) {
 	$fail('browser_level_dynamic_loader_guard_failed');
 }
 
-echo "META_BROWSER_OWNER_RETIREMENT=PASS source_scoped=1 dynamic_loader_guard=1 header_guard=1 browser_pixel_owner=none\n";
+// Keep the P0 Production no-consent route inventory in the same blocking Meta contract.
+$route_output = array();
+$route_code   = 0;
+exec('node ' . escapeshellarg( $route_gate ), $route_output, $route_code);
+if ($route_code !== 0) {
+	$fail('production_local_route_boundary_failed');
+}
+
+echo "META_BROWSER_OWNER_RETIREMENT=PASS source_scoped=1 dynamic_loader_guard=1 header_guard=1 browser_pixel_owner=none local_routes=3 boundary_routes=12 dual_path=1\n";

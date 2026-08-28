@@ -21,6 +21,9 @@ const prodDbName = (process.env.PROD_DB_NAME || 'db0ecrycwv2tgb').trim();
 const requestTimeoutMs = Number.parseInt(process.env.PRODUCTION_BOUNDARY_REQUEST_TIMEOUT_MS || '15000', 10);
 const routes = [
   '/',
+  '/clinicas-de-medicina-estetica-nuvanx/',
+  '/medicina-estetica-chamberi/',
+  '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/',
   '/soluciones-medicas/',
   '/equipo-medico/',
   '/blog/',
@@ -238,6 +241,9 @@ legacy_valoracion_direct_form_count() {
 ua='NUVANX-Production-Boundary/1.6'
 for route in \
   '/' \
+  '/clinicas-de-medicina-estetica-nuvanx/' \
+  '/medicina-estetica-chamberi/' \
+  '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' \
   '/soluciones-medicas/' \
   '/equipo-medico/' \
   '/blog/' \
@@ -373,7 +379,7 @@ do
   echo "$route_label=PASS route=$route render_contract=pass meta_no_consent=pass remote_ip=$reported_remote_ip"
 done
 
-echo "$boundary_label=PASS sha=$stamp_sha run_id=$stamp_run_id routes=9 identity_fields=4 render_contract=pass meta_no_consent=pass mode=$probe_mode"
+echo "$boundary_label=PASS sha=$stamp_sha run_id=$stamp_run_id routes=12 identity_fields=4 render_contract=pass meta_no_consent=pass mode=$probe_mode"
 `;
 
   try {
