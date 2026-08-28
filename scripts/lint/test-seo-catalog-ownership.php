@@ -93,6 +93,20 @@ if ( ! is_file( $local_contract ) ) {
     }
 }
 
+// Doctoralia is an external entity surface, not an authority over the website
+// treatment catalog. Keep its public/admin drift explicit and fail-closed until
+// synchronization/direction ownership and Chamberí admin export are resolved.
+$doctoralia_contract = __DIR__ . '/test-doctoralia-public-parity-contract.php';
+if ( ! is_file( $doctoralia_contract ) ) {
+    $failures[] = 'doctoralia_public_parity_contract_missing';
+} else {
+    $command = 'php ' . escapeshellarg( $doctoralia_contract );
+    passthru( $command, $doctoralia_status );
+    if ( 0 !== $doctoralia_status ) {
+        $failures[] = 'doctoralia_public_parity_contract_failed exit=' . $doctoralia_status;
+    }
+}
+
 // Goya NAP display is governed separately from machine-readable E.164 values.
 // This blocks copy/paste regressions that reformat the public number ad hoc.
 $nap_contract = __DIR__ . '/test-goya-nap-display-contract.php';
