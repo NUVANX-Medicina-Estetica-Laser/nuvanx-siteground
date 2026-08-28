@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-08-28",
+  "issue": 751,
+  "canonical_service_source": "treatment-hub-schema.json",
+  "status": "external_public_parity_open",
+  "mutation_policy": {
+    "doctoralia_write_allowed": false,
+    "reason": "Resolve synchronization ownership, canonical direction and Chamberi admin export before further service mutations.",
+    "required_before_write": [
+      "goya_synchronization_owner_confirmed",
+      "goya_canonical_direction_confirmed",
+      "chamberi_admin_export_complete",
+      "website_chamberi_goya_exact_parity_diff_complete"
+    ]
+  },
+  "target_projection": {
+    "service_keys": [
+      "endolift-facial",
+      "endolaser-corporal",
+      "laser-co2-fraccionado",
+      "exion-btl",
+      "medicina-estetica-facial",
+      "bioestimulacion-colageno",
+      "btl-exilite-ipl",
+      "neuromodulador",
+      "acido-hialuronico",
+      "rinomodelacion"
+    ],
+    "parity_rule": "Doctoralia_services(Chamberi) == Doctoralia_services(Goya) == approved_projection(NUVANX.com)",
+    "legacy_not_canonical": [
+      "HIFU (Facial)",
+      "HIFU (Corporal)",
+      "Coolsculpting",
+      "Tratamiento con dermapen",
+      "Visita Medicina Complementaria y terapias alternativas"
+    ]
+  },
+  "clinics": {
+    "chamberi": {
+      "registration": "CS20144",
+      "facility_id": "47595",
+      "public_url": "https://www.doctoralia.es/clinicas/nuvanx-medicina-estetica-laser",
+      "admin_export_status": "pending",
+      "synchronization_owner_status": "unverified"
+    },
+    "goya": {
+      "registration": "CS20073",
+      "facility_id": "54924",
+      "public_url": "https://www.doctoralia.es/clinicas/nuvanx-medicina-estetica-laser-sede-goya",
+      "admin_export_status": "complete_read_only_2026-08-28",
+      "synchronization_owner_status": "unverified",
+      "canonical_direction_status": "unverified",
+      "directions": {
+        "53333": {
+          "website_owner": "goya_specific_landing",
+          "editable_service_rows": 16,
+          "relationship": "more_complete_candidate",
+          "canonical_status": "candidate_unconfirmed"
+        },
+        "49168": {
+          "website_owner": "nuvanx_home",
+          "editable_service_rows": 7,
+          "relationship": "exact_first_seven_row_subset_of_53333",
+          "canonical_status": "unconfirmed_do_not_mutate"
+        }
+      },
+      "public_primary_profile": {
+        "status": "drift_live",
+        "observed_at": "2026-08-28",
+        "specialties": [
+          "Enfermería",
+          "Medicina estética",
+          "Radiología"
+        ],
+        "equipment": [
+          "Aire acondicionado"
+        ],
+        "responsable_sanitario": "yolanda piñero",
+        "responsable_classification": "observed_public_not_official_register",
+        "service_count": 13,
+        "legacy_services_observed": [
+          "Primera consulta gratuita",
+          "Consulta de revisión",
+          "Visita Medicina Complementaria y terapias alternativas",
+          "Coolsculpting",
+          "Tratamiento profesional despigmentante facial",
+          "Tratamiento con dermapen",
+          "Diatermia",
+          "Fototerapia",
+          "HIFU (Facial)",
+          "HIFU (Corporal)"
+        ]
+      },
+      "public_secondary_surfaces": {
+        "status": "inconsistent_with_primary_profile",
+        "observed_specialty_variants": [
+          [
+            "Medicina estética",
+            "Enfermería",
+            "Geriatría"
+          ]
+        ],
+        "legacy_treatment_search_still_live": [
+          "HIFU",
+          "Tratamiento con dermapen",
+          "Fototerapia"
+        ]
+      },
+      "admin_legal_surface": {
+        "responsable": "Javier Rivera Tejeda",
+        "classification": "observed_admin_not_official_register"
+      },
+      "legal_healthcare_responsible": {
+        "status": "unverified",
+        "source_required": "authoritative_registry_certificate_or_administrative_record",
+        "mutation_allowed": false
+      }
+    }
+  }
+}
