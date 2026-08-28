@@ -21,6 +21,19 @@ A relevant push to `master` can automatically deploy **Staging2 only** through `
 
 See [`docs/operations/deployment.md`](../../docs/operations/deployment.md) for the canonical release model.
 
+## Failure classification before remediation
+
+Before changing application code because a Staging2 or deployment job is red, read [`AGENTS.md`](../../AGENTS.md) and [`docs/operations/staging-transient-classification.md`](../../docs/operations/staging-transient-classification.md).
+
+Do not classify these signals as application regressions without independent `FAIL_REAL` evidence:
+
+- `EX_TEMPFAIL` / exit `75` / `TRANSIENT_INFRASTRUCTURE`;
+- SiteGround HTTP `202`, antibot/captcha/challenge responses confirmed by the classifier;
+- `EX_CONFIG` / exit `78` / `FAIL_CONFIG`;
+- SSH transport/preflight exit `255`.
+
+These outcomes still block release because exact-SHA evidence is incomplete, but the correct diagnosis is `candidate_defect=not_established`. For isolated Block C transients, use the bounded targeted-recovery path; never restore full-matrix replay merely to retry one route/viewport.
+
 ## Migrations are separate from deploys
 
 One-time or bounded data migrations do not belong in this directory. Retained migration tooling lives under [`tools/migrations/`](../migrations/).
