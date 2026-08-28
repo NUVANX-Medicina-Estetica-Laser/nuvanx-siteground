@@ -417,3 +417,26 @@
     transform: none !important;
   }
 }
+
+/* Brand-button aliases used by Home and dark conversion bands. Components
+ * already define the equivalent nvx-button/nvx-btn variants; keep the branded
+ * naming surface behaviorally identical rather than falling back to ink. */
+.nvx-brand-btn--light {
+  --button-bg: var(--nvx-light);
+  --button-color: var(--nvx-ink);
+  --button-border: var(--nvx-light);
+  --button-hover-bg: var(--nvx-surface-soft);
+  --button-hover-color: var(--nvx-ink);
+  --button-hover-border: var(--nvx-surface-soft);
+  --button-focus: var(--nvx-light);
+}
+
+.nvx-brand-btn--secondary-on-dark {
+  --button-bg: var(--nvx-charcoal);
+  --button-color: var(--nvx-light);
+  --button-border: var(--nvx-border-on-dark-45);
+  --button-hover-bg: var(--nvx-on-dark);
+  --button-hover-color: var(--nvx-ink);
+  --button-hover-border: var(--nvx-light);
+  --button-focus: var(--nvx-light);
+}
