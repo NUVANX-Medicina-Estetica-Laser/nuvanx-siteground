@@ -34,6 +34,14 @@
       "Coolsculpting",
       "Tratamiento con dermapen",
       "Visita Medicina Complementaria y terapias alternativas"
+    ],
+    "review_before_retention_or_mapping": [
+      "Diatermia",
+      "Fototerapia",
+      "Maderoterapia",
+      "Micropigmentación de cejas",
+      "Tratamiento profesional despigmentante facial",
+      "Luz pulsada IPL"
     ]
   },
   "clinics": {
@@ -42,7 +50,41 @@
       "facility_id": "47595",
       "public_url": "https://www.doctoralia.es/clinicas/nuvanx-medicina-estetica-laser",
       "admin_export_status": "pending",
-      "synchronization_owner_status": "unverified"
+      "synchronization_owner_status": "unverified",
+      "public_primary_profile": {
+        "status": "public_catalog_not_yet_reconciled_to_repository_ssot",
+        "observed_at": "2026-08-28",
+        "specialties": [
+          "Cirugía plástica, estética y reparadora",
+          "Enfermería",
+          "Medicina estética",
+          "Medicina general",
+          "Especialista en medicina regenerativa"
+        ],
+        "equipment": [
+          "Láser Médico Avanzado",
+          "LaseMAR 1500 / Endolift®",
+          "Thermage® / radiofrecuencia monopolar para tensado cutáneo",
+          "Equipo DEKA para laserlipólisis y remodelación corporal asistida por láser",
+          "Zemits / sistema de contorno corporal con cavitación ultrasónica y masaje al vacío",
+          "Aparatología médico-estética para remodelación corporal, estimulación tisular y protocolos de well-aging"
+        ],
+        "responsable_sanitario": "Dr. José Javier Rivera Tejeda",
+        "responsable_classification": "observed_public_not_official_register",
+        "service_count": 13,
+        "public_service_examples": [
+          "Limpieza facial profunda",
+          "Limpieza facial",
+          "Radiofrecuencia facial",
+          "Masaje descontracturante",
+          "Visita Medicina General",
+          "Técnica Endolift",
+          "Marcación mandibular",
+          "Tratamiento de relleno de labios",
+          "Rinomodelación",
+          "Mesoterapia capilar"
+        ]
+      }
     },
     "goya": {
       "registration": "CS20073",
@@ -99,13 +141,47 @@
             "Medicina estética",
             "Enfermería",
             "Geriatría"
+          ],
+          [
+            "Radiología",
+            "Enfermería",
+            "Medicina estética"
           ]
         ],
         "legacy_treatment_search_still_live": [
           "HIFU",
           "Tratamiento con dermapen",
-          "Fototerapia"
-        ]
+          "Fototerapia",
+          "Maderoterapia",
+          "Micropigmentación de cejas",
+          "Luz pulsada IPL",
+          "Tratamiento profesional despigmentante facial"
+        ],
+        "professional_location_associations_still_live": {
+          "Gosia Ledniowska Janina": [
+            "Visita Medicina Complementaria y terapias alternativas",
+            "Coolsculpting",
+            "Diatermia",
+            "Fototerapia",
+            "HIFU (Ultrasonidos focalizados de alta intensidad)",
+            "Tratamiento con dermapen",
+            "Maderoterapia",
+            "Micropigmentación de cejas",
+            "Luz pulsada IPL",
+            "Tratamiento profesional despigmentante facial"
+          ],
+          "Dr. Jose Javier Rivera Tejeda": [
+            "Primera consulta gratuita",
+            "Consulta de revisión"
+          ],
+          "Dra. Cristina Márquez González": [
+            "Primera consulta gratuita",
+            "Consulta de revisión"
+          ],
+          "Francisco Geraldo Lorenzo": [
+            "Primera consulta gratuita"
+          ]
+        }
       },
       "admin_legal_surface": {
         "responsable": "Javier Rivera Tejeda",
