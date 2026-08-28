@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { assertCanonicalPublishedPaths, loadPublishedPagesManifest, VIEWPORTS } from './published-pages-contract.mjs';
 import { ensureTrustedPagesFile } from './trusted-pages-origin.mjs';
@@ -13,9 +12,12 @@ import {
 
 const VIEWPORT_COUNT = VIEWPORTS.length;
 
-// Block C outer attempts budget: defaults to 1 for matrix-driven CI (escalating
-// to a fresh runner on transient), configurable via BLOCK_C_MAX_ATTEMPTS for PR previews.
-const maxAttempts = Number.parseInt(process.env.BLOCK_C_MAX_ATTEMPTS || '1', 10) || 1;
+// The historical outer-attempt setting is retained for diagnostics and backward
+// compatibility, but transient-only evidence no longer causes another complete
+// 228-case matrix inside the same runner. Repeating the entire matrix turned one
+// SiteGround edge challenge into a CI time-budget failure. The wrapper now owns
+// targeted transient recovery for only the affected route/viewport evidence.
+const configuredMaxAttempts = Number.parseInt(process.env.BLOCK_C_MAX_ATTEMPTS || '1', 10) || 1;
 const baseUrl = (process.env.BASE_URL || 'https://staging2.nuvanx.com').replace(/\/$/, '');
 const expectedSha = (process.env.EXPECTED_SHA || '').trim();
 const attemptScript = fileURLToPath(new URL('./block-c-matrix.mjs', import.meta.url));
@@ -72,8 +74,8 @@ async function prepareTrustedPagesPreload() {
   return preloadUrl.href;
 }
 
-async function runAttempt(attempt) {
-  console.log(`BLOCK_C_ATTEMPT=${attempt}/${maxAttempts}`);
+async function runAttempt() {
+  console.log(`BLOCK_C_ATTEMPT=1/${configuredMaxAttempts} mode=full-matrix-once targeted_recovery=wrapper`);
   const preloadModule = await prepareTrustedPagesPreload();
   const args = preloadModule ? ['--import', preloadModule, attemptScript] : [attemptScript];
 
@@ -85,7 +87,7 @@ async function runAttempt(attempt) {
     child.once('error', reject);
     child.once('exit', (code, signal) => {
       if (signal) {
-        reject(new Error(`Block C attempt ${attempt} terminated by signal ${signal}`));
+        reject(new Error(`Block C full matrix terminated by signal ${signal}`));
         return;
       }
       resolve(Number.isInteger(code) ? code : 1);
@@ -106,7 +108,6 @@ function isAllowedSiteGroundAbort(networkErrors, route) {
   );
 }
 
-// Helper functions for transient failure detection
 function isAntiBotOnly(result, blockers, issues, status) {
   return (
     result.status === 'BLOCKED' &&
@@ -171,20 +172,14 @@ function isTransientFailure(result) {
   const networkErrors = Array.isArray(result.networkErrors) ? result.networkErrors.map(String) : [];
   const status = Number(result.edgeHttpStatus ?? result.httpStatus ?? 0);
 
-  // Check 1: SiteGround Antibot challenge only
   if (isAntiBotOnly(result, blockers, issues, status)) return true;
-
-  // Check 2: Navigation with no HTTP response due to SiteGround challenge
   if (isNavigationNoResponseOnly(result, blockers, issues, networkErrors, status)) return true;
 
-  // Check 3: Network issues with abort errors (either retry or captcha-related)
   const expectedDocumentUrl = `${baseUrl}${String(result.route || '')}`;
   const networkIssueOnly = isNetworkIssueOnly(result, blockers, issues, networkErrors);
-
   if (networkIssueOnly) {
     const retryAbortOnly = isRetryAbortOnly(networkErrors, expectedDocumentUrl);
     const siteGroundCaptchaRequestAbortOnly = isSiteGroundCaptchaRequestAbortOnly(networkErrors);
-
     return retryAbortOnly || siteGroundCaptchaRequestAbortOnly;
   }
 
@@ -204,7 +199,6 @@ function isOriginVerifiedVisualInconclusive(result) {
 
   if (isSiteGroundTransientResponse(edgeStatus, result.edgeHeaders || {}, finalUrl)) return true;
   if (edgeStatus === 0 && isAllowedSiteGroundAbort(networkErrors, result.route)) return true;
-
   return false;
 }
 
@@ -238,17 +232,17 @@ async function readValidatedResults() {
 
 async function successfulResultsAreComplete() {
   const results = await readValidatedResults();
-  if (!results) return { valid: false, complete: false, transientOnly: false };
+  if (!results) return { valid: false, complete: false, transientOnly: false, count: 0 };
 
   const nonPass = results.filter((result) => result.status !== 'PASS');
   if (nonPass.length > 0) {
     console.error(`BLOCK_C_PRODUCTION_ELIGIBILITY=INVALID_SUCCESS non_pass=${nonPass.length}`);
-    return { valid: false, complete: false, transientOnly: false };
+    return { valid: false, complete: false, transientOnly: false, count: nonPass.length };
   }
 
   const inconclusive = results.filter((result) => result.externalInconclusive === true);
   if (inconclusive.length === 0) {
-    return { valid: true, complete: true, transientOnly: false };
+    return { valid: true, complete: true, transientOnly: false, count: 0 };
   }
 
   const transientOnly = inconclusive.every(isOriginVerifiedVisualInconclusive);
@@ -257,51 +251,24 @@ async function successfulResultsAreComplete() {
     console.log(`BLOCK_C_INCONCLUSIVE route=${result.route} viewport=${result.viewport?.key || 'unknown'} edge_http=${result.edgeHttpStatus ?? 0} origin_http=${result.originStatus ?? 0}`);
   }
 
-  return { valid: transientOnly, complete: false, transientOnly };
+  return { valid: transientOnly, complete: false, transientOnly, count: inconclusive.length };
 }
 
 async function failedResultsAreTransient() {
   const results = await readValidatedResults();
-  if (!results) return false;
+  if (!results) return { transient: false, count: 0 };
 
   const failed = results.filter((result) => result.status !== 'PASS');
-  if (failed.length === 0) return false;
+  if (failed.length === 0) return { transient: false, count: 0 };
 
   const transient = failed.every(isTransientFailure);
-  console.log(`BLOCK_C_RETRY_CLASSIFICATION=${transient ? 'TRANSIENT_ONLY' : 'REAL_FAILURE'} failed=${failed.length}`);
+  console.log(`BLOCK_C_RETRY_CLASSIFICATION=${transient ? 'TRANSIENT_INFRASTRUCTURE' : 'REAL_FAILURE'} failed=${failed.length}${transient ? ' candidate_defect=not_established' : ' candidate_defect=established'}`);
   if (transient) {
     for (const result of failed) {
       console.log(`BLOCK_C_TRANSIENT route=${result.route} viewport=${result.viewport?.key || 'unknown'} status=${result.status} edge_http=${result.edgeHttpStatus ?? 0} effective_http=${result.httpStatus ?? 0}`);
     }
   }
-  return transient;
-}
-
-async function disarmRollbackAfterTransientExhaustion(reason = 'transient-only-exhaustion') {
-  const envFile = (process.env.GITHUB_ENV || '').trim();
-  if (envFile) {
-    try {
-      await fs.appendFile(envFile, 'STAGING_MUTATION_ARMED=0\n', 'utf8');
-      console.error(`BLOCK_C_STAGING_ROLLBACK=DISARMED reason=${reason}`);
-    } catch (err) {
-      console.warn(`BLOCK_C_STAGING_ROLLBACK=NOT_DISARMED reason=GITHUB_ENV_write_failed error=${err instanceof Error ? err.message : String(err)}`);
-    }
-  } else {
-    console.warn('BLOCK_C_STAGING_ROLLBACK=NOT_DISARMED reason=GITHUB_ENV_unavailable');
-  }
-
-  const summaryFile = (process.env.GITHUB_STEP_SUMMARY || '').trim();
-  if (summaryFile) {
-    try {
-      await fs.appendFile(
-        summaryFile,
-        `\n### Block C transient exhaustion\n\nSiteGround Antibot or transient infrastructure challenge prevented complete browser validation after all bounded retries (${reason}). No real application defect was established, so the Staging rollback was disarmed. This run remains ineligible for Production acceptance because browser geometry, H1 visibility, responsive layout and images were not completely validated.\n`,
-        'utf8'
-      );
-    } catch (err) {
-      console.warn(`Failed to write GITHUB_STEP_SUMMARY: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
+  return { transient, count: failed.length };
 }
 
 try {
@@ -311,49 +278,37 @@ try {
   process.exit(1);
 }
 
-for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-  let code;
-  try {
-    code = await runAttempt(attempt);
-  } catch (error) {
-    console.error(`BLOCK_C_RESILIENT=FAIL_REAL attempt=${attempt} reason=${error.message}`);
-    console.error(`BLOCK_C_RETRY_CLASSIFICATION=PRELOAD_ERROR reason=${error.message}`);
+let code;
+try {
+  code = await runAttempt();
+} catch (error) {
+  console.error(`BLOCK_C_RESILIENT=FAIL_REAL reason=${error.message}`);
+  console.error(`BLOCK_C_RETRY_CLASSIFICATION=PRELOAD_OR_PROCESS_ERROR reason=${error.message} candidate_defect=unknown`);
+  process.exit(1);
+}
+
+if (code === 0) {
+  const completion = await successfulResultsAreComplete();
+  if (completion.valid && completion.complete) {
+    console.log('BLOCK_C_RESILIENT=PASS attempt=1');
+    process.exit(0);
+  }
+  if (!completion.valid || !completion.transientOnly) {
+    console.error('BLOCK_C_RESILIENT=FAIL_REAL attempt=1 reason=incomplete-or-invalid-success-evidence candidate_defect=established');
     process.exit(1);
   }
 
-  let transientOnly = false;
-  let transientReason = 'transient-only-exhaustion';
-
-  if (code === 0) {
-    const completion = await successfulResultsAreComplete();
-    if (completion.valid && completion.complete) {
-      console.log(`BLOCK_C_RESILIENT=PASS attempt=${attempt}`);
-      process.exit(0);
-    }
-    if (!completion.valid || !completion.transientOnly) {
-      console.error(`BLOCK_C_RESILIENT=FAIL_REAL attempt=${attempt} reason=incomplete-or-invalid-success-evidence`);
-      process.exit(1);
-    }
-    transientOnly = true;
-    transientReason = 'siteground-antibot-visual-inconclusive';
-  } else {
-    transientOnly = await failedResultsAreTransient();
-    if (!transientOnly) {
-      console.error(`BLOCK_C_RESILIENT=FAIL_REAL attempt=${attempt}`);
-      process.exit(code || 1);
-    }
-    transientReason = 'transient-network-or-challenge-failure';
-  }
-
-  if (attempt === maxAttempts) {
-    await disarmRollbackAfterTransientExhaustion(transientReason);
-    console.error(`BLOCK_C_RESILIENT=FAIL_TRANSIENT_EXHAUSTED attempts=${maxAttempts} reason=${transientReason}`);
-    process.exit(EX_TEMPFAIL);
-  }
-
-  const delayMs = 4000 * attempt;
-  console.log(`BLOCK_C_RESILIENT=RETRY_TRANSIENT_INCONCLUSIVE attempt=${attempt} delay_ms=${delayMs}`);
-  await delay(delayMs);
+  console.warn(`BLOCK_C_RETRY_CLASSIFICATION=TRANSIENT_INFRASTRUCTURE cases=${completion.count} reason=siteground-antibot-visual-inconclusive candidate_defect=not_established`);
+  console.warn('BLOCK_C_RESILIENT=DELEGATE_TARGETED_TRANSIENT_RECOVERY full_matrix_replay=disabled wrapper_exit=75');
+  process.exit(EX_TEMPFAIL);
 }
 
-process.exit(1);
+const failed = await failedResultsAreTransient();
+if (!failed.transient) {
+  console.error(`BLOCK_C_RESILIENT=FAIL_REAL attempt=1 wrapper_exit=${code || 1} candidate_defect=established`);
+  process.exit(code || 1);
+}
+
+console.warn(`BLOCK_C_RETRY_CLASSIFICATION=TRANSIENT_INFRASTRUCTURE cases=${failed.count} reason=transient-network-or-challenge-failure candidate_defect=not_established`);
+console.warn('BLOCK_C_RESILIENT=DELEGATE_TARGETED_TRANSIENT_RECOVERY full_matrix_replay=disabled wrapper_exit=75');
+process.exit(EX_TEMPFAIL);
