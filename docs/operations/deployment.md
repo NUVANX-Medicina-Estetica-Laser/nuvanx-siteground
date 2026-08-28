@@ -50,6 +50,8 @@ staging2-block-c-<sha>
 
 The runtime acceptance inventory is dynamic and validates every trusted published WordPress page at the configured viewports. Canonical manifest membership is enforced before the browser matrix runs.
 
+**Failure interpretation is part of the deployment contract.** Before diagnosing a red Staging/PR-preview job as a candidate regression, apply the canonical taxonomy in [`staging-transient-classification.md`](./staging-transient-classification.md). In particular, `EX_TEMPFAIL (75)`, a classified SiteGround `202`/captcha challenge, SSH transport `255`, and `FAIL_CONFIG (78)` do not establish an application defect. They remain NO-GO because evidence is incomplete and require targeted recovery or a fresh exact-SHA run. Only `FAIL_REAL` or equivalent non-transient application/contract evidence establishes a candidate defect.
+
 ### Production
 
 `production.yml` owns the complete production lifecycle in one workflow:
@@ -137,7 +139,7 @@ EXPECTED_SHA=<40-char-sha> BASE_URL=https://staging2.nuvanx.com node scripts/sta
 EXPECTED_SHA=<40-char-sha> BASE_URL=https://staging2.nuvanx.com ORIGIN_SSH_ALIAS=nvx-staging2 node scripts/staging2/valoracion-placement.mjs
 ```
 
-The Staging acceptance runners adhere to the following exit-code contracts:
+The Staging acceptance runners adhere to the following exit-code contracts. The detailed cross-run interpretation is canonicalized in [`staging-transient-classification.md`](./staging-transient-classification.md).
 
 ### Valoración and quality orchestrator (`valoracion-placement.mjs`)
 The orchestrator sequences three isolated validation stages:
@@ -146,12 +148,16 @@ The orchestrator sequences three isolated validation stages:
 3. **Valoración placement runner (`valoracion-placement-resilient.mjs`)**: validates visual geometry, SHA meta tags, and HubSpot interactive mounting across viewports, automatically retried across up to 3 outer QA cycles on transient failure (`EX_TEMPFAIL` 75) with backoff to absorb transient mount jitter (exit `0` on pass, exit `1` on real assertion failure, exit `75` on transient exhaustion with rollback triggered).
 - `0`: All stages passed (`STAGING_ACCEPTANCE_COMPONENT=PASS`).
 - `1`: Real assertion failure (`VALORACION_PLACEMENT=FAIL_REAL` or real contract defect). Fails immediately on the first cycle to preserve failure evidence and save CI time.
-- `75` (`EX_TEMPFAIL`): Transient challenge exhaustion. If originating from the governed blog head stage, Staging2 rollback is disarmed (`STAGING_MUTATION_ARMED=0`); if originating from the valoración placement runner (`VALORACION_PLACEMENT=TRANSIENT_ONLY`), Staging2 rollback is triggered. Diagnostics are written to GitHub Step Summary.
+- `75` (`EX_TEMPFAIL`): Transient challenge exhaustion. If originating from the governed blog head stage, Staging2 rollback is disarmed (`STAGING_MUTATION_ARMED=0`); if originating from the valoración placement runner (`VALORACION_PLACEMENT=TRANSIENT_ONLY`), Staging2 rollback is triggered. Diagnostics are written to GitHub Step Summary. This is an evidence NO-GO, not proof of a candidate defect.
 
 ### Block C matrix runner (`block-c-entrypoint.mjs` / `block-c-matrix.mjs`)
-- `0`: Validation passed (`BLOCK_C_RESILIENT=PASS`). All published routes and viewports validated with complete browser visual geometry. Eligible for Production acceptance.
-- `1`: Real assertion failure (`BLOCK_C_RESILIENT=FAIL_REAL`) or malformed results. Rollback remains armed to revert Staging2.
-- `75` (`EX_TEMPFAIL`): Transient challenge exhaustion (`BLOCK_C_RESILIENT=FAIL_TRANSIENT_EXHAUSTED`). Rollback is disarmed (`STAGING_MUTATION_ARMED=0`) because origin SHA and HTTP 200 were verified, but the run remains ineligible for Production acceptance due to incomplete visual validation.
+- `0`: Validation passed (`BLOCK_C_RESILIENT=PASS` or a successful targeted-recovery PASS). All published routes/viewports have complete required acceptance evidence. Eligible for the Block C portion of Production acceptance.
+- `1` or another non-transient code with `FAIL_REAL`: Real browser/contract assertion failure or malformed application evidence. This establishes a candidate/contract defect and remains a hard NO-GO.
+- `75` (`EX_TEMPFAIL`): `TRANSIENT_INFRASTRUCTURE`; candidate defect **not established**. The full 228-case matrix runs once per runner. Isolated transient route/viewport evidence is revalidated through bounded targeted public-browser recovery rather than replaying the full matrix. If evidence still cannot be completed, the run remains ineligible for Production and a fresh exact-SHA acceptance run is required.
+- `78` (`EX_CONFIG`): CI/configuration contract failure; candidate defect **not established**. Correct the acceptance configuration and rerun the same exact candidate where applicable.
+- SSH/preflight `255`: transport/infrastructure failure; candidate defect **not established**. Do not patch candidate code based only on this signal.
+
+A red GitHub job can therefore mean either a real candidate failure **or** a deliberately blocking transient/configuration state. Inspect the explicit `BLOCK_C_*` classification marker before attributing the failure to application code. `TRANSIENT_INFRASTRUCTURE` is still NO-GO; it is simply not a demonstrated code regression.
 
 ## Repository hygiene
 
