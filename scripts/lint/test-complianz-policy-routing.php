@@ -93,6 +93,11 @@ $manage = nvx_rewrite_complianz_policy_links(
 );
 nvx_assert_contains( 'href="#"', $manage, 'js_managed_consent_control' );
 
+$hash_metadata_with_policy_label = nvx_rewrite_complianz_policy_links(
+	'<a class="cmplz-manage-options" href="#" data-relative_url="#cmplz-manage">Política de privacidad</a>'
+);
+nvx_assert_contains( 'href="#"', $hash_metadata_with_policy_label, 'hash_metadata_suppresses_policy_label_fallback' );
+
 $ordinary_hash = '<a class="local-anchor" href="#">Abrir panel local</a>';
 nvx_assert_same( $ordinary_hash, nvx_rewrite_complianz_policy_links( $ordinary_hash ), 'ordinary_hash_untouched' );
 
@@ -143,4 +148,4 @@ nvx_assert_filter_registration(
 	'canonical_template_filter_registered'
 );
 
-fwrite( STDOUT, "COMPLIANZ_POLICY_ROUTING=PASS cases=19 privacy=canonical cookies=canonical legal=canonical metadata=authoritative js_controls=preserved template_url=preserved owner=single\n" );
+fwrite( STDOUT, "COMPLIANZ_POLICY_ROUTING=PASS cases=20 privacy=canonical cookies=canonical legal=canonical metadata=authoritative hash_metadata=authoritative js_controls=preserved template_url=preserved owner=single\n" );
