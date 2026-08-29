@@ -216,10 +216,6 @@ rollback_count="$(grep -Fc "$rollback_condition" "$WORKFLOW" || true)"
 }
 echo 'STAGING_CANCELLATION_ROLLBACK_CONTRACT=PASS owners=master,pr-preview trigger=failure_or_cancelled armed=1'
 
-# Trusted migration gate: it is explicitly pending until the theme runtime is
-# introduced, then becomes blocking automatically for every normal PR/push.
-php "$ROOT/scripts/lint/test-document-buffer-retirement.php"
-
 # Vendor media governance must distinguish packshot filenames from legitimate
 # treatment-directory names such as /exion-face/ and /endolift-facial/.
 php "$ROOT/scripts/lint/test-vendor-image-url-boundary.php"

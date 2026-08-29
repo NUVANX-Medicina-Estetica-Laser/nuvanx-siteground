@@ -69,16 +69,6 @@ function nvx_get_deploy_stamp(): array {
 	return $stamp;
 }
 
-/**
- * Get a specific deploy stamp value.
- *
- * @param string $key Stamp key (DEPLOY_SHA, DEPLOY_RUN_ID, DEPLOY_TIMESTAMP, RELEASE_ID).
- * @return string Stamp value or empty string if not set.
- */
-function nvx_get_deploy_stamp_value( string $key ): string {
-	$stamp = nvx_get_deploy_stamp();
-	return $stamp[ $key ] ?? '';
-}
 
 /**
  * Render deploy identity as non-schema HTML meta tags.
