@@ -57,18 +57,6 @@ function nvx_get_canonical_page_registry(): array {
 			'surface'  => 'surface-warm',
 			'template' => 'page.php',
 		),
-		'/medicina-estetica-chamberi/' => array(
-			'owner'    => 'nvx_sede_chamberi',
-			'renderer' => 'templates/page-sede.php',
-			'surface'  => 'surface-warm',
-			'template' => 'templates/page-sede.php',
-		),
-		'/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' => array(
-			'owner'    => 'nvx_sede_goya',
-			'renderer' => 'templates/page-sede.php',
-			'surface'  => 'surface-warm',
-			'template' => 'templates/page-sede.php',
-		),
 		'/madrid/valoracion/' => array(
 			'owner'    => 'nvx_valoracion_managed_page',
 			'renderer' => 'nvx_render_managed_valoracion_page',
@@ -280,6 +268,26 @@ function nvx_get_canonical_page_registry(): array {
 			'template' => 'page.php',
 		),
 	);
+
+	$clinics = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	foreach (
+		array(
+			'chamberi' => 'nvx_sede_chamberi',
+			'goya'     => 'nvx_sede_goya',
+		) as $clinic_key => $owner
+	) {
+		$landing_path = trim( (string) ( $clinics[ $clinic_key ]['landing_path'] ?? '' ) );
+		if ( '' === $landing_path ) {
+			continue;
+		}
+		$landing_path = '/' . trim( $landing_path, '/' ) . '/';
+		$registry[ $landing_path ] = array(
+			'owner'    => $owner,
+			'renderer' => 'templates/page-sede.php',
+			'surface'  => 'surface-warm',
+			'template' => 'templates/page-sede.php',
+		);
+	}
 
 	return $registry;
 }

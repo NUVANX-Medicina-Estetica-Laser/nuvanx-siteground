@@ -107,7 +107,7 @@ function nvx_co2_hero_copy_markup(): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'laser-co2-page.json' )['hero'] ?? array();
 
-	$colegiado = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 
 	$byline_html  = '<div class="nvx-medical-byline">';
 	$byline_html .= '<div class="nvx-medical-byline__text">';
@@ -144,7 +144,7 @@ function nvx_co2_editorial_body_markup(): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'laser-co2-page.json' );
 
-	$colegiado    = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado    = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 	$review_label = defined( 'NVX_CO2_REVIEW_LABEL' ) ? NVX_CO2_REVIEW_LABEL : 'julio 2026';
 	$equipo_url   = home_url( '/equipo-medico/' );
 

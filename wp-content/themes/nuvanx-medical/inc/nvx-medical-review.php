@@ -18,12 +18,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /** @return array<string,array{name:string,license:string,url:string,id:string,title:string}> */
 function nvx_medical_reviewers(): array {
-	$license = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? (string) NVX_DIRECTOR_COLEGIADO : '282864786';
+	$license = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
+	$name    = function_exists( 'nvx_medical_staff_name' ) ? nvx_medical_staff_name( 'director' ) : '';
 	$url     = home_url( '/equipo-medico/#physician-rivera-tejeda' );
 
 	return array(
 		'rivera' => array(
-			'name'    => 'Dr. José Javier Rivera Tejeda',
+			'name'    => $name,
 			'license' => $license,
 			'url'     => $url,
 			'id'      => $url,

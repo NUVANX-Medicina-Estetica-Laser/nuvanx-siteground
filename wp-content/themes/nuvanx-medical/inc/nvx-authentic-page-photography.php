@@ -47,7 +47,7 @@ function nvx_authentic_page_photo_registry(): array {
 			'title'   => 'Una indicación empieza por escuchar y valorar',
 			'images'  => array(
 				array( 'id' => 2896, 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Dirección médica' ),
-				array( 'id' => 2381, 'alt' => 'Dr. José Javier Rivera durante una valoración médica en NUVANX Madrid', 'caption' => 'Valoración personalizada' ),
+				array( 'id' => nvx_medical_staff_profile_media_attachment_id( 'director' ), 'alt' => 'Dr. José Javier Rivera durante una valoración médica en NUVANX Madrid', 'caption' => 'Valoración personalizada' ),
 				array( 'id' => 1630, 'alt' => 'Box de tratamiento real de NUVANX', 'caption' => 'Entorno clínico' ),
 			),
 		),
@@ -189,7 +189,7 @@ function nvx_authentic_page_photo_registry(): array {
 			'eyebrow' => 'Equipo médico',
 			'title'   => 'Profesionales que acompañan cada decisión',
 			'images'  => array(
-				array( 'id' => 2381, 'alt' => 'Dr. José Javier Rivera durante una valoración médica en NUVANX Madrid', 'caption' => 'Dirección médica' ),
+				array( 'id' => nvx_medical_staff_profile_media_attachment_id( 'director' ), 'alt' => 'Dr. José Javier Rivera durante una valoración médica en NUVANX Madrid', 'caption' => 'Dirección médica' ),
 				array( 'id' => 1840, 'alt' => 'Dra. Ivon Rivera Deras — equipo médico NUVANX Madrid', 'caption' => 'Medicina preventiva' ),
 				array( 'id' => 2897, 'alt' => 'Francisco Geraldo — coordinación NUVANX Madrid', 'caption' => 'Coordinación NUVANX' ),
 			),
@@ -315,7 +315,8 @@ function nvx_governed_public_image_ids(): array {
 
 /** Maximum responsive candidate width for a governed attachment. */
 function nvx_governed_public_srcset_cap( int $attachment_id ): int {
-	if ( 2381 === $attachment_id ) {
+	$director_profile_id = nvx_medical_staff_profile_media_attachment_id( 'director' );
+	if ( $director_profile_id > 0 && $director_profile_id === $attachment_id ) {
 		return 768;
 	}
 	if ( in_array( $attachment_id, array( 1630, 1632, 1840 ), true ) ) {
@@ -381,12 +382,13 @@ add_filter( 'wp_calculate_image_srcset', 'nvx_governed_public_srcset_sources', 1
 
 /**
  * Match the real CSS width of the director portrait instead of the historic
- * 28vw hint, which could make browsers select the 1.9 MB 2381 source.
+ * viewport-relative hint, which could make browsers select the oversized source.
  */
 function nvx_governed_public_image_attributes( array $attr, $attachment, $size ): array {
 	unset( $size );
-	$attachment_id = isset( $attachment->ID ) ? (int) $attachment->ID : 0;
-	if ( 2381 === $attachment_id ) {
+	$attachment_id     = isset( $attachment->ID ) ? (int) $attachment->ID : 0;
+	$director_profile_id = nvx_medical_staff_profile_media_attachment_id( 'director' );
+	if ( $director_profile_id > 0 && $director_profile_id === $attachment_id ) {
 		$attr['sizes'] = '(min-width: 769px) 224px, 92vw';
 	}
 	return $attr;

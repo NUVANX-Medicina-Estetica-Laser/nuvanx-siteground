@@ -992,7 +992,7 @@ function nvx_tariff_price_label( string $group, string $key ): string {
  * Visible YMYL signature: name, specialty, colegiado, review month.
  */
 function nvx_clinical_authority_byline_markup( string $review_label = '' ): string {
-	$colegiado = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? (string) NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 	$label     = '' !== $review_label ? $review_label : nvx_clinical_review_month_label();
 
 	return '<p class="nvx-medical-review">' . esc_html(

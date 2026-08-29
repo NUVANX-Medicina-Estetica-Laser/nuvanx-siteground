@@ -18,30 +18,36 @@ if ( function_exists( 'nvxIsClinicsHub' ) && nvxIsClinicsHub() ) {
 	return;
 }
 
-// Get clinic-specific data for individual clinic pages
-$clinics  = function_exists( 'nvx_schema_clinics' ) ? nvx_schema_clinics() : array();
-$registry = function_exists( 'nvx_schema_page_registry' ) ? nvx_schema_page_registry() : array();
-$config   = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+// Get clinic-specific data for individual clinic pages.
+$clinics = function_exists( 'nvx_schema_clinics' ) ? nvx_schema_clinics() : array();
+$config  = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
 
-// Determine which clinic this page represents based on URL/slug
+// Determine which clinic this page represents based on URL/slug.
 $current_slug = get_post_field( 'post_name', get_the_ID() );
-$clinic_key   = 'chamberi'; // Default
+$clinic_key   = 'chamberi';
 
 if ( strpos( $current_slug, 'goya' ) !== false || strpos( $current_slug, 'salamanca' ) !== false ) {
 	$clinic_key = 'goya';
 }
 
-$clinic_data   = $clinics[ $clinic_key ] ?? array();
-$clinic_config = $config[ $clinic_key ] ?? array();
+$clinic_data   = isset( $clinics[ $clinic_key ] ) && is_array( $clinics[ $clinic_key ] ) ? $clinics[ $clinic_key ] : array();
+$clinic_config = isset( $config[ $clinic_key ] ) && is_array( $config[ $clinic_key ] ) ? $config[ $clinic_key ] : array();
 
-$clinic_name    = ! empty( $clinic_data['name'] ) ? $clinic_data['name'] : ( 'chamberi' === $clinic_key ? 'Centro Clínico NUVANX Chamberí' : 'Centro Clínico NUVANX Salamanca–Goya' );
-$clinic_address = ! empty( $clinic_config['address'] ) ? sprintf( '%s, %s %s', $clinic_config['address'], $clinic_config['postal_code'], $clinic_config['locality'] ) : '';
-$clinic_phone   = ! empty( $clinic_config['phone_href'] ) ? $clinic_config['phone_href'] : '';
-$clinic_hours   = ! empty( $clinic_config['hours'] ) ? $clinic_config['hours'] : '';
-$clinic_maps    = ! empty( $clinic_data['hasMap'] ) ? $clinic_data['hasMap'] : '';
-
-$phone_display  = ! empty( $clinic_config['phone'] ) ? $clinic_config['phone'] : '';
-$whatsapp_url   = ! empty( $clinic_config['whatsapp_href'] ) ? $clinic_config['whatsapp_href'] : ( ! empty( $clinic_phone ) ? 'https://wa.me/' . preg_replace( '/\D/', '', $clinic_phone ) : '' );
+$clinic_name    = ! empty( $clinic_data['name'] ) ? (string) $clinic_data['name'] : '';
+$clinic_address = ! empty( $clinic_config['address'] )
+	? sprintf(
+		'%s, %s %s',
+		(string) $clinic_config['address'],
+		(string) ( $clinic_config['postal_code'] ?? '' ),
+		(string) ( $clinic_config['locality'] ?? '' )
+	)
+	: '';
+$clinic_phone   = (string) ( $clinic_config['phone_href'] ?? '' );
+$phone_display  = (string) ( $clinic_config['phone'] ?? '' );
+$clinic_reg     = (string) ( $clinic_config['reg'] ?? '' );
+$clinic_hours   = (string) ( $clinic_config['hours'] ?? '' );
+$clinic_maps    = ! empty( $clinic_data['hasMap'] ) ? (string) $clinic_data['hasMap'] : '';
+$whatsapp_url   = (string) ( $clinic_config['whatsapp_href'] ?? '' );
 $valoracion_url = home_url( '/madrid/valoracion/' );
 
 ob_start();
@@ -66,52 +72,34 @@ ob_start();
 					echo nvx_clinical_authority_byline_markup(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- helper escapes.
 				}
 				?>
-				<p class="nvx-brand-hero__lead">
-					<?php
-					if ( 'chamberi' === $clinic_key ) {
-						echo esc_html(
-							sprintf(
-								/* translators: 1: street address, 2: phone */
-								__( 'Clínica de medicina estética en Chamberí: %1$s. Teléfono %2$s. Centro sanitario CS20144. Valoración médica presencial antes de cualquier tratamiento.', 'nuvanx-medical' ),
-								$clinic_address !== '' ? $clinic_address : __( 'Calle de Fernández de la Hoz, 4, Bajo Derecha, 28010 Madrid', 'nuvanx-medical' ),
-								$phone_display !== '' ? $phone_display : '669 319 836'
-							)
-						);
-					} else {
-						echo esc_html(
-							sprintf(
-								/* translators: 1: street address, 2: phone */
-								__( 'Clínica de medicina estética láser en Goya, Barrio de Salamanca: %1$s. Teléfono %2$s. Centro sanitario CS20073. Valoración médica presencial antes de cualquier tratamiento.', 'nuvanx-medical' ),
-								$clinic_address !== '' ? $clinic_address : __( 'Calle de Fernán González, 26, 28009 Madrid', 'nuvanx-medical' ),
-								$phone_display !== '' ? $phone_display : '647 50 51 07'
-							)
-						);
-					}
-					?>
-				</p>
+				<?php if ( '' !== $clinic_address && '' !== $phone_display && '' !== $clinic_reg ) : ?>
+					<p class="nvx-brand-hero__lead">
+						<?php
+						$lead_format = 'chamberi' === $clinic_key
+							? __( 'Clínica de medicina estética en Chamberí: %1$s. Teléfono %2$s. Centro sanitario %3$s. Valoración médica presencial antes de cualquier tratamiento.', 'nuvanx-medical' )
+							: __( 'Clínica de medicina estética láser en Goya, Barrio de Salamanca: %1$s. Teléfono %2$s. Centro sanitario %3$s. Valoración médica presencial antes de cualquier tratamiento.', 'nuvanx-medical' );
+						echo esc_html( sprintf( $lead_format, $clinic_address, $phone_display, $clinic_reg ) );
+						?>
+					</p>
+				<?php endif; ?>
 				<div class="nvx-brand-actions">
 					<a href="<?php echo esc_url( $valoracion_url ); ?>" class="nvx-brand-btn nvx-brand-btn--primary">
 						<?php esc_html_e( 'Solicitar valoración médica', 'nuvanx-medical' ); ?>
 					</a>
-					<?php if ( ! empty( $whatsapp_url ) ) : ?>
+					<?php if ( '' !== $whatsapp_url ) : ?>
 						<a href="<?php echo esc_url( $whatsapp_url ); ?>" class="nvx-brand-btn nvx-brand-btn--secondary" rel="noopener noreferrer" target="_blank">
 							<?php esc_html_e( 'Contactar por WhatsApp', 'nuvanx-medical' ); ?>
 						</a>
 					<?php endif; ?>
 				</div>
-				<p class="nvx-brand-meta nvx-reg-copy">
-					<?php
-					if ( 'chamberi' === $clinic_key ) {
-						esc_html_e( 'Registro sanitario: CS20144 · Chamberí, Madrid', 'nuvanx-medical' );
-					} else {
-						esc_html_e( 'Registro sanitario: CS20073 · Salamanca–Goya, Madrid', 'nuvanx-medical' );
-					}
-					?>
-				</p>
+				<?php if ( '' !== $clinic_reg ) : ?>
+					<p class="nvx-brand-meta nvx-reg-copy">
+						<?php echo esc_html( sprintf( __( 'Registro sanitario: %1$s · %2$s, Madrid', 'nuvanx-medical' ), $clinic_reg, 'chamberi' === $clinic_key ? 'Chamberí' : 'Salamanca–Goya' ) ); ?>
+					</p>
+				<?php endif; ?>
 			</div>
 		</div>
 	</section>
-
 
 		<section class="nvx-brand-section" aria-label="<?php esc_attr_e( 'Información de la sede', 'nuvanx-medical' ); ?>">
 			<div class="nvx-brand-section__inner">
@@ -131,7 +119,7 @@ ob_start();
 						<h3 class="nvx-brand-subtitle"><?php esc_html_e( 'Teléfono', 'nuvanx-medical' ); ?></h3>
 						<p class="nvx-body">
 							<svg class="nvx-icon" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 1 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-							<?php if ( ! empty( $phone_display ) ) : ?>
+							<?php if ( '' !== $phone_display && '' !== $clinic_phone ) : ?>
 								<a href="<?php echo esc_url( 'tel:' . $clinic_phone ); ?>"><?php echo esc_html( $phone_display ); ?></a>
 							<?php endif; ?>
 						</p>
@@ -145,7 +133,7 @@ ob_start();
 						</p>
 					</div>
 
-					<?php if ( ! empty( $clinic_maps ) ) : ?>
+					<?php if ( '' !== $clinic_maps ) : ?>
 						<div class="nvx-brand-card">
 							<h3 class="nvx-brand-subtitle"><?php esc_html_e( 'Cómo llegar', 'nuvanx-medical' ); ?></h3>
 							<p class="nvx-body">
@@ -160,16 +148,16 @@ ob_start();
 		</section>
 
 		<?php
-			$clinic_photos = function_exists( 'nvx_clinic_landing_photos' )
-				? nvx_clinic_landing_photos( $clinic_key )
-				: array();
-			$clinic_gallery_expected = function_exists( 'nvx_clinic_landing_gallery_expected_count' )
-				? nvx_clinic_landing_gallery_expected_count( $clinic_key )
-				: ( 'goya' === $clinic_key ? 2 : 4 );
-			$clinic_gallery_complete = function_exists( 'nvx_clinic_landing_gallery_is_complete' )
-				? nvx_clinic_landing_gallery_is_complete( $clinic_photos, $clinic_key )
-				: $clinic_gallery_expected === count( $clinic_photos );
-			if ( $clinic_gallery_complete ) :
+		$clinic_photos = function_exists( 'nvx_clinic_landing_photos' )
+			? nvx_clinic_landing_photos( $clinic_key )
+			: array();
+		$clinic_gallery_expected = function_exists( 'nvx_clinic_landing_gallery_expected_count' )
+			? nvx_clinic_landing_gallery_expected_count( $clinic_key )
+			: ( 'goya' === $clinic_key ? 2 : 4 );
+		$clinic_gallery_complete = function_exists( 'nvx_clinic_landing_gallery_is_complete' )
+			? nvx_clinic_landing_gallery_is_complete( $clinic_photos, $clinic_key )
+			: $clinic_gallery_expected === count( $clinic_photos );
+		if ( $clinic_gallery_complete ) :
 			?>
 		<section class="nvx-brand-section nvx-clinic-gallery" aria-labelledby="nvx-clinic-gallery-title">
 			<div class="nvx-brand-section__inner">
@@ -178,40 +166,40 @@ ob_start();
 				<div class="nvx-clinic-gallery__grid">
 					<?php foreach ( $clinic_photos as $photo ) : ?>
 						<?php
-							$attachment_id = (int) ( $photo['id'] ?? 0 );
-							$alt           = (string) ( $photo['alt'] ?? '' );
-							$sizes         = '(min-width: 1024px) 50vw, (min-width: 641px) 50vw, 100vw';
-							if ( $attachment_id > 0 ) {
-								$image = wp_get_attachment_image(
-									$attachment_id,
-									'full',
-									false,
-									array(
-										'class'    => 'nvx-clinic-gallery__image',
-										'alt'      => $alt,
-										'loading'  => 'lazy',
-										'decoding' => 'async',
-										'sizes'    => $sizes,
-									)
+						$attachment_id = (int) ( $photo['id'] ?? 0 );
+						$alt           = (string) ( $photo['alt'] ?? '' );
+						$sizes         = '(min-width: 1024px) 50vw, (min-width: 641px) 50vw, 100vw';
+						if ( $attachment_id > 0 ) {
+							$image = wp_get_attachment_image(
+								$attachment_id,
+								'full',
+								false,
+								array(
+									'class'    => 'nvx-clinic-gallery__image',
+									'alt'      => $alt,
+									'loading'  => 'lazy',
+									'decoding' => 'async',
+									'sizes'    => $sizes,
+								)
+							);
+						} else {
+							$src    = isset( $photo['file'] ) ? (string) $photo['file'] : '';
+							$srcset = isset( $photo['srcset'] ) ? (string) $photo['srcset'] : '';
+							$width  = isset( $photo['width'] ) ? (int) $photo['width'] : 0;
+							$height = isset( $photo['height'] ) ? (int) $photo['height'] : 0;
+							$image  = '';
+							if ( '' !== $src && '' !== $srcset && $width > 0 && $height > 0 ) {
+								$image = sprintf(
+									'<img class="nvx-clinic-gallery__image" src="%1$s" srcset="%2$s" sizes="%3$s" width="%4$d" height="%5$d" alt="%6$s" loading="lazy" decoding="async">',
+									esc_url( $src ),
+									esc_attr( $srcset ),
+									esc_attr( $sizes ),
+									$width,
+									$height,
+									esc_attr( $alt )
 								);
-							} else {
-								$src    = isset( $photo['file'] ) ? (string) $photo['file'] : '';
-								$srcset = isset( $photo['srcset'] ) ? (string) $photo['srcset'] : '';
-								$width  = isset( $photo['width'] ) ? (int) $photo['width'] : 0;
-								$height = isset( $photo['height'] ) ? (int) $photo['height'] : 0;
-								$image  = '';
-								if ( '' !== $src && '' !== $srcset && $width > 0 && $height > 0 ) {
-									$image = sprintf(
-										'<img class="nvx-clinic-gallery__image" src="%1$s" srcset="%2$s" sizes="%3$s" width="%4$d" height="%5$d" alt="%6$s" loading="lazy" decoding="async">',
-										esc_url( $src ),
-										esc_attr( $srcset ),
-										esc_attr( $sizes ),
-										$width,
-										$height,
-										esc_attr( $alt )
-									);
-								}
 							}
+						}
 						if ( '' === $image ) {
 							continue;
 						}
@@ -235,20 +223,19 @@ ob_start();
 			</div>
 		</section>
 			<?php
-					endif;
-			if ( ! $clinic_gallery_complete ) :
-				?>
-				<section class="nvx-brand-section nvx-clinic-gallery" data-nvx-gallery-contract="incomplete" aria-labelledby="nvx-clinic-gallery-title">
-					<div class="nvx-brand-section__inner">
-						<h2 id="nvx-clinic-gallery-title" class="nvx-brand-title"><?php esc_html_e( 'Galería de la sede temporalmente no disponible', 'nuvanx-medical' ); ?></h2>
-						<p class="nvx-brand-lead"><?php esc_html_e( 'Estamos actualizando las imágenes verificadas de esta sede. La galería se publicará de nuevo cuando estén disponibles las fotografías editoriales aprobadas para esta sede.', 'nuvanx-medical' ); ?></p>
-					</div>
-				</section>
-				<?php
-			endif;
+		endif;
+		if ( ! $clinic_gallery_complete ) :
+			?>
+			<section class="nvx-brand-section nvx-clinic-gallery" data-nvx-gallery-contract="incomplete" aria-labelledby="nvx-clinic-gallery-title">
+				<div class="nvx-brand-section__inner">
+					<h2 id="nvx-clinic-gallery-title" class="nvx-brand-title"><?php esc_html_e( 'Galería de la sede temporalmente no disponible', 'nuvanx-medical' ); ?></h2>
+					<p class="nvx-brand-lead"><?php esc_html_e( 'Estamos actualizando las imágenes verificadas de esta sede. La galería se publicará de nuevo cuando estén disponibles las fotografías editoriales aprobadas para esta sede.', 'nuvanx-medical' ); ?></p>
+				</div>
+			</section>
+			<?php
+		endif;
 
-			if ( 'goya' === $clinic_key && function_exists( 'nvx_goya_clinical_team_markup' ) ) {
-
+		if ( 'goya' === $clinic_key && function_exists( 'nvx_goya_clinical_team_markup' ) ) {
 			echo nvx_goya_clinical_team_markup(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- helper escapes.
 		}
 		?>

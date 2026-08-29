@@ -263,7 +263,7 @@ function nvx_valoracion_schema_graph( $graph ) {
 	}
 
 	$url         = home_url( '/madrid/valoracion/' );
-	$colegiado   = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? (string) NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado   = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 	$description = __( 'Valoración médica en Madrid de 15 a 30 minutos: diagnóstico, indicación y presupuesto documentado antes de tratar. Sin Anestesia General. Recuperación en 48h como reincorporación habitual, según el protocolo indicado. Sin obligación de procedimiento.', 'nuvanx-medical' );
 	$action      = array(
 		'@type'  => 'ReserveAction',

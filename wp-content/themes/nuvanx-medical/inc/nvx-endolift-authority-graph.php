@@ -31,10 +31,15 @@ function nvx_endolift_authority_graph_is_target(): bool {
  * Render the missing contextual relationships for the Endolift® owner page.
  */
 function nvx_endolift_authority_graph_markup(): string {
-	$problem_url  = home_url( '/papada-definicion-mandibular-madrid/' );
-	$pricing_url  = home_url( '/inversion-medicina-estetica/' );
-	$chamberi_url = home_url( '/medicina-estetica-chamberi/' );
-	$goya_url     = home_url( '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' );
+	$problem_url = home_url( '/papada-definicion-mandibular-madrid/' );
+	$pricing_url = home_url( '/inversion-medicina-estetica/' );
+	$clinics     = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+
+	$chamberi_path = isset( $clinics['chamberi']['landing_path'] ) ? (string) $clinics['chamberi']['landing_path'] : '';
+	$goya_path     = isset( $clinics['goya']['landing_path'] ) ? (string) $clinics['goya']['landing_path'] : '';
+	$clinics_hub   = home_url( '/clinicas-de-medicina-estetica-nuvanx/' );
+	$chamberi_url  = '' !== $chamberi_path ? home_url( $chamberi_path ) : $clinics_hub;
+	$goya_url      = '' !== $goya_path ? home_url( $goya_path ) : $clinics_hub;
 
 	$html  = '<section class="nvx-brand-section nvx-endolift-authority-graph" aria-labelledby="nvx-endolift-context-title" data-nvx-endolift-authority-graph="1">';
 	$html .= '<div class="nvx-brand-section__inner">';

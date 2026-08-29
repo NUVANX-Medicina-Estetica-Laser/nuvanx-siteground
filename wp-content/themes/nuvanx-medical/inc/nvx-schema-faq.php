@@ -221,6 +221,13 @@ function nvx_schema_faq_catalog() {
 
 	// Post-Maternity hub FAQs (PHP-based, not in JSON)
 	if ( empty( $catalog['post-maternity'] ) ) {
+		$clinics = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+		$chamberi_reg = (string) ( $clinics['chamberi']['reg'] ?? '' );
+		$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
+		$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+		$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
+		$faq_where = 'Valoración en ' . $chamberi_name . ' (' . $chamberi_reg . ') y Salamanca–' . $goya_name . ' (' . $goya_reg . '), con plan documentado si procede.';
+
 		$catalog['post-maternity'] = array(
 			array(
 				'q' => '¿Puedo tratarme en lactancia?',
@@ -240,7 +247,7 @@ function nvx_schema_faq_catalog() {
 			),
 			array(
 				'q' => '¿Dónde?',
-				'a' => 'Valoración en Chamberí (CS20144) y Salamanca–Goya (CS20073), con plan documentado si procede.',
+				'a' => $faq_where,
 			),
 		);
 	}

@@ -31,11 +31,20 @@ function nvx_theme_is_goya_page(): bool {
 	if ( is_admin() ) {
 		return false;
 	}
-	if ( is_page( 'clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca' ) ) { // Goya Sede page ID
+
+	$clinics   = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$goya_path = trim( (string) ( $clinics['goya']['landing_path'] ?? '' ) );
+	if ( '' === $goya_path ) {
+		return false;
+	}
+	$goya_path = '/' . trim( $goya_path, '/' ) . '/';
+	$goya_slug = trim( $goya_path, '/' );
+	if ( '' !== $goya_slug && is_page( $goya_slug ) ) {
 		return true;
 	}
-	$path = nvx_theme_request_path();
-	return '/' . trim( $path, '/' ) . '/' === '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/';
+
+	$path = '/' . trim( nvx_theme_request_path(), '/' ) . '/';
+	return $path === $goya_path;
 }
 
 add_filter(

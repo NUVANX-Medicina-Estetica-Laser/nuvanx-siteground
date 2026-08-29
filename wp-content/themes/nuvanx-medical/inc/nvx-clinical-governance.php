@@ -97,12 +97,18 @@ function nvx_clinical_generate_schema( string $treatment_id, string $url ): ?arr
 		$schema['followup'] = $data['follow_up'];
 	}
 
-	// Attach medical responsible credentials (E-E-A-T).
-	if ( ! empty( $data['medical_responsible'] ) ) {
-		$schema['provider'] = array(
-			'@type' => 'Physician',
-			'name'  => $data['medical_responsible'],
-		);
+	// Resolve medical responsibility from the canonical staff registry.
+	$medical_id = trim( (string) ( $data['medical_responsible_id'] ?? '' ) );
+	if ( '' !== $medical_id && function_exists( 'nvx_medical_staff_name' ) && function_exists( 'nvx_medical_colegiado' ) ) {
+		$medical_name      = trim( (string) nvx_medical_staff_name( $medical_id ) );
+		$medical_colegiado = trim( (string) nvx_medical_colegiado( $medical_id ) );
+		if ( '' !== $medical_name && '' !== $medical_colegiado ) {
+			$schema['provider'] = array(
+				'@type'      => 'Physician',
+				'name'       => $medical_name,
+				'identifier' => $medical_colegiado,
+			);
+		}
 	}
 
 	return $schema;

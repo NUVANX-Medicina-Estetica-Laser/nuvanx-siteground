@@ -87,7 +87,7 @@ function nvx_exion_hero_copy_markup(): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'exion-page.json' )['hero'] ?? array();
 
-	$colegiado = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 
 	$html  = '<div class="nvx-brand-hero__copy">';
 	$html .= '<p class="nvx-brand-kicker">' . esc_html( $data['kicker'] ?? '' ) . '</p>';
@@ -129,7 +129,7 @@ function nvx_exion_editorial_body_markup(): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'exion-page.json' );
 
-	$colegiado    = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado    = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 	$review_label = defined( 'NVX_EXION®_REVIEW_LABEL' ) ? NVX_EXION®_REVIEW_LABEL : 'julio 2026';
 	$equipo_url   = home_url( '/equipo-medico/' );
 

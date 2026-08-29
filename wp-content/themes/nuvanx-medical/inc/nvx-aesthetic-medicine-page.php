@@ -150,12 +150,18 @@ function nvx_aesthetic_hero_ctas_markup(): string {
  * Hero copy.
  */
 function nvx_aesthetic_hero_copy_markup(): string {
+	$clinics = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$chamberi_reg = (string) ( $clinics['chamberi']['reg'] ?? '' );
+	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
+	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
+
 	$html  = '<div class="nvx-brand-hero__copy">';
 	$html .= '<p class="nvx-brand-kicker">' . esc_html__( 'NUVANX · Madrid', 'nuvanx-medical' ) . '</p>';
 	$html .= '<h1 class="nvx-brand-hero__title" id="nvx-med-h1">' . esc_html__( 'Medicina Estética Avanzada con Criterio Clínico', 'nuvanx-medical' ) . '</h1>';
 	$html .= '<p class="nvx-brand-hero__lead">' . esc_html__( 'Restauramos el soporte estructural, la turgencia y la armonía del rostro mediante procedimientos médicos inyectables y regenerativos de alta precisión. Sin alterar tu identidad y guiados exclusivamente por el diagnóstico personalizado de nuestro equipo médico.', 'nuvanx-medical' ) . '</p>';
 	$html .= nvx_aesthetic_hero_ctas_markup();
-	$html .= '<p class="nvx-brand-meta nvx-reg-copy">' . esc_html__( 'Chamberí (CS20144) · Salamanca–Goya (CS20073) · Preservación anatómica', 'nuvanx-medical' ) . '</p>';
+	$html .= '<p class="nvx-brand-meta nvx-reg-copy">' . esc_html( $chamberi_name . ' (' . $chamberi_reg . ') · Salamanca–' . $goya_name . ' (' . $goya_reg . ') · Preservación anatómica' ) . '</p>';
 	$html .= '</div>';
 
 	return $html;

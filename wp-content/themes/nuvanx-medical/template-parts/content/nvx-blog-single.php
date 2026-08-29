@@ -18,6 +18,19 @@ while ( have_posts() ) :
 	$next       = get_next_post();
 	$tags       = get_the_tags();
 	$tags       = is_array( $tags ) ? $tags : array();
+	$clinics    = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$chamberi_reg = (string) ( $clinics['chamberi']['reg'] ?? '' );
+	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
+	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
+	$blog_cta_text = sprintf(
+		/* translators: 1: clinic name, 2: clinic reg, 3: clinic name, 4: clinic reg */
+		__( 'Cada tratamiento se pauta tras la exploración clínica de anatomía, tejido y objetivos. Sedes autorizadas: %1$s (%2$s) y Salamanca–%3$s (%4$s).', 'nuvanx-medical' ),
+		$chamberi_name,
+		$chamberi_reg,
+		$goya_name,
+		$goya_reg
+	);
 	$nvx_thumb_id  = (int) get_post_thumbnail_id();
 	$nvx_thumb_alt = $nvx_thumb_id > 0 ? trim( (string) get_post_meta( $nvx_thumb_id, '_wp_attachment_image_alt', true ) ) : '';
 	$nvx_thumb_html = ( $nvx_thumb_id > 0 && '' !== $nvx_thumb_alt )
@@ -124,7 +137,7 @@ while ( have_posts() ) :
 					<div class="nvx-blog-article__cta-inner">
 						<p class="nvx-brand-kicker"><?php esc_html_e( 'Diagnóstico médico presencial', 'nuvanx-medical' ); ?></p>
 						<h2 class="nvx-blog-article__cta-title"><?php esc_html_e( 'Plan individualizado en nuestras clínicas de Madrid', 'nuvanx-medical' ); ?></h2>
-						<p class="nvx-blog-article__cta-text"><?php esc_html_e( 'Cada tratamiento se pauta tras la exploración clínica de anatomía, tejido y objetivos. Sedes autorizadas: Chamberí (CS20144) y Salamanca–Goya (CS20073).', 'nuvanx-medical' ); ?></p>
+						<p class="nvx-blog-article__cta-text"><?php echo esc_html( $blog_cta_text ); ?></p>
 						<?php if ( function_exists( 'nvx_cta_pair_markup' ) ) : ?>
 							<?php echo nvx_cta_pair_markup( 'nvx-blog-article__actions' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 						<?php endif; ?>

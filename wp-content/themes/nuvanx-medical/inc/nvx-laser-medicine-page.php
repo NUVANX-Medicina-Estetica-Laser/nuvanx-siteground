@@ -105,7 +105,13 @@ function nvx_laser_hero_ctas_markup(): string {
  * Unified brand hero — same shell as Endolift® / medicina-estética (still media, no video).
  */
 function nvx_laser_hero_markup(): string {
-	$colegiado = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
+	$clinics = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$chamberi_reg = (string) ( $clinics['chamberi']['reg'] ?? '' );
+	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
+	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
+	$clinic_meta = $chamberi_name . ' (' . $chamberi_reg . ') · Salamanca–' . $goya_name . ' (' . $goya_reg . ') · Indicación médica personalizada';
 
 	// Prefer featured image so this hub matches photo brand-heroes on peer routes.
 	$media = '';
@@ -127,7 +133,7 @@ function nvx_laser_hero_markup(): string {
 		)
 	) . '</p>';
 	$html .= nvx_laser_hero_ctas_markup();
-	$html .= '<p class="nvx-brand-meta nvx-reg-copy">' . esc_html__( 'Chamberí (CS20144) · Salamanca–Goya (CS20073) · Indicación médica personalizada', 'nuvanx-medical' ) . '</p>';
+	$html .= '<p class="nvx-brand-meta nvx-reg-copy">' . esc_html( $clinic_meta ) . '</p>';
 	$html .= '</div>';
 	$html .= $media;
 	$html .= '</div></section>';

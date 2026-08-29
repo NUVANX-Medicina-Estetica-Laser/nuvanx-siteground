@@ -12,8 +12,8 @@ defined( 'ABSPATH' ) || exit;
 
 function nvx_schema_enrich_organization( array &$graph, int $index, array $all_clinics, array $physicians ): void {
 	$cfg          = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
-	$chamberi_tel = $cfg['chamberi']['phone_href'] ?? '+34669319836';
-	$goya_tel     = $cfg['goya']['phone_href'] ?? '+34647505107';
+	$chamberi_tel = (string) ( $cfg['chamberi']['phone_href'] ?? '' );
+	$goya_tel     = (string) ( $cfg['goya']['phone_href'] ?? '' );
 
 	$graph[ $index ]['@type']                  = nvx_schema_add_type( $graph[ $index ]['@type'], 'MedicalOrganization' );
 	$graph[ $index ]['name']                   = 'NUVANX Medicina Estética Láser';

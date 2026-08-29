@@ -119,6 +119,13 @@ function nvx_signature_phase_markup( array $page ): string {
 	$ficha_links  = is_array( $page['ficha_links'] ?? null ) ? $page['ficha_links'] : array();
 	$related      = is_array( $page['related_fichas'] ?? null ) ? $page['related_fichas'] : array();
 	$price_range  = (string) ( $page['price_range'] ?? '' );
+	$clinics      = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$chamberi_reg = (string) ( $clinics['chamberi']['reg'] ?? '' );
+	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
+	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
+	$clinic_meta_label = $chamberi_name . ' (Reg. Sanitario ' . $chamberi_reg . ') y Salamanca–' . $goya_name . ' (Reg. Sanitario ' . $goya_reg . ')';
+	$clinic_meta_short = $chamberi_name . ' (' . $chamberi_reg . ') · Salamanca–' . $goya_name . ' (' . $goya_reg . ')';
 	if ( 'papada-definicion-mandibular-madrid' === $slug && function_exists( 'nvx_tariff_price_label' ) ) {
 		$from = nvx_tariff_price_label( 'Endolift®', 'papada' );
 		if ( '' !== $from ) {
@@ -151,7 +158,7 @@ function nvx_signature_phase_markup( array $page ): string {
 	}
 
 	$html      .= '<div class="nvx-brand-actions"><a class="nvx-brand-btn nvx-brand-btn--primary" href="' . $valoracion . '">' . esc_html__( 'Solicitar valoración médica privada', 'nuvanx-medical' ) . '</a></div>';
-	$html      .= '<p class="nvx-brand-meta">' . esc_html__( 'Valoración presencial en nuestras clínicas de Madrid: Chamberí (Reg. Sanitario CS20144) y Salamanca–Goya (Reg. Sanitario CS20073). La indicación, la tecnología, el número de sesiones, el período de recuperación y el presupuesto se confirman después de la exploración médica.', 'nuvanx-medical' ) . '</p></div></div></section>';
+	$html      .= '<p class="nvx-brand-meta">' . esc_html( 'Valoración presencial en nuestras clínicas de Madrid: ' . $clinic_meta_label . '. La indicación, la tecnología, el número de sesiones, el período de recuperación y el presupuesto se confirman después de la exploración médica.' ) . '</p></div></div></section>';
 	$html      .= nvx_signature_phase_list( 'Qué se valora', (array) $page['assessment'] );
 	$html      .= '<section class="nvx-brand-section"><div class="nvx-brand-section__inner"><h2>' . esc_html__( 'Cómo se decide el plan', 'nuvanx-medical' ) . '</h2>';
 	$html      .= '<p>' . esc_html__( 'El médico identifica el componente predominante, revisa zonas contiguas y descarta problemas que no deben abordarse con medicina estética. Solo entonces se selecciona una modalidad y se documentan alternativas, cuidados y seguimiento.', 'nuvanx-medical' ) . '</p>';
@@ -210,7 +217,7 @@ function nvx_signature_hub_catalog(): array {
 			'kicker'    => 'NUVANX · Protocolos Signature · Madrid',
 			'h1'        => 'Protocolos Signature: medicina estética de diagnóstico.',
 			'lead'      => 'Cada protocolo organiza la decisión clínica alrededor de un objetivo. No son paquetes cerrados ni combinaciones automáticas: la tecnología se elige después de valorar anatomía, tejido y expectativas.',
-			'intro'     => 'Los Protocolos Signature conectan diagnóstico, modalidad y seguimiento. El nombre del protocolo ordena la conversación; la indicación, el número de sesiones, la recuperación y el presupuesto se confirman en consulta. Chamberí (CS20144) · Salamanca–Goya (CS20073).',
+			'intro'     => 'Los Protocolos Signature conectan diagnóstico, modalidad y seguimiento. El nombre del protocolo ordena la conversación; la indicación, el número de sesiones, la recuperación y el presupuesto se confirman en consulta. ' . $clinic_meta_short . '.',
 			'seo_title' => 'Protocolos Signature Madrid | NUVANX',
 			'seo_desc'  => 'Protocolos Signature NUVANX en Madrid: rutas clínicas de diagnóstico para contorno, calidad de piel, textura, tono y perfil facial.',
 		),
@@ -221,9 +228,9 @@ function nvx_signature_hub_catalog(): array {
 			'kicker'    => $contour,
 			'h1'        => 'Remodelación corporal láser en Madrid: contorno según tu anatomía.',
 			'lead'      => $short . ' evalúa grasa localizada, laxitud y continuidad entre zonas antes de indicar una tecnología. El plan se diseña por anatomía, no por una lista de aparatos.',
-			'intro'     => 'Abdomen, flancos, brazos, espalda, muslos, rodillas o contorno masculino pueden formar parte del mismo marco de decisión. Cada zona se presupuesta solo si tiene indicación documentada tras la exploración. Chamberí (CS20144) · Salamanca–Goya (CS20073) · Presupuesto por zona tras valoración.',
+			'intro'     => 'Abdomen, flancos, brazos, espalda, muslos, rodillas o contorno masculino pueden formar parte del mismo marco de decisión. Cada zona se presupuesta solo si tiene indicación documentada tras la exploración. ' . $clinic_meta_short . ' · Presupuesto por zona tras valoración.',
 			'seo_title' => 'Remodelación Corporal Láser Madrid | Contorno por Zonas | NUVANX',
-			'seo_desc'  => 'Contour Architecture™ en Madrid: abdomen, flancos, brazos, espalda, muslos y rodillas. Valoración de grasa y laxitud en Chamberí (CS20144) y Goya (CS20073).',
+			'seo_desc'  => 'Contour Architecture™ en Madrid: abdomen, flancos, brazos, espalda, muslos y rodillas. Valoración de grasa y laxitud en ' . $chamberi_name . ' (' . $chamberi_reg . ') y ' . $goya_name . ' (' . $goya_reg . ').',
 		),
 		'post-maternity'       => array(
 			'slug'      => 'tratamiento-postparto-abdomen-contorno-corporal-madrid',
@@ -232,9 +239,9 @@ function nvx_signature_hub_catalog(): array {
 			'kicker'    => 'NUVANX Post-Maternity Contour™',
 			'h1'        => 'Tratamiento postparto: abdomen y contorno corporal en Madrid.',
 			'lead'      => 'Lectura respetuosa de abdomen, flancos y calidad del tejido después del embarazo. Se separa grasa subcutánea, laxitud, diástasis y expectativas realistas antes de proponer cualquier modalidad.',
-			'intro'     => 'El postparto no es un protocolo estándar. La valoración considera lactancia, tiempo desde el parto, pared abdominal, cicatrices y disponibilidad de recuperación. Si no hay indicación proporcionada, se explica la alternativa o la espera. Chamberí (CS20144) · Salamanca–Goya (CS20073) · Indicación solo tras valoración.',
+			'intro'     => 'El postparto no es un protocolo estándar. La valoración considera lactancia, tiempo desde el parto, pared abdominal, cicatrices y disponibilidad de recuperación. Si no hay indicación proporcionada, se explica la alternativa o la espera. ' . $clinic_meta_short . ' · Indicación solo tras valoración.',
 			'seo_title' => 'Tratamiento Postparto Abdomen Madrid | Contorno tras el Embarazo | NUVANX',
-			'seo_desc'  => 'Post-Maternity Contour™ en Madrid: valoración de grasa, laxitud y pared abdominal tras el embarazo. Diástasis y lactancia se evalúan antes de indicar. Chamberí (CS20144) y Salamanca–Goya (CS20073).',
+			'seo_desc'  => 'Post-Maternity Contour™ en Madrid: valoración de grasa, laxitud y pared abdominal tras el embarazo. Diástasis y lactancia se evalúan antes de indicar. ' . $chamberi_name . ' (' . $chamberi_reg . ') y Salamanca–' . $goya_name . ' (' . $goya_reg . ').',
 		),
 	);
 }
@@ -538,7 +545,7 @@ function nvx_signature_hub_markup( array $hub ): string {
 				),
 				array(
 					'q' => '¿Dónde?',
-					'a' => 'Valoración en Chamberí (CS20144) y Salamanca–Goya (CS20073), con plan documentado si procede.',
+					'a' => 'Valoración en ' . $chamberi_name . ' (' . $chamberi_reg . ') y Salamanca–' . $goya_name . ' (' . $goya_reg . '), con plan documentado si procede.',
 				),
 			)
 		);
@@ -850,7 +857,7 @@ function nvx_papada_hub_schema_graph( $graph ) {
 
 	$url         = home_url( '/papada-definicion-mandibular-madrid/' );
 	$ficha       = home_url( '/endolift-facial-papada-mandibula/' );
-	$colegiado   = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? (string) NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado   = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 	$description = (string) ( $page['lead'] ?? $page['seo_desc'] ?? '' );
 	$reviewer    = array(
 		'@type'      => 'Physician',

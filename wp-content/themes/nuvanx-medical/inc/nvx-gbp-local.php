@@ -64,59 +64,68 @@ function nvx_gbp_review_url( string $clinic_key ): string {
  * Missing files are skipped rather than replaced with vendor packshots or
  * unverified theme JPEGs.
  *
- * The approved paths are resolved locally from WordPress uploads. A missing
- * file is omitted: it must never fall back to a photo from another sede or a
- * historic asset with an unverified source.
+ * Canonical uploads paths are owned by clinic-asset-registry.json. This
+ * renderer owns only role-specific public alt/caption copy.
  *
  * @return array<int,array{id:int,uploads_path:string,alt:string,caption:string}>
  */
 function nvx_clinic_editorial_photo_map( string $clinic_key ): array {
 	$clinic_key = 'goya' === $clinic_key ? 'goya' : 'chamberi';
+	$gallery    = function_exists( 'nvx_clinic_landing_gallery_registry' )
+		? nvx_clinic_landing_gallery_registry( $clinic_key )
+		: array();
 
-	$photos = array(
+	$copy = array(
 		'goya' => array(
-			array(
-				'id'           => 0,
-				'uploads_path' => '2026/03/nuvanx-medicina-estetica1.webp',
-				'alt'          => __( 'Box clínico de NUVANX Salamanca–Goya, Madrid', 'nuvanx-medical' ),
-				'caption'      => __( 'Box clínico', 'nuvanx-medical' ),
+			'box' => array(
+				'alt'     => __( 'Box clínico de NUVANX Salamanca–Goya, Madrid', 'nuvanx-medical' ),
+				'caption' => __( 'Box clínico', 'nuvanx-medical' ),
 			),
-			array(
-				'id'           => 0,
-				'uploads_path' => '2026/06/nvx-fachada-goya-900.webp',
-				'alt'          => __( 'Fachada de NUVANX Salamanca–Goya, Madrid', 'nuvanx-medical' ),
-				'caption'      => __( 'Fachada', 'nuvanx-medical' ),
+			'facade' => array(
+				'alt'     => __( 'Fachada de NUVANX Salamanca–Goya, Madrid', 'nuvanx-medical' ),
+				'caption' => __( 'Fachada', 'nuvanx-medical' ),
 			),
 		),
 		'chamberi' => array(
-			array(
-				'id'           => 0,
-				'uploads_path' => '2026/03/nuvanx-medicina-estetica7.webp',
-				'alt'          => __( 'Box clínico de NUVANX Chamberí, Madrid', 'nuvanx-medical' ),
-				'caption'      => __( 'Box clínico', 'nuvanx-medical' ),
+			'box' => array(
+				'alt'     => __( 'Box clínico de NUVANX Chamberí, Madrid', 'nuvanx-medical' ),
+				'caption' => __( 'Box clínico', 'nuvanx-medical' ),
 			),
-			array(
-				'id'           => 0,
-				'uploads_path' => '2026/06/nvx-fachada-chamberi-final-760.webp',
-				'alt'          => __( 'Fachada de NUVANX Chamberí, Madrid', 'nuvanx-medical' ),
-				'caption'      => __( 'Fachada', 'nuvanx-medical' ),
+			'facade' => array(
+				'alt'     => __( 'Fachada de NUVANX Chamberí, Madrid', 'nuvanx-medical' ),
+				'caption' => __( 'Fachada', 'nuvanx-medical' ),
 			),
-			array(
-				'id'           => 0,
-				'uploads_path' => '2026/06/Sala-Nuvanx.webp',
-				'alt'          => __( 'Sala de espera de NUVANX Chamberí, Madrid', 'nuvanx-medical' ),
-				'caption'      => __( 'Sala de espera', 'nuvanx-medical' ),
+			'waiting_room' => array(
+				'alt'     => __( 'Sala de espera de NUVANX Chamberí, Madrid', 'nuvanx-medical' ),
+				'caption' => __( 'Sala de espera', 'nuvanx-medical' ),
 			),
-			array(
-				'id'           => 0,
-				'uploads_path' => '2025/04/despacho-nuvanx.webp',
-				'alt'          => __( 'Despacho de consulta de NUVANX Chamberí, Madrid', 'nuvanx-medical' ),
-				'caption'      => __( 'Despacho de consulta', 'nuvanx-medical' ),
+			'consultation_office' => array(
+				'alt'     => __( 'Despacho de consulta de NUVANX Chamberí, Madrid', 'nuvanx-medical' ),
+				'caption' => __( 'Despacho de consulta', 'nuvanx-medical' ),
 			),
 		),
 	);
 
-	return $photos[ $clinic_key ];
+	$photos = array();
+	foreach ( $gallery as $item ) {
+		if ( ! is_array( $item ) ) {
+			continue;
+		}
+		$role         = trim( (string) ( $item['role'] ?? '' ) );
+		$uploads_path = ltrim( (string) ( $item['uploads_path'] ?? '' ), '/' );
+		$text         = $copy[ $clinic_key ][ $role ] ?? null;
+		if ( '' === $role || '' === $uploads_path || ! is_array( $text ) ) {
+			continue;
+		}
+		$photos[] = array(
+			'id'           => 0,
+			'uploads_path' => $uploads_path,
+			'alt'          => (string) ( $text['alt'] ?? '' ),
+			'caption'      => (string) ( $text['caption'] ?? '' ),
+		);
+	}
+
+	return $photos;
 }
 
 /** Expected number of verified editorial sede photographs per clinic landing. */

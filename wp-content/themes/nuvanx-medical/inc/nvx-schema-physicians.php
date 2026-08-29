@@ -19,7 +19,8 @@ defined( 'ABSPATH' ) || exit;
 function nvx_schema_physician_director( $organization_id ) {
 	$equipo      = home_url( NVX_SD_PATH_EQUIPO_MEDICO );
 	$director_id = home_url( NVX_SD_PATH_EQUIPO_MEDICO . '#physician-rivera-tejeda' );
-	$colegiado   = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado   = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
+	$doctoralia  = function_exists( 'nvx_medical_staff_doctoralia_url' ) ? nvx_medical_staff_doctoralia_url( 'director' ) : '';
 
 	return array(
 		'@type'            => array( 'Person', 'Physician' ),
@@ -72,7 +73,7 @@ function nvx_schema_physician_director( $organization_id ) {
 			),
 		),
 		'sameAs'           => array(
-			'https://www.doctoralia.es/jose-javier-rivera-tejeda/medico-estetico/madrid',
+			$doctoralia,
 		),
 	);
 }
@@ -86,7 +87,7 @@ function nvx_schema_physician_director( $organization_id ) {
 function nvx_schema_physician_ivon( $organization_id ) {
 	$equipo    = home_url( NVX_SD_PATH_EQUIPO_MEDICO );
 	$ivon_id   = home_url( NVX_SD_PATH_EQUIPO_MEDICO . '#physician-rivera-deras' );
-	$colegiado = defined( 'NVX_IVON_COLEGIADO' ) ? NVX_IVON_COLEGIADO : '284621525';
+	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'ivon' ) : '';
 
 	return array(
 		'@type'            => array( 'Person', 'Physician' ),
@@ -157,7 +158,7 @@ function nvx_schema_physician_ivon( $organization_id ) {
 function nvx_schema_physician_fabio( $organization_id ) {
 	$equipo    = home_url( NVX_SD_PATH_EQUIPO_MEDICO );
 	$fabio_id  = home_url( NVX_SD_PATH_EQUIPO_MEDICO . '#physician-quinonez-bareiro' );
-	$colegiado = defined( 'NVX_FABIO_COLEGIADO' ) ? NVX_FABIO_COLEGIADO : '282877543';
+	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'fabio' ) : '';
 
 	return array(
 		'@type'            => array( 'Person', 'Physician' ),

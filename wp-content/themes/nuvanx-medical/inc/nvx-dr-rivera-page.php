@@ -55,6 +55,17 @@ function nvx_content_dr_rivera_hijack( string $content ): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'dr-rivera-page.json' );
 
+	$director_name    = function_exists( 'nvx_medical_staff_name' ) ? nvx_medical_staff_name( 'director' ) : '';
+	$director_license = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
+	$fallback_name    = '' !== $director_name ? $director_name : __( 'Director médico NUVANX', 'nuvanx-medical' );
+	$fallback_lead    = '' !== $director_license
+		? sprintf(
+			/* translators: %s: medical license number */
+			__( 'Nº Colegiado ICOMEM: %s · Especialista en Medicina Estética Láser e Ingeniería Tisular', 'nuvanx-medical' ),
+			$director_license
+		)
+		: __( 'Especialista en Medicina Estética Láser e Ingeniería Tisular', 'nuvanx-medical' );
+
 	// E-E-A-T Avatar and Manifest
 	$avatar = esc_url( home_url( $data['avatar'] ?? '/wp-content/themes/nuvanx-medical/assets/images/dr-rivera-avatar.jpg' ) );
 
@@ -64,18 +75,18 @@ function nvx_content_dr_rivera_hijack( string $content ): string {
 
 	$avatar_path = ABSPATH . ltrim( wp_parse_url( $avatar, PHP_URL_PATH ), '/' );
 	if ( is_readable( $avatar_path ) ) {
-		$html .= '<img src="' . $avatar . '" alt="' . esc_attr( $data['h1'] ?? 'Dr. Javier Rivera Tejeda' ) . '" class="nvx-dr-rivera-avatar" width="160" height="160" loading="lazy" decoding="async">';
+		$html .= '<img src="' . $avatar . '" alt="' . esc_attr( $data['h1'] ?? $fallback_name ) . '" class="nvx-dr-rivera-avatar" width="160" height="160" loading="lazy" decoding="async">';
 	}
 	$html .= '<p class="nvx-brand-kicker nvx-dr-rivera-kicker">' . esc_html( $data['kicker'] ?? __( 'Dirección Médica NUVANX', 'nuvanx-medical' ) ) . '</p>';
-	$html .= '<h1 class="nvx-brand-hero__title" id="nvx-dr-rivera-h1">' . esc_html( $data['h1'] ?? __( 'Dr. Javier Rivera Tejeda', 'nuvanx-medical' ) ) . '</h1>';
-	$html .= '<p class="nvx-brand-hero__lead nvx-dr-rivera-lead">' . esc_html( $data['lead'] ?? __( 'Nº Colegiado ICOMEM: 282864786 · Especialista en Medicina Estética Láser e Ingeniería Tisular', 'nuvanx-medical' ) ) . '</p>';
+	$html .= '<h1 class="nvx-brand-hero__title" id="nvx-dr-rivera-h1">' . esc_html( $data['h1'] ?? $fallback_name ) . '</h1>';
+	$html .= '<p class="nvx-brand-hero__lead nvx-dr-rivera-lead">' . esc_html( $data['lead'] ?? $fallback_lead ) . '</p>';
 	$html .= '</div>';
 
 	// Manifiesto Clínico
 	if ( ! empty( $data['manifesto'] ) ) {
 		$html .= '<blockquote class="nvx-blockquote">';
 		$html .= '<p>' . esc_html( $data['manifesto'] ) . '</p>';
-		$html .= '<footer><cite>' . esc_html__( 'Dr. Javier Rivera Tejeda', 'nuvanx-medical' ) . '</cite></footer>';
+		$html .= '<footer><cite>' . esc_html( $fallback_name ) . '</cite></footer>';
 		$html .= '</blockquote>';
 	}
 

@@ -87,9 +87,7 @@ function nvx_redirect_valoracion_aliases(): void {
 add_action( 'template_redirect', 'nvx_redirect_valoracion_aliases', 0 );
 
 /**
- * Canonical Goya clinic page is /clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/.
- *
- * Short /medicina-estetica-goya/ redirects to preserve historical links and ad tracking.
+ * Redirect the historic short Goya alias to the canonical clinic route owned by clinics.json.
  */
 function nvx_redirect_goya_alias(): void {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
@@ -105,22 +103,22 @@ function nvx_redirect_goya_alias(): void {
 		return;
 	}
 
-	// Already on the canonical path.
-	if ( 0 === strpos( $path, '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' ) ) {
+	$clinics        = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$canonical_path = trim( (string) ( $clinics['goya']['landing_path'] ?? '' ) );
+	if ( '' === $canonical_path ) {
 		return;
 	}
 
-	// Preserve query strings (gclid, UTM, etc.) - parse and reconstruct
-	$parsed_uri = wp_parse_url( $uri );
+	// Preserve query strings (gclid, UTM, etc.) - parse and reconstruct.
+	$parsed_uri   = wp_parse_url( $uri );
 	$query_params = array();
 
 	if ( isset( $parsed_uri['query'] ) && '' !== $parsed_uri['query'] ) {
 		parse_str( $parsed_uri['query'], $query_params );
 	}
 
-	$target = home_url( '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' );
+	$target = home_url( $canonical_path );
 
-	// Reconstruct query string if parameters exist
 	if ( ! empty( $query_params ) ) {
 		$target = add_query_arg( $query_params, $target );
 	}

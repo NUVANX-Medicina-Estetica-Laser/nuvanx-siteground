@@ -133,6 +133,27 @@ function nvx_medical_staff_profile_media_attachment_id( string $doctor_id ): int
 	return isset( $doctor['profile_media_attachment_id'] ) ? (int) $doctor['profile_media_attachment_id'] : 0;
 }
 
+/** Load the canonical registry for governed clinic and partner assets. */
+function nvx_clinic_asset_registry(): array {
+	static $registry = null;
+	if ( is_array( $registry ) ) {
+		return $registry;
+	}
+
+	$file = __DIR__ . '/data/clinic-asset-registry.json';
+	$json = is_readable( $file ) ? file_get_contents( $file ) : false;
+	$data = false !== $json ? json_decode( $json, true ) : null;
+	$registry = is_array( $data ) && 'nuvanx-clinic-asset-registry/v3' === ( $data['schema'] ?? '' ) ? $data : array();
+	return $registry;
+}
+
+/** Get the governed uploads paths for a clinic landing gallery. */
+function nvx_clinic_landing_gallery_registry( string $clinic_key ): array {
+	$registry = nvx_clinic_asset_registry();
+	$gallery  = $registry['approved_editorial_overrides']['clinic_landing_galleries'][ $clinic_key ] ?? array();
+	return is_array( $gallery ) ? $gallery : array();
+}
+
 // Public medical identity constants are defined once from the canonical registry.
 if ( ! defined( 'NVX_DIRECTOR_COLEGIADO' ) ) {
 	define( 'NVX_DIRECTOR_COLEGIADO', nvx_medical_colegiado( 'director' ) );

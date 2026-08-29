@@ -181,13 +181,13 @@ function nvx_clinics_hub_page_markup(): string {
 
 	$chamberi_path = isset( $registry['clinics']['chamberi']['path'] )
 		? (string) $registry['clinics']['chamberi']['path']
-		: '/medicina-estetica-chamberi/';
+		: (string) ( $config['chamberi']['landing_path'] ?? '' );
 	$goya_path     = isset( $registry['clinics']['goya']['path'] )
 		? (string) $registry['clinics']['goya']['path']
-		: '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/';
+		: (string) ( $config['goya']['landing_path'] ?? '' );
 
-	$chamberi_phone = ! empty( $clinics['chamberi']['telephone'] ) ? (string) $clinics['chamberi']['telephone'] : '+34669319836';
-	$goya_phone     = ! empty( $clinics['goya']['telephone'] ) ? (string) $clinics['goya']['telephone'] : '+34647505107';
+	$chamberi_phone = ! empty( $clinics['chamberi']['telephone'] ) ? (string) $clinics['chamberi']['telephone'] : '';
+	$goya_phone     = ! empty( $clinics['goya']['telephone'] ) ? (string) $clinics['goya']['telephone'] : '';
 	$chamberi_maps  = ! empty( $clinics['chamberi']['hasMap'] ) ? (string) $clinics['chamberi']['hasMap'] : nvxClinicsMapUrl( 'chamberi' );
 	$goya_maps      = ! empty( $clinics['goya']['hasMap'] ) ? (string) $clinics['goya']['hasMap'] : nvxClinicsMapUrl( 'goya' );
 	$chamberi_url   = home_url( $chamberi_path );
@@ -207,8 +207,8 @@ function nvx_clinics_hub_page_markup(): string {
 	$chamberi_hours = ! empty( $config['chamberi']['hours'] ) ? (string) $config['chamberi']['hours'] : __( 'lunes a viernes, 12:00–20:00; sábados, 10:00–18:00', 'nuvanx-medical' );
 	$goya_hours     = ! empty( $config['goya']['hours'] ) ? (string) $config['goya']['hours'] : __( 'lunes a viernes, 11:00–20:00', 'nuvanx-medical' );
 
-	$chamberi_addr = ! empty( $config['chamberi']['address'] ) ? sprintf( '%s, %s %s', $config['chamberi']['address'], $config['chamberi']['postal_code'], $config['chamberi']['locality'] ) : __( 'Calle de Fernández de la Hoz, 4, Bajo Derecha, 28010 Madrid', 'nuvanx-medical' );
-	$goya_addr     = ! empty( $config['goya']['address'] ) ? sprintf( '%s, %s %s', $config['goya']['address'], $config['goya']['postal_code'], $config['goya']['locality'] ) : __( 'Calle de Fernán González, 26, 28009 Madrid', 'nuvanx-medical' );
+	$chamberi_addr = ! empty( $config['chamberi']['address'] ) ? sprintf( '%s, %s %s', $config['chamberi']['address'], $config['chamberi']['postal_code'], $config['chamberi']['locality'] ) : '';
+	$goya_addr     = ! empty( $config['goya']['address'] ) ? sprintf( '%s, %s %s', $config['goya']['address'], $config['goya']['postal_code'], $config['goya']['locality'] ) : '';
 
 	$html  = '<div class="nvx-brand-page nvx-clinics-hub-page">';
 	$html .= '<section class="nvx-brand-hero" aria-labelledby="nvx-clinics-hub-h1">';
@@ -219,7 +219,12 @@ function nvx_clinics_hub_page_markup(): string {
 	$html .= '<div class="nvx-brand-actions nvx-clinics-hub-actions">';
 	$html .= '<a class="nvx-brand-btn nvx-brand-btn--primary" href="' . esc_url( $valoracion ) . '">' . esc_html__( 'Valoración gratuita — sin compromiso', 'nuvanx-medical' ) . '</a>';
 	$html .= '</div>';
-	$html .= '<p class="nvx-brand-meta nvx-reg-copy">' . esc_html__( 'Chamberí CS20144 · Salamanca–Goya CS20073 · Medicina basada en evidencia', 'nuvanx-medical' ) . '</p>';
+	$html .= '<p class="nvx-brand-meta nvx-reg-copy">' . esc_html( sprintf( __( '%1$s %2$s · %3$s %4$s · Medicina basada en evidencia', 'nuvanx-medical' ), 
+		(string) ( $config['chamberi']['short_name'] ?? '' ), 
+		(string) ( $config['chamberi']['reg'] ?? '' ), 
+		(string) ( $config['goya']['short_name'] ?? '' ), 
+		(string) ( $config['goya']['reg'] ?? '' ) 
+	) ) . '</p>';
 	$html .= '</div></div></section>';
 
 	$html .= '<nav class="nvx-brand-section nvx-clinics-nav" aria-label="' . esc_attr__( 'Sedes NUVANX', 'nuvanx-medical' ) . '">';
@@ -231,7 +236,7 @@ function nvx_clinics_hub_page_markup(): string {
 	// Chamberí.
 	$html .= '<section id="clinica-chamberi" class="nvx-brand-section" aria-labelledby="nvx-clinic-chamberi-title">';
 	$html .= '<div class="nvx-brand-section__inner">';
-	$html .= '<p class="nvx-brand-kicker">' . esc_html__( 'Registro sanitario CS20144', 'nuvanx-medical' ) . '</p>';
+	$html .= '<p class="nvx-brand-kicker">' . esc_html( sprintf( __( 'Registro sanitario %s', 'nuvanx-medical' ), (string) ( $config['chamberi']['reg'] ?? '' ) ) ) . '</p>';
 	$html .= '<h2 id="nvx-clinic-chamberi-title" class="nvx-brand-title">' . esc_html__( 'Centro Clínico NUVANX Chamberí', 'nuvanx-medical' ) . '</h2>';
 	$html .= '<p class="nvx-brand-lead">' . esc_html__( 'A dos minutos de la Plaza de Olavide. Valoración, Endolift®, láser CO₂ y seguimiento en un centro autorizado por la Comunidad de Madrid.', 'nuvanx-medical' ) . '</p>';
 	$html .= '<ul class="nvx-brand-list">';
@@ -248,7 +253,7 @@ function nvx_clinics_hub_page_markup(): string {
 	// Goya.
 	$html .= '<section id="clinica-goya" class="nvx-brand-section" aria-labelledby="nvx-clinic-goya-title">';
 	$html .= '<div class="nvx-brand-section__inner">';
-	$html .= '<p class="nvx-brand-kicker">' . esc_html__( 'Registro sanitario CS20073', 'nuvanx-medical' ) . '</p>';
+	$html .= '<p class="nvx-brand-kicker">' . esc_html( sprintf( __( 'Registro sanitario %s', 'nuvanx-medical' ), (string) ( $config['goya']['reg'] ?? '' ) ) ) . '</p>';
 	$html .= '<h2 id="nvx-clinic-goya-title" class="nvx-brand-title">' . esc_html__( 'Centro Clínico NUVANX Salamanca–Goya', 'nuvanx-medical' ) . '</h2>';
 	$html .= '<p class="nvx-brand-lead">' . esc_html__( 'En el Barrio de Salamanca. Misma dirección médica y protocolos que Chamberí, con atención y valoración en sede propia.', 'nuvanx-medical' ) . '</p>';
 	$html .= '<ul class="nvx-brand-list">';
@@ -270,7 +275,12 @@ function nvx_clinics_hub_page_markup(): string {
 	$html .= '<section class="nvx-brand-section" aria-labelledby="nvx-clinics-closure-title">';
 	$html .= '<div class="nvx-brand-section__inner">';
 	$html .= '<h2 id="nvx-clinics-closure-title" class="nvx-brand-title">' . esc_html__( 'Valoración en nuestras sedes de Madrid', 'nuvanx-medical' ) . '</h2>';
-	$html .= '<p class="nvx-brand-lead">' . esc_html__( 'Chamberí (CS20144) y Salamanca–Goya (CS20073). Un único criterio médico, dos centros sanitarios autorizados.', 'nuvanx-medical' ) . '</p>';
+	$html .= '<p class="nvx-brand-lead">' . esc_html( sprintf( __( '%1$s (%2$s) y %3$s (%4$s). Un único criterio médico, dos centros sanitarios autorizados.', 'nuvanx-medical' ),
+		(string) ( $config['chamberi']['short_name'] ?? '' ),
+		(string) ( $config['chamberi']['reg'] ?? '' ),
+		(string) ( $config['goya']['short_name'] ?? '' ),
+		(string) ( $config['goya']['reg'] ?? '' )
+	) ) . '</p>';
 	$html .= '<div class="nvx-brand-actions">';
 	$html .= '<a class="nvx-brand-btn nvx-brand-btn--primary" href="' . esc_url( $valoracion ) . '">' . esc_html__( 'Valoración gratuita — sin compromiso', 'nuvanx-medical' ) . '</a>';
 	$html .= '</div></div></section>';

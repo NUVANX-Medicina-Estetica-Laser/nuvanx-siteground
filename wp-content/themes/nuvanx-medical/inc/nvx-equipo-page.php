@@ -65,9 +65,9 @@ function nvx_equipo_hero_copy_markup(): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'equipo-medico-page.json' )['hero'] ?? array();
 
-	$colegiado_dir   = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
-	$colegiado_ivon  = defined( 'NVX_IVON_COLEGIADO' ) ? NVX_IVON_COLEGIADO : '284621525';
-	$colegiado_fabio = defined( 'NVX_FABIO_COLEGIADO' ) ? NVX_FABIO_COLEGIADO : '282877543';
+	$colegiado_dir   = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
+	$colegiado_ivon  = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'ivon' ) : '';
+	$colegiado_fabio = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'fabio' ) : '';
 
 	$html  = '<div class="nvx-brand-hero__copy">';
 	$html .= '<p class="nvx-brand-kicker">' . esc_html( $data['kicker'] ?? '' ) . '</p>';
@@ -283,8 +283,6 @@ function nvx_equipo_capture_media_if_empty( string $card, string &$media ): void
 	}
 	if ( preg_match( NVX_EQUIPO_MEDIA_PATTERN, $card, $im ) ) {
 		$media = $im[0];
-		// Add onerror handler to prevent network errors from breaking page functionality
-		$media = preg_replace('/<img/', '<img onerror="this.style.display=\'none\'"', $media);
 	}
 }
 
@@ -669,7 +667,7 @@ function nvx_equipo_physician_authority_markup( array $config ): string {
 function nvx_equipo_director_authority_markup( string $rivera_media = '' ): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'equipo-medico-page.json' )['rivera'] ?? array();
-	$authorized_consultation = 2381;
+	$authorized_consultation = function_exists( 'nvx_medical_staff_profile_media_attachment_id' ) ? nvx_medical_staff_profile_media_attachment_id( 'director' ) : 0;
 	$consultation_file       = get_attached_file( $authorized_consultation );
 	if ( is_string( $consultation_file ) && is_readable( $consultation_file ) ) {
 		$consultation = wp_get_attachment_image(
@@ -688,8 +686,8 @@ function nvx_equipo_director_authority_markup( string $rivera_media = '' ): stri
 		}
 	}
 
-	$colegiado  = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
-	$doctoralia = 'https://www.doctoralia.es/jose-javier-rivera-tejeda/medico-estetico/madrid';
+	$colegiado  = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
+	$doctoralia = function_exists( 'nvx_medical_staff_doctoralia_url' ) ? nvx_medical_staff_doctoralia_url( 'director' ) : '';
 
 	return nvx_equipo_physician_authority_markup(
 		array(
@@ -772,7 +770,7 @@ function nvx_equipo_ivon_authority_markup( string $ivon_media = '' ): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'equipo-medico-page.json' )['ivon'] ?? array();
 
-	$colegiado = defined( 'NVX_IVON_COLEGIADO' ) ? NVX_IVON_COLEGIADO : '284621525';
+	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'ivon' ) : '';
 
 	return nvx_equipo_physician_authority_markup(
 		array(
@@ -838,7 +836,7 @@ function nvx_equipo_fabio_authority_markup( string $fabio_media = '' ): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'equipo-medico-page.json' )['fabio'] ?? array();
 
-	$colegiado = defined( 'NVX_FABIO_COLEGIADO' ) ? NVX_FABIO_COLEGIADO : '282877543';
+	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'fabio' ) : '';
 
 	return nvx_equipo_physician_authority_markup(
 		array(
@@ -909,7 +907,7 @@ function nvx_equipo_fabio_authority_markup( string $fabio_media = '' ): string {
 function nvx_equipo_cristina_authority_markup( string $cristina_media = '' ): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data       = nvx_catalog_json_resolved( 'equipo-medico-page.json' )['cristina'] ?? array();
-	$doctoralia = 'https://www.doctoralia.es/cristina-marquez-gonzalez-2/radiologo-medico-estetico/madrid';
+	$doctoralia = function_exists( 'nvx_medical_staff_doctoralia_url' ) ? nvx_medical_staff_doctoralia_url( 'cristina' ) : '';
 
 	return nvx_equipo_physician_authority_markup(
 		array(

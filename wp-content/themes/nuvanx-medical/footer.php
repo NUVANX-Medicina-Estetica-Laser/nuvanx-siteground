@@ -33,6 +33,7 @@ $nvx_cases_public                = $nvx_cases_id > 0
 		|| ! in_array( $nvx_cases_id, nvx_noindex_page_ids(), true ) );
 $nvx_why_nuvanx_url              = function_exists( 'nvx_strategy_published_url' ) ? nvx_strategy_published_url( 'why_nuvanx' ) : '';
 $nvx_investment_url              = function_exists( 'nvx_strategy_published_url' ) ? nvx_strategy_published_url( 'investment' ) : '';
+$nvx_footer_clinics              = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
 
 $nvx_footer_treatments = array(
 	array(
@@ -62,7 +63,7 @@ if ( is_array( $nvx_footer_published_treatments ) ) {
 		if ( '' === $nvx_url || isset( $nvx_footer_seen_urls[ $nvx_url ] ) ) {
 			continue;
 		}
-		$nvx_footer_treatments[]         = $nvx_treatment;
+		$nvx_footer_treatments[]          = $nvx_treatment;
 		$nvx_footer_seen_urls[ $nvx_url ] = true;
 	}
 }
@@ -116,22 +117,34 @@ $nvx_col_two  = array_slice( $nvx_footer_treatments, $nvx_split_at );
 			<details class="nvx-footer__section nvx-footer__section--clinics">
 				<summary class="nvx-footer__section-title"><?php esc_html_e( 'Clínicas', 'nuvanx-medical' ); ?></summary>
 				<div class="nvx-footer__clinics">
-					<div class="nvx-footer__clinic">
-						<a href="<?php echo esc_url( home_url( '/medicina-estetica-chamberi/' ) ); ?>" class="nvx-footer__clinic-name">Chamberí</a>
-						<a href="tel:+34669319836" class="nvx-footer__clinic-phone">669 319 836</a>
-						<address class="nvx-footer__address">
-							Calle de Fernández de la Hoz, 4<br>
-							Bajo Derecha, 28010 Madrid
-						</address>
-					</div>
-					<div class="nvx-footer__clinic">
-						<a href="<?php echo esc_url( home_url( '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' ) ); ?>" class="nvx-footer__clinic-name">Salamanca–Goya</a>
-						<a href="tel:+34647505107" class="nvx-footer__clinic-phone">647 50 51 07</a>
-						<address class="nvx-footer__address">
-							Calle de Fernán González, 26<br>
-							28009 Madrid
-						</address>
-					</div>
+					<?php foreach ( array( 'chamberi', 'goya' ) as $nvx_clinic_key ) : ?>
+						<?php
+						$nvx_clinic = isset( $nvx_footer_clinics[ $nvx_clinic_key ] ) && is_array( $nvx_footer_clinics[ $nvx_clinic_key ] )
+							? $nvx_footer_clinics[ $nvx_clinic_key ]
+							: array();
+						$nvx_clinic_path    = (string) ( $nvx_clinic['landing_path'] ?? '' );
+						$nvx_clinic_phone   = (string) ( $nvx_clinic['phone'] ?? '' );
+						$nvx_clinic_phone_h = (string) ( $nvx_clinic['phone_href'] ?? '' );
+						$nvx_clinic_address = (string) ( $nvx_clinic['address'] ?? '' );
+						$nvx_clinic_postal  = (string) ( $nvx_clinic['postal_code'] ?? '' );
+						$nvx_clinic_locality = (string) ( $nvx_clinic['locality'] ?? '' );
+						$nvx_clinic_label   = (string) ( $nvx_clinic['short_name'] ?? '' );
+						?>
+						<?php if ( '' !== $nvx_clinic_path && '' !== $nvx_clinic_label ) : ?>
+							<div class="nvx-footer__clinic">
+								<a href="<?php echo esc_url( home_url( $nvx_clinic_path ) ); ?>" class="nvx-footer__clinic-name"><?php echo esc_html( $nvx_clinic_label ); ?></a>
+								<?php if ( '' !== $nvx_clinic_phone_h && '' !== $nvx_clinic_phone ) : ?>
+									<a href="<?php echo esc_url( 'tel:' . $nvx_clinic_phone_h ); ?>" class="nvx-footer__clinic-phone"><?php echo esc_html( $nvx_clinic_phone ); ?></a>
+								<?php endif; ?>
+								<?php if ( '' !== $nvx_clinic_address ) : ?>
+									<address class="nvx-footer__address">
+										<?php echo esc_html( $nvx_clinic_address ); ?><br>
+										<?php echo esc_html( trim( $nvx_clinic_postal . ' ' . $nvx_clinic_locality ) ); ?>
+									</address>
+								<?php endif; ?>
+							</div>
+						<?php endif; ?>
+					<?php endforeach; ?>
 					<a href="<?php echo esc_url( home_url( '/clinicas-de-medicina-estetica-nuvanx/' ) ); ?>" class="nvx-footer__clinics-all">Nuestras clínicas</a>
 				</div>
 			</details>
@@ -171,9 +184,22 @@ $nvx_col_two  = array_slice( $nvx_footer_treatments, $nvx_split_at );
 				<span aria-hidden="true"> · </span>
 				<a href="<?php echo esc_url( home_url( '/politica-de-cookies-ue/' ) ); ?>">Política de cookies</a>
 			</nav>
-			<p class="nvx-footer__registrations nvx-reg-copy">
-				Chamberí · Centro sanitario autorizado CS20144 · Salamanca–Goya · Centro sanitario autorizado CS20073
-			</p>
+			<?php
+			$nvx_footer_reg_parts = array();
+			foreach ( array( 'chamberi', 'goya' ) as $nvx_clinic_key ) {
+				$nvx_clinic = isset( $nvx_footer_clinics[ $nvx_clinic_key ] ) && is_array( $nvx_footer_clinics[ $nvx_clinic_key ] )
+					? $nvx_footer_clinics[ $nvx_clinic_key ]
+					: array();
+				$nvx_label = (string) ( $nvx_clinic['short_name'] ?? '' );
+				$nvx_reg   = (string) ( $nvx_clinic['reg'] ?? '' );
+				if ( '' !== $nvx_label && '' !== $nvx_reg ) {
+					$nvx_footer_reg_parts[] = sprintf( '%s · Centro sanitario autorizado %s', $nvx_label, $nvx_reg );
+				}
+			}
+			?>
+			<?php if ( ! empty( $nvx_footer_reg_parts ) ) : ?>
+				<p class="nvx-footer__registrations nvx-reg-copy"><?php echo esc_html( implode( ' · ', $nvx_footer_reg_parts ) ); ?></p>
+			<?php endif; ?>
 		</div>
 	</div>
 </footer>

@@ -99,7 +99,7 @@ function nvx_endolift_hero_copy_markup(): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'endolift-page.json' )['hero'] ?? array();
 
-	$colegiado = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 
 	return nvx_brand_hero_copy_markup(
 		array(
@@ -131,7 +131,7 @@ function nvx_endolift_editorial_body_markup(): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'endolift-page.json' );
 
-	$colegiado    = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
+	$colegiado    = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 	$clinical_ssot = nvx_get_clinical_treatment( 'endolift_facial' );
 	$price_from   = function_exists( 'nvx_endolift_price_from_eur' ) ? nvx_endolift_price_from_eur() : 798.60;
 	$price_label  = function_exists( 'nvx_format_price_eur' ) ? nvx_format_price_eur( $price_from ) : number_format_i18n( $price_from, 2 );

@@ -10,36 +10,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/**
- * Load site configuration from config.json using the cached theme loader.
- *
- * Delegates to nvx_catalog_json_resolved() when available (registers a static
- * in-process cache) so the JSON file is read at most once per request.
- *
- * @return array<string, mixed>
- */
-function nvx_get_config(): array {
-	if ( function_exists( 'nvx_catalog_json_resolved' ) ) {
-		$cfg = nvx_catalog_json_resolved( 'config.json' );
-		return is_array( $cfg ) ? $cfg : array();
-	}
-	// Fallback: direct read only when the loader is not yet available.
-	$path = get_template_directory() . '/inc/data/config.json';
-	if ( is_readable( $path ) ) {
-		$decoded = json_decode( (string) file_get_contents( $path ), true );
-		return is_array( $decoded ) ? $decoded : array();
-	}
-	return array();
-}
-
 if ( ! defined( 'NVX_CONTACT_EMAIL' ) ) {
-	// Use canonical business loader from clinics.json instead of deleted config.json
-	if ( function_exists( 'nvx_business_contact_email' ) ) {
-		$email = nvx_business_contact_email();
-		define( 'NVX_CONTACT_EMAIL', '' !== $email ? $email : 'info@nuvanx.com' );
-	} else {
-		define( 'NVX_CONTACT_EMAIL', 'info@nuvanx.com' );
-	}
+	define( 'NVX_CONTACT_EMAIL', function_exists( 'nvx_business_contact_email' ) ? nvx_business_contact_email() : '' );
 }
 /**
  * Editorial review month label for Endolift® byline (update with clinical review).
@@ -256,11 +228,11 @@ function nvx_schema_page_registry() {
 	// Validate the path (not just the entry) so a malformed route with an empty
 	// path still falls back to the canonical value; nvx_schema_clinics() feeds
 	// these paths directly into home_url().
-	if ( empty( $registry['clinics']['chamberi']['path'] ) ) {
-		$registry['clinics']['chamberi'] = nvxSchemaRouteEntry( 1543, '/medicina-estetica-chamberi/' );
-	}
-	if ( empty( $registry['clinics']['goya']['path'] ) ) {
-		$registry['clinics']['goya'] = nvxSchemaRouteEntry( 1537, '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/' );
+	$clinics = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	foreach ( array( 'chamberi' => 1543, 'goya' => 1537 ) as $clinic_key => $page_id ) {
+		if ( empty( $registry['clinics'][ $clinic_key ]['path'] ) && ! empty( $clinics[ $clinic_key ]['landing_path'] ) ) {
+			$registry['clinics'][ $clinic_key ] = nvxSchemaRouteEntry( $page_id, (string) $clinics[ $clinic_key ]['landing_path'] );
+		}
 	}
 	if ( empty( $registry['clinic_hub']['path'] ) ) {
 		$registry['clinic_hub'] = nvxSchemaRouteEntry( 1399, '/clinicas-de-medicina-estetica-nuvanx/' );
@@ -511,17 +483,17 @@ function nvx_schema_clinics() {
 			'name'                      => $ch['name'] ?? 'NUVANX Medicina Estética Láser — Chamberí',
 			'branchCode'                => 'chamberi',
 			'url'                       => home_url( $registry['clinics']['chamberi']['path'] ),
-			'telephone'                 => $ch['phone_href'] ?? '+34669319836',
+			'telephone'                 => $ch['phone_href'] ?? '',
 			'email'                     => NVX_CONTACT_EMAIL,
 			'image'                     => function_exists( 'nvx_clinic_schema_image_urls' )
 				? nvx_clinic_schema_image_urls( 'chamberi' )
 				: array( trailingslashit( get_template_directory_uri() ) . 'assets/images/clinics/chamberi/01-interior.jpg' ),
 			'address'                   => array(
 				'@type'           => 'PostalAddress',
-				'streetAddress'   => $ch['address'] ?? 'Calle de Fernández de la Hoz, 4, Bajo Derecha',
+				'streetAddress'   => $ch['address'] ?? '',
 				'addressLocality' => $ch['locality'] ?? 'Madrid',
 				'addressRegion'   => 'Comunidad de Madrid',
-				'postalCode'      => $ch['postal_code'] ?? '28010',
+				'postalCode'      => $ch['postal_code'] ?? '',
 				'addressCountry'  => 'ES',
 			),
 			'geo'                       => array(
@@ -532,7 +504,7 @@ function nvx_schema_clinics() {
 			'identifier'                => array(
 				'@type'      => 'PropertyValue',
 				'propertyID' => 'Registro sanitario de la Comunidad de Madrid',
-				'value'      => $ch['reg'] ?? 'CS20144',
+				'value'      => $ch['reg'] ?? '',
 			),
 			'hasMap'                    => 'https://www.google.com/maps/search/?api=1&query=NUVANX%20Medicina%20Est%C3%A9tica%20L%C3%A1ser%20C%2F%20de%20Fern%C3%A1ndez%20de%20la%20Hoz%204%2028010%20Madrid',
 			'areaServed'                => array( 'Chamberí', 'Almagro', 'Trafalgar', 'Malasaña', 'Ríos Rosas', 'Madrid' ),
@@ -557,17 +529,17 @@ function nvx_schema_clinics() {
 			'name'                      => $go['name'] ?? 'NUVANX Medicina Estética Láser — Goya · Barrio Salamanca',
 			'branchCode'                => 'goya',
 			'url'                       => home_url( $registry['clinics']['goya']['path'] ),
-			'telephone'                 => $go['phone_href'] ?? '+34647505107',
+			'telephone'                 => $go['phone_href'] ?? '',
 			'email'                     => NVX_CONTACT_EMAIL,
 			'image'                     => function_exists( 'nvx_clinic_schema_image_urls' )
 				? nvx_clinic_schema_image_urls( 'goya' )
 				: array( trailingslashit( get_template_directory_uri() ) . 'assets/images/clinics/goya/01-fachada.jpg' ),
 			'address'                   => array(
 				'@type'           => 'PostalAddress',
-				'streetAddress'   => $go['address'] ?? 'Calle de Fernán González, 26',
+				'streetAddress'   => $go['address'] ?? '',
 				'addressLocality' => $go['locality'] ?? 'Madrid',
 				'addressRegion'   => 'Comunidad de Madrid',
-				'postalCode'      => $go['postal_code'] ?? '28009',
+				'postalCode'      => $go['postal_code'] ?? '',
 				'addressCountry'  => 'ES',
 			),
 			'geo'                       => array(
@@ -578,7 +550,7 @@ function nvx_schema_clinics() {
 			'identifier'                => array(
 				'@type'      => 'PropertyValue',
 				'propertyID' => 'Registro sanitario de la Comunidad de Madrid',
-				'value'      => $go['reg'] ?? 'CS20073',
+				'value'      => $go['reg'] ?? '',
 			),
 			'hasMap'                    => 'https://www.google.com/maps/search/?api=1&query=NUVANX%20Goya%20C%2F%20de%20Fern%C3%A1n%20Gonz%C3%A1lez%2026%2028009%20Madrid',
 			'areaServed'                => array( 'Goya', 'Barrio de Salamanca', 'Lista', 'Recoletos', 'Velázquez', 'Serrano', 'Madrid' ),

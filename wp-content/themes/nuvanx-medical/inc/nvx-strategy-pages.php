@@ -72,6 +72,12 @@ function nvx_strategy_why_nuvanx_markup(): string {
 	$valuation_url = esc_url( home_url( '/madrid/valoracion/' ) );
 	$team_url      = esc_url( home_url( '/equipo-medico/' ) );
 	$investment    = nvx_strategy_published_url( 'investment' );
+	$clinics       = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$chamberi_reg = (string) ( $clinics['chamberi']['reg'] ?? '' );
+	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
+	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
+	$clinic_section = 'NUVANX atiende en ' . $chamberi_name . ' (' . $chamberi_reg . ') y Salamanca–' . $goya_name . ' (' . $goya_reg . '), con equipo médico colegiado.';
 
 	$html  = '<article class="nvx-brand-readable nvx-strategy-page">';
 	$html .= '<section class="nvx-brand-hero"><div class="nvx-brand-hero__inner"><div class="nvx-brand-hero__copy"><p class="nvx-eyebrow">Criterio médico NUVANX</p>';
@@ -111,7 +117,7 @@ function nvx_strategy_why_nuvanx_markup(): string {
 		. '<p>Este procedimiento no es habitual en el sector. Lo describimos porque creemos que debería serlo.</p>'
 		. '</section>';
 
-	$html .= '<section class="nvx-brand-section" aria-labelledby="why-centros"><h2 id="why-centros">Atención en centros sanitarios autorizados</h2><p>NUVANX atiende en Chamberí (CS20144) y Salamanca–Goya (CS20073), con equipo médico colegiado.</p><p><a class="nvx-brand-btn" href="' . $valuation_url . '">Valoración gratuita — sin compromiso</a> <a class="nvx-brand-inline-link" href="' . $team_url . '">Conocer al equipo médico</a>';
+	$html .= '<section class="nvx-brand-section" aria-labelledby="why-centros"><h2 id="why-centros">Atención en centros sanitarios autorizados</h2><p>' . esc_html( $clinic_section ) . '</p><p><a class="nvx-brand-btn" href="' . $valuation_url . '">Valoración gratuita — sin compromiso</a> <a class="nvx-brand-inline-link" href="' . $team_url . '">Conocer al equipo médico</a>';
 	if ( '' !== $investment ) {
 		$html .= ' <a class="nvx-brand-inline-link" href="' . esc_url( $investment ) . '">Consultar inversión orientativa</a>';
 	}

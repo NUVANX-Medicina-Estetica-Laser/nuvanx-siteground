@@ -344,7 +344,7 @@ function nvx_catalog_apply_runtime_truth( array $catalog, string $filename, ?arr
 	$catalog   = nvx_catalog_apply_tariff_truth( $catalog, $safe_name, $config );
 
 	if ( 'equipo-medico-page.json' === $safe_name && isset( $catalog['rivera']['quote']['author'] ) ) {
-		$colegiado = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282864786';
+		$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 		$catalog['rivera']['quote']['author'] = str_replace( '%s', $colegiado, (string) $catalog['rivera']['quote']['author'] );
 	}
 

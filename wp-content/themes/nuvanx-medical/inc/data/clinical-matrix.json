@@ -31,7 +31,7 @@
         "Irregularidades en el contorno"
       ],
       "follow_up": "Revisión a las 2 semanas, 3 meses y 6 meses.",
-      "medical_responsible": "Dr. José Javier Rivera Tejeda (Col. 282864786)",
+      "medical_responsible_id": "director",
       "scientific_review_date": "2026-08-24",
       "evidence": [
         {
@@ -100,7 +100,7 @@
         "Alteraciones transitorias de la pigmentación"
       ],
       "follow_up": "Seguimiento clínico según intensidad del resurfacing y evolución de la piel.",
-      "medical_responsible": "Dr. José Javier Rivera Tejeda (Col. 282864786)",
+      "medical_responsible_id": "director",
       "scientific_review_date": "2026-08-24",
       "evidence": [
         {
@@ -156,7 +156,7 @@
         "Molestia durante la aplicación"
       ],
       "follow_up": "Seguimiento y mantenimiento según evolución individual.",
-      "medical_responsible": "Dr. José Javier Rivera Tejeda (Col. 282864786)",
+      "medical_responsible_id": "director",
       "scientific_review_date": "2026-08-24",
       "evidence": [
         {

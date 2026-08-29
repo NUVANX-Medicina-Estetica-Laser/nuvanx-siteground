@@ -271,6 +271,12 @@ function nvx_aesthetic_treatment_render( array $page ): void {
 	$brands     = array_values( array_filter( array_map( 'strval', (array) ( $page['brands'] ?? array() ) ) ) );
 	$techniques = array_values( array_filter( array_map( 'strval', (array) ( $page['techniques'] ?? array() ) ) ) );
 	$price      = (string) ( $page['price_range'] ?? $protocol['price_range'] ?? $schema['price_range'] ?? '' );
+	$clinics    = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$chamberi_reg = (string) ( $clinics['chamberi']['reg'] ?? '' );
+	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
+	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
+	$clinic_meta = $chamberi_name . ' (' . $chamberi_reg . ') · Salamanca–' . $goya_name . ' (' . $goya_reg . ')';
 	if ( 'neuromoduladores-faciales-madrid' === (string) ( $page['slug'] ?? '' ) && function_exists( 'nvx_tariff_price_label' ) ) {
 		$from = nvx_tariff_price_label( 'neuromoduladores', 'entrecejo' );
 		if ( '' !== $from ) {
@@ -299,7 +305,7 @@ function nvx_aesthetic_treatment_render( array $page ): void {
 						'byline'             => true,
 						'lead'               => (string) $page['lead'],
 						'cta_fallback_label' => __( 'Valoración gratuita — sin compromiso', 'nuvanx-medical' ),
-						'meta'               => __( 'Chamberí (CS20144) · Salamanca–Goya (CS20073)', 'nuvanx-medical' ),
+						'meta'               => $clinic_meta,
 					)
 				);
 				?>
