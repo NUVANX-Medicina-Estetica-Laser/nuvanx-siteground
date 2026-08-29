@@ -1,12 +1,26 @@
-## Checklist — cambios en functions.php / requires
+## Alcance
 
-- [ ] Si este PR elimina un `require_once`, se ha ejecutado
-      `grep -rn "function_exists( '<símbolo>'" --include="*.php" .`
-      para cada función definida en el archivo eliminado, y el resultado
-      (sin consumidores) se pega abajo.
-- [ ] Si este PR añade un `require_once`, se ha verificado en staging2
-      que la ruta afectada renderiza el módulo esperado (no el fallback genérico).
+Describe el problema, la fuente de verdad propietaria y el cambio mínimo que lo resuelve.
 
-## Descripción del PR
+## Verificación
 
-*(Añade aquí el contexto, capturas o resultados del grep si aplican)*
+- [ ] Verifiqué todos los consumidores/referencias afectados por este cambio.
+- [ ] Ejecuté los tests estáticos/semánticos relevantes para los archivos modificados.
+- [ ] No añadí workflows temporales/one-time, residuos generados ni documentación duplicada.
+- [ ] No introduje valores hardcoded que ya tengan un owner machine-readable.
+
+## Impacto runtime / release
+
+- [ ] No cambia comportamiento runtime/release.
+- [ ] Cambia runtime/release; después del merge, el nuevo SHA debe completar el Staging canónico antes de cualquier promoción a Production.
+
+Si cambia deployment, migraciones, seguridad, analytics o ownership de una integración, documenta el rollback/fail-closed y la evidencia que demuestra el nuevo owner.
+
+## Integración del tema
+
+Si cambia `functions.php`, `require_once` o módulos del tema:
+
+- [ ] El archivo/módulo existe en la ruta esperada.
+- [ ] Se carga exactamente una vez desde el owner previsto.
+- [ ] Pasan los checks de sintaxis PHP/JS aplicables.
+- [ ] No se introdujeron hooks, renderers, conversion owners o metadata emitters duplicados.
