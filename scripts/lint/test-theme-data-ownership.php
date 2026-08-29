@@ -105,7 +105,7 @@ foreach ( $iterator as $file ) {
 		continue;
 	}
 
-	if ( str_contains( $source, 'Salamanca–Salamanca' ) || str_contains( $source, 'Salamanca-Salamanca' ) ) {
+	if ( str_contains( $source, 'Salamanca–Salamanca' ) || str_contains( $source, 'Salamanca-Salamanca' ) || str_contains( $source, "Salamanca–' . \$goya_name" ) ) {
 		$failures[] = 'duplicated_clinic_name_prefix file=' . $relative;
 	}
 	if ( str_contains( $source, 'config.json' ) ) {
