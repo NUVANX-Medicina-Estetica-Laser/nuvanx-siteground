@@ -21,8 +21,11 @@ const invalid = [
   '<div class="other-wrapper"><article class="nvx-brand-page--signature nvx-brand-page__renderer-root"><div class="entry-content"></div></article></div>',
   // Outer global frame present but inner missing page-specific modifier
   '<div class="nvx-brand-page"><article class="nvx-brand-page__renderer-root"><div class="entry-content"></div></article></div>',
-  // Non-matching tag/element
+  // Non-matching tag/element for inner root
   '<span class="nvx-brand-page nvx-brand-page--signature">Text</span>',
+  // Non-frame tag/element for outer ancestor (e.g. span or section without div/article frame)
+  '<span class="nvx-brand-page"><article class="nvx-brand-page--signature nvx-brand-page__renderer-root"></article></span>',
+  '<section class="nvx-brand-page"><article class="nvx-brand-page--signature nvx-brand-page__renderer-root"></article></section>',
   // Empty
   '',
   // Redundant nested duplicate frames (outer global + inner standalone unstripped)

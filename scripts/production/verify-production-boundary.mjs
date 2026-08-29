@@ -292,17 +292,23 @@ validate_signature_frame() {
         $hasSignature = in_array("nvx-brand-page--signature", $classes, true);
         $hasRendererRoot = in_array("nvx-brand-page__renderer-root", $classes, true);
 
-        $brandPageAncestorCount = 0;
+        $brandPageAncestors = [];
         foreach ($stack as $parent) {
           if (in_array("nvx-brand-page", $parent["classes"], true)) {
-            $brandPageAncestorCount++;
+            $brandPageAncestors[] = $parent;
           }
         }
 
-        if ($hasBrandPage && $hasSignature && $brandPageAncestorCount === 0) {
+        $totalBrandPageAncestors = count($brandPageAncestors);
+        $hasSingleValidFrameAncestor = (
+          $totalBrandPageAncestors === 1 &&
+          ($brandPageAncestors[0]["tag"] === "div" || $brandPageAncestors[0]["tag"] === "article")
+        );
+
+        if ($hasBrandPage && $hasSignature && $totalBrandPageAncestors === 0) {
           $standalone = true;
         }
-        if (!$hasBrandPage && $hasSignature && $hasRendererRoot && $brandPageAncestorCount === 1) {
+        if (!$hasBrandPage && $hasSignature && $hasRendererRoot && $hasSingleValidFrameAncestor) {
           $governed = true;
         }
       }
