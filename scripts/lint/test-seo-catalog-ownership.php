@@ -11,9 +11,10 @@ declare(strict_types=1);
 
 $root       = dirname( __DIR__, 2 );
 $data_dir   = $root . '/wp-content/themes/nuvanx-medical/inc/data';
+$theme_dir  = $root . '/wp-content/themes/nuvanx-medical';
 $routes_raw = file_get_contents( $data_dir . '/routes.json' );
 $seo_raw    = file_get_contents( $data_dir . '/seo-metadata.json' );
-$central    = file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-seo-metadata.php' );
+$central    = file_get_contents( $theme_dir . '/inc/nvx-seo-metadata.php' );
 
 if ( false === $routes_raw || false === $seo_raw || false === $central ) {
 	fwrite( STDERR, "SEO_CATALOG_OWNERSHIP_TEST=FAIL reason=unreadable_contract_source\n" );
@@ -50,6 +51,42 @@ if ( false === strpos( $central, "add_filter( 'wpseo_metadesc', 'nvx_seo_filter_
 	$failures[] = 'canonical_description_owner_missing';
 }
 
+// Legacy page-local SEO callbacks are forbidden outside the temporary
+// retirement shim. Reintroducing one is a split-ownership regression and must
+// fail CI rather than being silently compensated by another remove_filter.
+$forbidden_callbacks = array(
+	'nvx_filter_valoracion_document_title',
+	'nvx_filter_valoracion_metadesc',
+	'nvx_filter_contacto_document_title',
+	'nvx_filter_contacto_metadesc',
+	'nvx_contacto_seo_title',
+	'nvx_contacto_seo_metadesc',
+	'nvx_filter_contacto_social_title',
+	'nvx_filter_contacto_social_description',
+);
+$iterator = new RecursiveIteratorIterator(
+	new RecursiveDirectoryIterator( $theme_dir, FilesystemIterator::SKIP_DOTS )
+);
+foreach ( $iterator as $file ) {
+	if ( ! $file->isFile() || 'php' !== strtolower( $file->getExtension() ) ) {
+		continue;
+	}
+	$path = $file->getPathname();
+	if ( str_ends_with( $path, '/inc/nvx-seo-legacy-retirement.php' ) ) {
+		continue;
+	}
+	$source = file_get_contents( $path );
+	if ( false === $source ) {
+		$failures[] = 'unreadable_php_source ' . $path;
+		continue;
+	}
+	foreach ( $forbidden_callbacks as $callback ) {
+		if ( false !== strpos( $source, $callback ) ) {
+			$failures[] = 'legacy_seo_callback_forbidden callback=' . $callback . ' file=' . str_replace( $root . '/', '', $path );
+		}
+	}
+}
+
 $contact = $seo['contacto'] ?? null;
 if (
 	! is_array( $contact )
@@ -60,9 +97,9 @@ if (
 }
 
 $contracts = array(
-	'test-local-seo-ownership.php'          => 'local_seo_ownership_contract',
-	'test-goya-nap-display-contract.php'   => 'goya_nap_display_contract',
-	'test-gsc-search-analytics-contract.mjs'=> 'gsc_search_analytics_contract',
+	'test-local-seo-ownership.php'           => 'local_seo_ownership_contract',
+	'test-goya-nap-display-contract.php'    => 'goya_nap_display_contract',
+	'test-gsc-search-analytics-contract.mjs' => 'gsc_search_analytics_contract',
 );
 foreach ( $contracts as $filename => $label ) {
 	$path = __DIR__ . '/' . $filename;
