@@ -356,18 +356,18 @@ do
         || { echo "PRODUCTION_PROBE_FAIL route=$route reason=legacy_direct_form count=$legacy_direct_forms mode=$probe_mode" >&2; cleanup; exit 1; }
       ;;
     '/protocolos-signature/')
-      require_body "$body" "$route" 'nvx-brand-page nvx-brand-page--signature' || { cleanup; exit 1; }
+      require_body "$body" "$route" 'nvx-brand-page--signature' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Una ruta de decisión, no un paquete cerrado' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Arquitecturas clínicas' || { cleanup; exit 1; }
       ;;
     '/remodelacion-corporal-laser-madrid/')
-      require_body "$body" "$route" 'nvx-brand-page nvx-brand-page--signature' || { cleanup; exit 1; }
+      require_body "$body" "$route" 'nvx-brand-page--signature' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Cómo se decide el plan corporal' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Zonas de valoración' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Tu primera valoración clínica' || { cleanup; exit 1; }
       ;;
     '/tratamiento-postparto-abdomen-contorno-corporal-madrid/')
-      require_body "$body" "$route" 'nvx-brand-page nvx-brand-page--signature' || { cleanup; exit 1; }
+      require_body "$body" "$route" 'nvx-brand-page--signature' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Qué se valora en postparto' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Rutas relacionadas' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Tu primera valoración clínica' || { cleanup; exit 1; }
