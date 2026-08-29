@@ -219,11 +219,11 @@ function nvx_clinics_hub_page_markup(): string {
 	$html .= '<div class="nvx-brand-actions nvx-clinics-hub-actions">';
 	$html .= '<a class="nvx-brand-btn nvx-brand-btn--primary" href="' . esc_url( $valoracion ) . '">' . esc_html__( 'Valoración gratuita — sin compromiso', 'nuvanx-medical' ) . '</a>';
 	$html .= '</div>';
-	$html .= '<p class="nvx-brand-meta nvx-reg-copy">' . esc_html( sprintf( __( '%1$s %2$s · %3$s %4$s · Medicina basada en evidencia', 'nuvanx-medical' ), 
-		(string) ( $config['chamberi']['short_name'] ?? '' ), 
-		(string) ( $config['chamberi']['reg'] ?? '' ), 
-		(string) ( $config['goya']['short_name'] ?? '' ), 
-		(string) ( $config['goya']['reg'] ?? '' ) 
+	$html .= '<p class="nvx-brand-meta nvx-reg-copy">' . esc_html( sprintf( __( '%1$s %2$s · %3$s %4$s · Medicina basada en evidencia', 'nuvanx-medical' ),
+		(string) ( $config['chamberi']['short_name'] ?? '' ),
+		(string) ( $config['chamberi']['reg'] ?? '' ),
+		(string) ( $config['goya']['short_name'] ?? '' ),
+		(string) ( $config['goya']['reg'] ?? '' )
 	) ) . '</p>';
 	$html .= '</div></div></section>';
 
