@@ -1,6 +1,6 @@
 name: Production
 run-name: >-
-  Production · ${{ github.event_name == 'workflow_run' && 'staging-release-dispatch' || (inputs.run_ssh_connectivity_probe && format('SSH connectivity probe · {0}', inputs.candidate_sha) || (inputs.deploy && format('{0} · {1}', inputs.release_mode, inputs.candidate_sha) || format('verification · {0}', inputs.candidate_sha))) }}
+  Production · ${{ inputs.run_ssh_connectivity_probe && format('SSH connectivity probe · {0}', inputs.candidate_sha) || (inputs.deploy && format('{0} · {1}', inputs.release_mode, inputs.candidate_sha) || format('verification · {0}', inputs.candidate_sha)) }}
 
 on:
   # Production is deliberately manual-only. A successful Staging run proves a
@@ -82,58 +82,6 @@ env:
   SSH_TRANSPORT_EXIT_CODE: 255
 
 jobs:
-  dispatch_release:
-    name: Disabled automatic production dispatcher
-    # Retained temporarily for workflow history compatibility; it is permanently
-    # disabled. A production release is authorized only by workflow_dispatch.
-    if: ${{ false }}
-    permissions:
-      actions: write
-      contents: read
-      pull-requests: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    steps:
-      - name: Dispatch only explicit release marker and wait for completion
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          message="$(gh api "/repos/${GITHUB_REPOSITORY}/commits/${CANDIDATE_SHA}" --jq '.commit.message')"
-          if [[ "$message" != *'[deploy-production]'* ]]; then
-            echo "PRODUCTION_CHAIN=SKIP no_release_marker sha=$CANDIDATE_SHA"
-            exit 0
-          fi
-
-          before_id="$(gh run list --workflow production.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-          gh workflow run production.yml \
-            --ref master \
-            -f deploy=true \
-            -f candidate_sha="$CANDIDATE_SHA" \
-            -f release_mode=release \
-            -f run_post_audits=true \
-            -f run_performance=true \
-            -f run_hubspot_e2e=true \
-            -f run_final_close_audit=true \
-            -f run_mu_plugin_forensics=true
-
-          child_id=''
-          for attempt in $(seq 1 30); do
-            runs="$(gh run list --workflow production.yml --branch master --event workflow_dispatch --limit 20 --json databaseId,headSha)"
-            child_id="$(jq -r --argjson before "$before_id" --arg sha "$CANDIDATE_SHA" '[.[] | select(.databaseId > $before and .headSha == $sha)] | sort_by(.databaseId) | last | .databaseId // empty' <<<"$runs")"
-            if [[ -n "$child_id" ]]; then
-              break
-            fi
-            sleep 2
-          done
-          [[ "$child_id" =~ ^[0-9]+$ ]] || { echo 'PRODUCTION_CHAIN=FAIL child_run_not_found' >&2; exit 1; }
-          echo "PRODUCTION_CHAIN=DISPATCHED sha=$CANDIDATE_SHA run_id=$child_id"
-          gh run watch "$child_id" --exit-status
-          echo "PRODUCTION_CHAIN=PASS sha=$CANDIDATE_SHA run_id=$child_id"
-
   release:
     name: Promote immutable accepted SHA
     if: ${{ github.event_name == 'workflow_dispatch' && (inputs.deploy || inputs.run_ssh_connectivity_probe) }}
