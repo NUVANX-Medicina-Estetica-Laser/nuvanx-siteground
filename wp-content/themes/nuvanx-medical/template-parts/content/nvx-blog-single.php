@@ -25,7 +25,7 @@ while ( have_posts() ) :
 	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
 	$blog_cta_text = sprintf(
 		/* translators: 1: clinic name, 2: clinic reg, 3: clinic name, 4: clinic reg */
-		__( 'Cada tratamiento se pauta tras la exploración clínica de anatomía, tejido y objetivos. Sedes autorizadas: %1$s (%2$s) y Salamanca–%3$s (%4$s).', 'nuvanx-medical' ),
+		__( 'Cada tratamiento se pauta tras la exploración clínica de anatomía, tejido y objetivos. Sedes autorizadas: %1$s (%2$s) y %3$s (%4$s).', 'nuvanx-medical' ),
 		$chamberi_name,
 		$chamberi_reg,
 		$goya_name,
