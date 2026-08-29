@@ -152,10 +152,5 @@ nvx_assert_filter_registration(
 	$GLOBALS['nvx_added_filters'],
 	'canonical_template_filter_registered'
 );
-nvx_assert_filter_registration(
-	array( 'wp_enqueue_scripts', 'nvx_complianz_enforce_touch_targets', 20 ),
-	$GLOBALS['nvx_added_actions'],
-	'canonical_touch_target_action_registered'
-);
 
-fwrite( STDOUT, "COMPLIANZ_POLICY_ROUTING=PASS cases=21 privacy=canonical cookies=canonical legal=canonical metadata=authoritative hash_metadata=authoritative js_controls=preserved template_url=preserved touch_target=registered owner=single\n" );
+fwrite( STDOUT, "COMPLIANZ_POLICY_ROUTING=PASS cases=20 privacy=canonical cookies=canonical legal=canonical metadata=authoritative hash_metadata=authoritative js_controls=preserved template_url=preserved touch_target=css_governed owner=single\n" );

@@ -376,72 +376,6 @@ svg {
   max-width: 100%;
 }
 
-/*
- * First-paint geometry. Production still inlines only fonts+tokens+base
- * while header/layout/components/patterns arrive as later stylesheets.
- * These rules must match the later files so the Chamberí contact block
- * does not jump when that CSS lands.
- */
-.nvx-header {
-  min-height: var(--nvx-header-height-mobile);
-  padding-block: var(--nvx-space-3);
-}
-
-.nvx-logo__img,
-.custom-logo {
-  display: block;
-  width: auto;
-  height: var(--nvx-logo-height-mobile);
-  max-width: var(--nvx-logo-width-mobile);
-  object-fit: contain;
-}
-
-.nvx-icon {
-  display: inline-block;
-  width: var(--nvx-icon-sm);
-  height: var(--nvx-icon-sm);
-  vertical-align: -0.2em;
-  flex-shrink: 0;
-}
-
-.nvx-brand-hero {
-  background: var(--nvx-ink);
-  color: var(--nvx-light);
-}
-
-.nvx-brand-hero__copy {
-  box-sizing: border-box;
-  width: var(--nvx-shell);
-  max-width: 100%;
-  margin-inline: auto;
-  padding-block: var(--nvx-space-8);
-  padding-inline: var(--nvx-gutter-inner);
-}
-
-.nvx-brand-page > .nvx-brand-section,
-.nvx-page__content > .nvx-brand-section {
-  box-sizing: border-box;
-  padding-block: var(--nvx-pad-section);
-}
-
-.nvx-brand-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: var(--nvx-gap-base);
-  padding: 0;
-  list-style: none;
-}
-
-.nvx-brand-grid--2 > * {
-  grid-column: span 6;
-}
-
-@media (max-width: 640px) {
-  .nvx-brand-grid--2 > * {
-    grid-column: 1 / -1;
-  }
-}
-
 /* Form controls inherit typography; buttons keep visual contract from tokens/components. */
 button,
 input,
@@ -645,7 +579,8 @@ body:not(.home) .nvx-brand-hero__copy {
   }
 }
 
-/* Print styles for clinical environments (CSS-3) */
+/* Print styles for clinical environments (CSS-3). The forced display reset is
+ * deliberate print-policy containment, not cascade convenience. */
 @media print {
   .nvx-header,
   .nvx-footer,
@@ -654,7 +589,7 @@ body:not(.home) .nvx-brand-hero__copy {
   [class*="nvx-home-hero__video"],
   .nvx-hamburger,
   .nvx-mobile-nav {
-    display: none !important;
+    display: none !important; /* nvx-token-exception: PRINT_POLICY — interactive chrome must not print */
   }
   body {
     font-size: 12pt;
@@ -720,29 +655,26 @@ body:not(.home) .nvx-brand-hero__copy {
   color: var(--nvx-charcoal);
 }
 
-/* Ensure consistent top spacing after hero for all page types - más elegante */
+/* Ensure consistent top spacing after hero for both standard and managed page frames. */
 .nvx-page__content > .nvx-brand-section:first-of-type,
-.nvx-brand-page > .nvx-brand-section:first-of-type {
+.nvx-brand-page > .nvx-brand-section:first-of-type,
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-section:first-of-type {
   padding-top: var(--nvx-space-10);
 }
 
-/* Theme hero is a direct child of article (outside shell) */
-
-/* Body sections after a full-bleed hero keep readable gutters - diseño elegante */
-.nvx-page__content .nvx-brand-section,
-.nvx-brand-page > .nvx-brand-section {
+/* Body sections rendered inside the standard content wrapper. Managed
+ * .nvx-brand-page sections own their rhythm in the dedicated rule below. */
+.nvx-page__content .nvx-brand-section {
   width: 100%;
   padding-block: var(--nvx-pad-section);
 }
 
-
-
-/* Brand heroes inside content match home full-bleed, not shell box */
-/* NOTE: Double .nvx-brand-page nesting is supported by CSS and is "by design" */
-/* The refactor b5bf6ea6 that attempted to "fix" this was reverted due to regression */
+/* Brand heroes inside either canonical page context match Home full-bleed.
+ * Runtime wrapper governance marks a retained renderer root explicitly when
+ * the outer .nvx-brand-page owns the canonical frame. */
 .nvx-page__content .nvx-brand-hero,
 .nvx-brand-page > .nvx-brand-hero,
-.nvx-page__content .nvx-brand-page > .nvx-brand-hero {
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-hero {
   position: relative;
   display: block;
   width: calc(100vw - var(--nvx-scrollbar-width, 0px));
@@ -752,13 +684,14 @@ body:not(.home) .nvx-brand-hero__copy {
   overflow: hidden;
 }
 
-/* Fallback dark ink background for all brand heroes inside .nvx-brand-page */
+/* Fallback dark ink background for all brand heroes inside the page frame. */
 .nvx-brand-page .nvx-brand-hero {
   background: var(--nvx-ink);
 }
 
-/* Brand-page body sections: one vertical rhythm everywhere */
-.nvx-brand-page > .nvx-brand-section {
+/* Brand-page body sections: one vertical rhythm everywhere. */
+.nvx-brand-page > .nvx-brand-section,
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-section {
   width: 100%;
   margin: 0;
   padding-block: var(--nvx-pad-section);
@@ -784,8 +717,6 @@ body:not(.home) .nvx-brand-hero__copy {
   padding-inline: 0;
 }
 
-
-
 /*
  * Post-hero clinical intro is emitted as a normal brand-section
  * (.nvx-hero-intro) so gutters match Chamberí / hub / treatment sections.
@@ -795,14 +726,16 @@ body:not(.home) .nvx-brand-hero__copy {
 }
 
 .nvx-page__content .nvx-brand-hero__media,
-.nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media {
+.nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media,
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-hero .nvx-brand-hero__media {
   margin: 0;
   border-radius: 0;
   background: var(--nvx-ink);
 }
 
 .nvx-page__content .nvx-brand-hero__media img,
-.nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media img {
+.nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media img,
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-hero .nvx-brand-hero__media img {
   width: 100%;
   height: 100%;
   max-height: none;
@@ -826,10 +759,6 @@ body:not(.home) .nvx-brand-hero__copy {
 
 .nvx-brand-section--soft {
   background: var(--nvx-surface-base);
-}
-
-.nvx-brand-page .nvx-brand-section {
-  padding-block: var(--nvx-pad-section);
 }
 
 /* Valoración form stage — inspired by header media (fondo-formulario):
@@ -1075,8 +1004,6 @@ body:not(.home) .nvx-brand-hero__copy {
 }
 
 @media (max-width: 600px) {
-
-
   .nvx-page.nvx-page--legal > .nvx-blog-article.nvx-brand-readable {
     padding-block: var(--nvx-space-6) var(--nvx-pad-section-tight);
   }
@@ -4332,6 +4259,15 @@ body:not(.home) .nvx-page-hero__copy h1,
   transition: opacity var(--nvx-duration-fast) ease;
 }
 
+.nvx-logo__img,
+.custom-logo {
+  display: block;
+  width: auto;
+  height: var(--nvx-logo-height-mobile);
+  max-width: var(--nvx-logo-width-mobile);
+  object-fit: contain;
+}
+
 .nvx-logo:hover {
   opacity: 0.8;
 }
@@ -5062,7 +4998,8 @@ body:not(.home) .nvx-page-hero__copy h1,
 .nvx-footer a,
 .nvx-btn,
 .nvx-button,
-.nvx-brand-btn {
+.nvx-brand-btn,
+.wp-block-button__link {
   min-height: var(--nvx-touch-target-min, 48px);
 }
 
@@ -5095,6 +5032,15 @@ body:not(.home) .nvx-page-hero__copy h1,
   color: var(--nvx-light);
   background: var(--nvx-charcoal);
   border-color: var(--nvx-light);
+}
+
+/* Complianz renders its own button CSS and can load it after the theme bundle.
+ * Keep this one third-party containment override so the WCAG touch-target floor
+ * remains authoritative without restoring a PHP inline-style owner. */
+.cmplz-cookiebanner .cmplz-btn,
+#cmplz-cookiebanner-container .cmplz-btn {
+  min-height: var(--nvx-touch-target-min, 48px) !important; /* nvx-token-exception: THIRD_PARTY_CONTAINMENT — Complianz late CSS */
+  box-sizing: border-box;
 }
 
 /* Closed mobile navigation drawer: inert and non-interactive. */
@@ -5133,10 +5079,13 @@ body:not(.home) .nvx-page-hero__copy h1,
 }
 
 /* Canonical conversion-control geometry. Color variants keep ownership of
- * their button custom properties; this layer owns shape, typography and focus. */
+ * their button custom properties; this layer owns shape, typography and focus.
+ * Gutenberg links consume this same contract instead of maintaining a parallel
+ * WordPress-specific button implementation. */
 .nvx-brand-btn,
 .nvx-btn,
-.nvx-button {
+.nvx-button,
+.wp-block-button__link {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -5171,7 +5120,8 @@ body:not(.home) .nvx-page-hero__copy h1,
 
 .nvx-brand-btn:hover,
 .nvx-btn:hover,
-.nvx-button:hover {
+.nvx-button:hover,
+.wp-block-button__link:hover {
   background: var(--button-hover-bg, var(--nvx-charcoal));
   color: var(--button-hover-color, var(--nvx-light));
   border-color: var(--button-hover-border, var(--nvx-charcoal));
@@ -5181,7 +5131,8 @@ body:not(.home) .nvx-page-hero__copy h1,
 
 .nvx-brand-btn:focus-visible,
 .nvx-btn:focus-visible,
-.nvx-button:focus-visible {
+.nvx-button:focus-visible,
+.wp-block-button__link:focus-visible {
   background: var(--button-hover-bg, var(--nvx-charcoal));
   color: var(--button-hover-color, var(--nvx-light));
   border-color: var(--button-hover-border, var(--nvx-charcoal));
@@ -5197,13 +5148,15 @@ body:not(.home) .nvx-page-hero__copy h1,
 .nvx-button:disabled,
 .nvx-brand-btn[aria-disabled="true"],
 .nvx-btn[aria-disabled="true"],
-.nvx-button[aria-disabled="true"] {
+.nvx-button[aria-disabled="true"],
+.wp-block-button__link[aria-disabled="true"] {
   background: var(--button-bg, var(--nvx-ink));
   color: var(--button-color, var(--nvx-light));
   border-color: var(--button-border, var(--nvx-ink));
   transform: none;
   box-shadow: none;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 .nvx-brand-btn:disabled:focus-visible,
@@ -5211,7 +5164,8 @@ body:not(.home) .nvx-page-hero__copy h1,
 .nvx-button:disabled:focus-visible,
 .nvx-brand-btn[aria-disabled="true"]:focus-visible,
 .nvx-btn[aria-disabled="true"]:focus-visible,
-.nvx-button[aria-disabled="true"]:focus-visible {
+.nvx-button[aria-disabled="true"]:focus-visible,
+.wp-block-button__link[aria-disabled="true"]:focus-visible {
   outline: none;
 }
 
@@ -5386,32 +5340,6 @@ body:not(.home) .nvx-page-hero__copy h1,
   }
 }
 
-/* Reduced motion: disable nav transitions/animations, videos, and preserve immediate scroll. */
-@media (prefers-reduced-motion: reduce) {
-  .nvx-nav__link::after,
-  .nvx-nav__list > li > a::after,
-  .nvx-nav__list .sub-menu,
-  .nvx-button,
-  .nvx-btn,
-  .nvx-brand-btn,
-  .nvx-toast {
-    transition: none !important;
-  }
-
-  .nvx-mobile-nav {
-    animation: none !important;
-  }
-
-  video[autoplay],
-  .nvx-home-hero__video {
-    display: none !important;
-  }
-
-  html:focus-within {
-    scroll-behavior: auto;
-  }
-}
-
 /* ── Global Skip Link ─────────────────── */
 .nvx-skip-link {
   position: absolute;
@@ -5433,27 +5361,43 @@ body:not(.home) .nvx-page-hero__copy h1,
   z-index: calc(var(--nvx-z-a11y) + 1);
   box-shadow: var(--nvx-shadow-focus-light);
 }
-@media (prefers-reduced-motion: reduce) {
-  .nvx-skip-link { transition: none; }
-}
 
-/* Global prefers-reduced-motion override (CSS-2) */
+/* Single reduced-motion policy. The universal duration overrides are the only
+ * deliberate global !important use here: they must beat route-local bundles
+ * that can load after core. Explicit transform/display resets remove motion
+ * that a near-zero duration alone would not eliminate. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important; /* nvx-token-exception: reduced-motion override */
-    animation-iteration-count: 1 !important;
+    animation-iteration-count: 1 !important; /* nvx-token-exception: reduced-motion override */
     transition-duration: 0.01ms !important; /* nvx-token-exception: reduced-motion override */
-    scroll-behavior: auto !important;
+    scroll-behavior: auto !important; /* nvx-token-exception: reduced-motion override */
   }
+
+  .nvx-mobile-nav {
+    animation: none !important; /* nvx-token-exception: reduced-motion override — drawer must not traverse the viewport */
+  }
+
+  video[autoplay],
+  .nvx-home-hero__video {
+    display: none !important; /* nvx-token-exception: reduced-motion override — autoplay media is removed entirely */
+  }
+
   .nvx-brand-btn:hover,
   .nvx-brand-btn:focus-visible,
   .nvx-btn:hover,
   .nvx-btn:focus-visible,
+  .nvx-button:hover,
+  .nvx-button:focus-visible,
+  .wp-block-button__link:hover,
+  .wp-block-button__link:focus-visible,
   .nvx-home-feature:hover,
   .nvx-home-feature:focus-within,
   .nvx-brand-card:hover,
-  .nvx-brand-card:focus-within {
-    transform: none !important;
+  .nvx-brand-card:focus-within,
+  .nvx-blog-card:hover .nvx-blog-card__image,
+  .nvx-blog-card:focus-within .nvx-blog-card__image {
+    transform: none !important; /* nvx-token-exception: reduced-motion override — route bundles may load after core */
   }
 }
 
