@@ -1,42 +1,70 @@
-# NUVANX repository instructions for coding agents
+# NUVANX repository execution rules
 
-These instructions apply to every task in this repository.
+These rules apply to agents and contributors working in this repository.
 
-## Staging and CI failure interpretation
+## 1. Canonical release model
 
-Before diagnosing any Staging2, Block C, browser-acceptance, SSH, or deployment failure, read:
+- The repository supports exactly two workflows: `.github/workflows/staging.yml` and `.github/workflows/production.yml`.
+- Do not add one-time, temporary, migration-specific or diagnostic workflows. Use repository scripts and the existing canonical workflows.
+- Production release authorization is manual and exact-SHA. Never infer Production eligibility from `master` advancing.
+- Do not bypass Staging acceptance through direct WordPress writes, ad-hoc SSH deployment, WPVibe writes or workflow self-mutation.
+- A runtime-changing merge advances the candidate SHA and therefore requires fresh exact-SHA Staging acceptance before Production promotion.
 
-- `docs/operations/staging-transient-classification.md`
-- `docs/operations/deployment.md`
+See [`docs/operations/deployment.md`](docs/operations/deployment.md) for the full operational contract.
 
-Do **not** infer that a candidate or application is broken merely because a GitHub Actions job is red, timed out, or incomplete. Read the classifier markers and the failing assertion first.
+## 2. Evidence before conclusions
 
-Canonical interpretation:
+Distinguish application defects from infrastructure or configuration failures.
 
-| Evidence | Interpretation |
-|---|---|
-| `FAIL_REAL` or an explicit non-transient application/contract assertion failure | Candidate defect established; fix candidate/application code. |
-| Exit `75` / `EX_TEMPFAIL` / `TRANSIENT_INFRASTRUCTURE` | Candidate defect **not established**. Evidence is incomplete; promotion remains blocked until exact-SHA acceptance completes. |
-| SiteGround HTTP `202`, antibot/captcha/challenge, or allowed transient browser navigation | Infrastructure/edge transient when confirmed by the classifier; **not** a code regression by itself. |
-| Exit `78` / `EX_CONFIG` / `FAIL_CONFIG` | CI/configuration defect; candidate defect **not established**. |
-| SSH exit `255` / transport-preflight failure | Transport/infrastructure defect; candidate defect **not established**. |
+Classify failures using the evidence produced by the canonical scripts:
 
-Required language for transient cases:
+- `FAIL_REAL` — candidate/application defect established by deterministic evidence.
+- `TRANSIENT_INFRASTRUCTURE` / exit `75` — transport or temporary infrastructure condition; release remains blocked because evidence is incomplete, but candidate defect is not established.
+- `FAIL_CONFIG` / exit `78` — configuration/precondition failure; do not patch application code to hide it.
+- SSH exit `255`, bounded TCP timeouts, or verified SiteGround challenge/HTTP `202` are transport/edge signals unless an independent application failure is also proven.
 
-`classification=transient_infrastructure candidate_defect=not_established`
+A red workflow is not, by itself, proof of a code regression. Read the failing step and its artifacts/logs before changing source.
 
-Never convert transient evidence into `PASS`. A transient is still a release **NO-GO** because exact-SHA evidence is incomplete; it simply must not be reported as an application regression without independent `FAIL_REAL` evidence.
+## 3. Mutation safety
 
-## Block C retry rule
+- Preserve the FIFO mutation contract. Do not weaken cross-workflow serialization.
+- Do not rerun a mutating Production/Staging job when the FIFO contract says `rerun_forbidden`; start a new canonical run instead.
+- Never disable strict SSH host-key verification.
+- Never remove backup, rollback, exact-SHA identity or production-boundary gates to make a release green.
+- Do not rewrite already-applied migrations. Add a new bounded migration when a data change is genuinely required.
 
-Block C runs the complete published-surface matrix once per runner. An isolated transient route/viewport must use bounded targeted recovery and must **not** trigger another full-matrix replay in the same runner. If targeted recovery remains inconclusive, return `EX_TEMPFAIL (75)` and require a fresh exact-SHA acceptance run.
+## 4. Source-of-truth discipline
 
-Do not increase retry breadth, weaken assertions, reduce route/viewport coverage, or reinterpret incomplete browser geometry as PASS in order to make CI green.
+Prefer executable/data contracts over prose:
 
-## Historical reference
+- publication topology: `wp-content/themes/nuvanx-medical/inc/data/publication-manifest.json`
+- routes: `wp-content/themes/nuvanx-medical/inc/data/routes.json`
+- tariffs: `wp-content/themes/nuvanx-medical/inc/data/tariff-catalog.json`
+- design tokens: `wp-content/themes/nuvanx-medical/assets/css/nvx-tokens.css`
+- clinical content approval: `docs/approvals/endolaser-content-approval.json`
+- workflow behavior: the current canonical YAML and invoked scripts
 
-Run `33145945869` established the distinction: the first matrix reached 228/228 PASS, one SiteGround `202` left a single tablet case inconclusive, and the old full-matrix replay then exhausted the outer time budget. That incident was infrastructure/retry-architecture evidence, not proof of a candidate regression.
+Do not duplicate changing values into Markdown unless the Markdown is the actual owner of that value.
 
-## Production safety
+## 5. Documentation hygiene
 
-A non-defect transient classification never authorizes Production. Production requires all current release gates, immutable exact-SHA Staging2 acceptance evidence, and any explicit promotion authorization required by the active release issue/workflow.
+Markdown is for durable contracts, not project journals.
+
+- Put current blockers/status in GitHub Issues or PRs.
+- Put run evidence in Actions logs/artifacts.
+- Let Git history preserve superseded investigations and one-time procedures.
+- Do not add dated audit dumps, temporary checklists, issue mirrors or completed one-timer instructions to `docs/`.
+- When a durable rule changes, update the smallest canonical document instead of creating another overlapping file.
+
+## 6. Change quality
+
+Before changing or deleting code:
+
+1. find all consumers/references;
+2. verify the owning source of truth;
+3. run the relevant static/semantic tests;
+4. keep the diff scoped;
+5. state what was directly verified versus inferred;
+6. avoid placeholders, mocks or silent fallbacks in release-critical paths.
+
+For theme changes, preserve the existing design system and use tokens/components rather than introducing page-local visual systems. See [`docs/architecture.md`](docs/architecture.md).
