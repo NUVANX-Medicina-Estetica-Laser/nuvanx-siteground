@@ -28,6 +28,9 @@ const invalid = [
   // Redundant nested duplicate frames (outer global + inner standalone unstripped)
   '<div class="nvx-brand-page"><article class="nvx-brand-page nvx-brand-page--signature"><div class="entry-content"></div></article></div>',
   '<article class="nvx-brand-page"><div class="nvx-brand-page nvx-brand-page--signature"></div></article>',
+  // Multiple nested outer nvx-brand-page ancestors before governed renderer
+  '<div class="nvx-brand-page"><div class="nvx-brand-page"><article class="nvx-brand-page--signature nvx-brand-page__renderer-root"><div class="entry-content"></div></article></div></div>',
+  '<div class="nvx-brand-page"><main class="nvx-brand-page"><article class="nvx-brand-page--signature nvx-brand-page__renderer-root"></article></main></div>',
   // Sibling outer and inner elements (not an ancestor)
   '<div class="nvx-brand-page"></div><article class="nvx-brand-page--signature nvx-brand-page__renderer-root"><div class="entry-content"></div></article>',
   // Modifier-only outer class (token exactness)
