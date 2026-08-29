@@ -1,14 +1,11 @@
 #!/usr/bin/env node
 /**
- * Test contract for compiled CSS manifest and deterministic build integrity.
+ * Deterministic CSS distribution contract.
  *
- * Validates:
- * 1. dist/manifest.json exists and conforms to schema 1.
- * 2. `core` is the only aggregate bundle; single-source bundles are forbidden.
- * 3. Every canonical source CSS file is represented exactly once in manifest.files.
- * 4. All generated files exist with matching content hashes.
- * 5. Each aggregate bundle is reconstructible byte-for-byte from its sources.
- * 6. No orphan or historical CSS artifact exists in dist/.
+ * Every source stylesheet must have exactly one runtime representation:
+ * either it belongs to the multi-source `core` bundle, or it is emitted as one
+ * route-local immutable file. No source may appear in both, no single-source
+ * bundles are allowed, and dist/ may not contain orphan/historical CSS.
  */
 
 import fs from 'node:fs/promises';
@@ -28,10 +25,7 @@ function computeHash(content) {
 }
 
 function normalizeCss(raw) {
-  return raw
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .trim();
+  return raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 }
 
 async function testManifestContract() {
@@ -48,7 +42,7 @@ async function testManifestContract() {
     throw new Error('Manifest missing core bundle');
   }
   if (!files || typeof files !== 'object') {
-    throw new Error('Manifest missing files map');
+    throw new Error('Manifest missing route files map');
   }
 
   const bundleNames = Object.keys(bundles).sort();
@@ -62,99 +56,96 @@ async function testManifestContract() {
     .filter((file) => file.endsWith('.css'))
     .map((file) => `assets/css/${file}`)
     .sort();
-  const manifestSourceFiles = Object.keys(files).sort();
 
-  if (JSON.stringify(sourceCssFiles) !== JSON.stringify(manifestSourceFiles)) {
-    const missing = sourceCssFiles.filter((file) => !manifestSourceFiles.includes(file));
-    const stale = manifestSourceFiles.filter((file) => !sourceCssFiles.includes(file));
+  const coreSources = bundles.core.sources;
+  if (!Array.isArray(coreSources) || coreSources.length < 2) {
+    throw new Error('Core bundle must aggregate at least two source files');
+  }
+
+  const coreSet = new Set(coreSources);
+  if (coreSet.size !== coreSources.length) {
+    throw new Error('Core bundle contains duplicate source entries');
+  }
+
+  const routeSources = Object.keys(files).sort();
+  const overlappingSources = routeSources.filter((file) => coreSet.has(file));
+  if (overlappingSources.length > 0) {
+    throw new Error(
+      `CSS sources have duplicate runtime representations: ${overlappingSources.join(', ')}`
+    );
+  }
+
+  const representedSources = [...coreSources, ...routeSources].sort();
+  if (JSON.stringify(sourceCssFiles) !== JSON.stringify(representedSources)) {
+    const missing = sourceCssFiles.filter((file) => !representedSources.includes(file));
+    const stale = representedSources.filter((file) => !sourceCssFiles.includes(file));
     throw new Error(
       `Manifest/source CSS mismatch: missing=[${missing.join(', ')}] stale=[${stale.join(', ')}]`
     );
   }
 
-  const referencedFiles = new Set();
+  const referencedArtifacts = new Set();
 
   for (const [name, info] of Object.entries(bundles)) {
     if (!Array.isArray(info.sources) || info.sources.length < 2) {
       throw new Error(`Bundle ${name} must aggregate at least two source files`);
     }
-
-    if (referencedFiles.has(info.file)) {
+    if (referencedArtifacts.has(info.file)) {
       throw new Error(`Generated CSS artifact referenced more than once: ${info.file}`);
     }
-    referencedFiles.add(info.file);
+    referencedArtifacts.add(info.file);
 
-    const bundleFilePath = path.join(DIST_DIR, info.file);
-    const distContent = normalizeCss(await fs.readFile(bundleFilePath, 'utf8'));
+    const bundlePath = path.join(DIST_DIR, info.file);
+    const distContent = normalizeCss(await fs.readFile(bundlePath, 'utf8'));
     const actualHash = computeHash(distContent);
-
     if (actualHash !== info.hash) {
       throw new Error(`Bundle ${name} hash mismatch: manifest=${info.hash} actual=${actualHash}`);
     }
-
     if (!info.file.includes(info.hash)) {
       throw new Error(`Bundle ${name} filename ${info.file} does not contain hash ${info.hash}`);
     }
 
     const parts = [];
     for (const relSrc of info.sources) {
-      const fullSrc = path.join(THEME_DIR, relSrc);
-      const srcContent = normalizeCss(await fs.readFile(fullSrc, 'utf8'));
+      const srcContent = normalizeCss(await fs.readFile(path.join(THEME_DIR, relSrc), 'utf8'));
       parts.push(`/* ${path.basename(relSrc)} */\n${srcContent}`);
     }
-
     const reconstructed = parts.join('\n\n');
-    const reconstructedHash = computeHash(reconstructed);
-    const reconstructedSize = Buffer.byteLength(reconstructed, 'utf8');
-
-    if (reconstructedHash !== info.hash) {
-      throw new Error(
-        `Bundle ${name} source reconstruction hash mismatch: ` +
-        `manifest=${info.hash} reconstructed=${reconstructedHash}`
-      );
+    if (computeHash(reconstructed) !== info.hash) {
+      throw new Error(`Bundle ${name} source reconstruction hash mismatch`);
     }
-
-    if (reconstructedSize !== info.size) {
-      throw new Error(
-        `Bundle ${name} source reconstruction size mismatch: ` +
-        `manifest=${info.size} reconstructed=${reconstructedSize}`
-      );
+    if (Buffer.byteLength(reconstructed, 'utf8') !== info.size) {
+      throw new Error(`Bundle ${name} source reconstruction size mismatch`);
     }
-
     if (reconstructed !== distContent) {
-      throw new Error(
-        `Bundle ${name} source reconstruction content mismatch: ` +
-        'dist file does not equal concatenation of declared sources'
-      );
+      throw new Error(`Bundle ${name} is not byte-exact reconstruction of declared sources`);
     }
   }
 
   for (const [relPath, info] of Object.entries(files)) {
-    if (referencedFiles.has(info.file)) {
+    if (referencedArtifacts.has(info.file)) {
       throw new Error(`Generated CSS artifact referenced more than once: ${info.file}`);
     }
-    referencedFiles.add(info.file);
+    referencedArtifacts.add(info.file);
 
-    const distFilePath = path.join(DIST_DIR, info.file);
-    const content = normalizeCss(await fs.readFile(distFilePath, 'utf8'));
-    const actualHash = computeHash(content);
+    const distContent = normalizeCss(await fs.readFile(path.join(DIST_DIR, info.file), 'utf8'));
+    const srcContent = normalizeCss(await fs.readFile(path.join(THEME_DIR, relPath), 'utf8'));
+    const actualHash = computeHash(distContent);
+    const sourceHash = computeHash(srcContent);
 
-    if (actualHash !== info.hash) {
-      throw new Error(`File ${relPath} hash mismatch: manifest=${info.hash} actual=${actualHash}`);
+    if (actualHash !== info.hash || sourceHash !== info.hash) {
+      throw new Error(
+        `Route CSS hash mismatch ${relPath}: manifest=${info.hash} source=${sourceHash} dist=${actualHash}`
+      );
     }
-
-    const srcFilePath = path.join(THEME_DIR, relPath);
-    const srcContent = normalizeCss(await fs.readFile(srcFilePath, 'utf8'));
-    const srcHash = computeHash(srcContent);
-
-    if (srcHash !== info.hash) {
-      throw new Error(`Source ${relPath} hash mismatch with dist: src=${srcHash} dist=${info.hash}`);
+    if (srcContent !== distContent) {
+      throw new Error(`Route CSS ${relPath} differs from its immutable dist artifact`);
     }
   }
 
   const distFiles = (await fs.readdir(DIST_DIR)).filter((file) => file.endsWith('.css')).sort();
-  const expectedDistFiles = [...referencedFiles].sort();
-  const orphans = distFiles.filter((file) => !referencedFiles.has(file));
+  const expectedDistFiles = [...referencedArtifacts].sort();
+  const orphans = distFiles.filter((file) => !referencedArtifacts.has(file));
   const missingDist = expectedDistFiles.filter((file) => !distFiles.includes(file));
 
   if (orphans.length > 0 || missingDist.length > 0) {
@@ -164,9 +155,9 @@ async function testManifestContract() {
   }
 
   console.log(
-    `CSS_MANIFEST_CONTRACT=PASS bundles=${bundleNames.length} ` +
-    `files=${manifestSourceFiles.length} bundle_reconstruction=verified ` +
-    'hash_integrity=verified duplicate_check=clean orphan_check=clean source_coverage=complete'
+    `CSS_MANIFEST_CONTRACT=PASS bundles=${bundleNames.length} route_files=${routeSources.length} ` +
+    `sources=${sourceCssFiles.length} runtime_artifacts=${expectedDistFiles.length} ` +
+    'single_representation=verified hash_integrity=verified orphan_check=clean source_coverage=complete'
   );
 }
 
