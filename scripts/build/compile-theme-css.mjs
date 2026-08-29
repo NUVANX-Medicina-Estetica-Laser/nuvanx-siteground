@@ -4,9 +4,9 @@
  *
  * Compiles modular source CSS into immutable hashed distribution artifacts.
  * Runtime consumes one aggregate core bundle plus one hashed file for each
- * route-local stylesheet. Single-source "bundles" are intentionally forbidden:
- * they duplicate the exact route CSS with a different hash and create a second
- * representation with no runtime consumer.
+ * route-local stylesheet. A source that belongs to core is never emitted again
+ * as an individual dist artifact; dist/ represents runtime consumption, not
+ * source history or alternate representations.
  *
  * @package nuvanx-siteground
  */
@@ -36,22 +36,12 @@ const BUNDLE_DEFINITIONS = {
   ],
 };
 
-/**
- * Compute 10-char sha256 hash for content.
- *
- * @param {string} content
- * @returns {string}
- */
+/** Compute 10-char sha256 hash for content. */
 function computeHash(content) {
   return crypto.createHash('sha256').update(content, 'utf8').digest('hex').slice(0, 10);
 }
 
-/**
- * Clean and normalize CSS content deterministically.
- *
- * @param {string} raw
- * @returns {string}
- */
+/** Clean and normalize CSS content deterministically. */
 function normalizeCss(raw) {
   return raw
     .replace(/\r\n/g, '\n')
@@ -63,7 +53,7 @@ async function main() {
   await fs.mkdir(DIST_DIR, { recursive: true });
 
   // dist/ is generated state, not an archive. Remove every prior CSS artifact
-  // and manifest before rebuilding the exact current source graph.
+  // and manifest before rebuilding the exact current runtime graph.
   const existingFiles = await fs.readdir(DIST_DIR);
   for (const file of existingFiles) {
     if (file.endsWith('.css') || file === 'manifest.json') {
@@ -79,12 +69,16 @@ async function main() {
     files: {},
   };
 
-  // Compile each canonical source once. Route-local CSS is consumed through
-  // manifest.files; core sources are also aggregated below for one runtime read.
+  const bundledSources = new Set(Object.values(BUNDLE_DEFINITIONS).flat());
+
+  // Only route-local sources that are not already represented inside an
+  // aggregate bundle get their own immutable dist artifact.
   const srcFiles = await fs.readdir(CSS_SRC_DIR);
   for (const srcFile of srcFiles) {
     if (!srcFile.endsWith('.css')) continue;
     const relSrc = `assets/css/${srcFile}`;
+    if (bundledSources.has(relSrc)) continue;
+
     const fullSrc = path.join(CSS_SRC_DIR, srcFile);
     const content = normalizeCss(await fs.readFile(fullSrc, 'utf8'));
     const hash = computeHash(content);
@@ -131,7 +125,10 @@ async function main() {
   const manifestPath = path.join(DIST_DIR, 'manifest.json');
   await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
-  console.log(`CSS_COMPILATION=PASS bundles=${Object.keys(manifest.bundles).length} files=${Object.keys(manifest.files).length} dist=${path.relative(ROOT_DIR, DIST_DIR)}`);
+  console.log(
+    `CSS_COMPILATION=PASS bundles=${Object.keys(manifest.bundles).length} ` +
+    `route_files=${Object.keys(manifest.files).length} dist=${path.relative(ROOT_DIR, DIST_DIR)}`
+  );
 }
 
 main().catch((err) => {
