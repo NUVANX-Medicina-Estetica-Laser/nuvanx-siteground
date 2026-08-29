@@ -658,7 +658,8 @@ body:not(.home) .nvx-brand-hero__copy {
 /* Ensure consistent top spacing after hero for both standard and managed page frames. */
 .nvx-page__content > .nvx-brand-section:first-of-type,
 .nvx-brand-page > .nvx-brand-section:first-of-type,
-.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-section:first-of-type {
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-section:first-of-type,
+.nvx-brand-page .nvx-brand-section:first-of-type {
   padding-top: var(--nvx-space-10);
 }
 
@@ -670,9 +671,9 @@ body:not(.home) .nvx-brand-hero__copy {
 }
 
 /* Brand heroes inside either canonical page context match Home full-bleed.
- * Runtime wrapper governance marks a retained renderer root explicitly when
- * the outer .nvx-brand-page owns the canonical frame. */
+ * Retain full descendant and direct-child compatibility for managed renderers. */
 .nvx-page__content .nvx-brand-hero,
+.nvx-brand-page .nvx-brand-hero,
 .nvx-brand-page > .nvx-brand-hero,
 .nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-hero {
   position: relative;
@@ -690,6 +691,7 @@ body:not(.home) .nvx-brand-hero__copy {
 }
 
 /* Brand-page body sections: one vertical rhythm everywhere. */
+.nvx-brand-page .nvx-brand-section,
 .nvx-brand-page > .nvx-brand-section,
 .nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-section {
   width: 100%;
@@ -711,7 +713,10 @@ body:not(.home) .nvx-brand-hero__copy {
 
 .nvx-brand-page--signature > .nvx-brand-section,
 .nvx-signature-hub > .nvx-brand-section,
-.nvx-signature-phase-page > .nvx-brand-section {
+.nvx-signature-phase-page > .nvx-brand-section,
+.nvx-brand-page--signature .nvx-brand-section,
+.nvx-signature-hub .nvx-brand-section,
+.nvx-signature-phase-page .nvx-brand-section {
   width: 100%;
   max-width: 100%;
   padding-inline: 0;
@@ -726,6 +731,7 @@ body:not(.home) .nvx-brand-hero__copy {
 }
 
 .nvx-page__content .nvx-brand-hero__media,
+.nvx-brand-page .nvx-brand-hero .nvx-brand-hero__media,
 .nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media,
 .nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-hero .nvx-brand-hero__media {
   margin: 0;
@@ -734,6 +740,7 @@ body:not(.home) .nvx-brand-hero__copy {
 }
 
 .nvx-page__content .nvx-brand-hero__media img,
+.nvx-brand-page .nvx-brand-hero .nvx-brand-hero__media img,
 .nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media img,
 .nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-hero .nvx-brand-hero__media img {
   width: 100%;
