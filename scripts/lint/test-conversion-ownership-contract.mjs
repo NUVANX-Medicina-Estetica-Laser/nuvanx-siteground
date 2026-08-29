@@ -19,8 +19,8 @@ assert.match(relay, /AW-18236597403\/qut3CLWflOAcEJvJ8fdD/, 'The separate 820 ph
 
 assert.equal(fs.existsSync(retiredPublisherPath), false, 'The retired direct-form GTM publisher must not be present');
 const readme = fs.readFileSync(seoReadmePath, 'utf8');
-assert.match(readme, /HubSpot successful submit → GA4 generate_lead → Google Ads 908 import/,
-  'Documentation must state the canonical ownership path');
+assert.match(readme, /HubSpot successful submit → GA4 generate_lead → downstream Google Ads import/,
+  'Documentation must state the stable canonical ownership path without duplicating account-specific configuration');
 assert.doesNotMatch(readme, /node scripts\/seo\/setup-gtm-conversion-trigger\.js/, 'Documentation must not advertise an executable retired publisher');
 assert.doesNotMatch(readme, /GTM_CONFIRM_PUBLISH=yes/, 'Documentation must not retain live-publisher execution instructions');
 
