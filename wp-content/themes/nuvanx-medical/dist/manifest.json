@@ -20,55 +20,20 @@
     }
   },
   "files": {
-    "assets/css/nvx-accessibility-governance.css": {
-      "file": "nvx-accessibility-governance.c281faba63.css",
-      "hash": "c281faba63",
-      "size": 13075
-    },
-    "assets/css/nvx-base.css": {
-      "file": "nvx-base.c47a391f4e.css",
-      "hash": "c47a391f4e",
-      "size": 8835
-    },
     "assets/css/nvx-cases-holding.css": {
       "file": "nvx-cases-holding.79a1c06596.css",
       "hash": "79a1c06596",
       "size": 1294
-    },
-    "assets/css/nvx-components.css": {
-      "file": "nvx-components.3d173a066b.css",
-      "hash": "3d173a066b",
-      "size": 50368
     },
     "assets/css/nvx-equipo-medico.css": {
       "file": "nvx-equipo-medico.f09e5d4885.css",
       "hash": "f09e5d4885",
       "size": 5517
     },
-    "assets/css/nvx-fonts.css": {
-      "file": "nvx-fonts.d185b68e18.css",
-      "hash": "d185b68e18",
-      "size": 796
-    },
-    "assets/css/nvx-footer.css": {
-      "file": "nvx-footer.a910c13f49.css",
-      "hash": "a910c13f49",
-      "size": 8222
-    },
-    "assets/css/nvx-header.css": {
-      "file": "nvx-header.26a2021b55.css",
-      "hash": "26a2021b55",
-      "size": 10043
-    },
     "assets/css/nvx-home-v3.css": {
       "file": "nvx-home-v3.3acc554342.css",
       "hash": "3acc554342",
       "size": 18624
-    },
-    "assets/css/nvx-patterns-editorial.css": {
-      "file": "nvx-patterns-editorial.6cf7ca00ee.css",
-      "hash": "6cf7ca00ee",
-      "size": 43888
     },
     "assets/css/nvx-portfolio-hub.css": {
       "file": "nvx-portfolio-hub.263ec577c4.css",
@@ -80,20 +45,10 @@
       "hash": "e53843656e",
       "size": 20241
     },
-    "assets/css/nvx-site-layout.css": {
-      "file": "nvx-site-layout.049516c42e.css",
-      "hash": "049516c42e",
-      "size": 11579
-    },
     "assets/css/nvx-soluciones-medicas.css": {
       "file": "nvx-soluciones-medicas.fbef37ea48.css",
       "hash": "fbef37ea48",
       "size": 11373
-    },
-    "assets/css/nvx-tokens.css": {
-      "file": "nvx-tokens.a610e23b6c.css",
-      "hash": "a610e23b6c",
-      "size": 9492
     }
   }
 }
