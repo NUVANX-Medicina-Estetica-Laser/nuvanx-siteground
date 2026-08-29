@@ -1,37 +1,30 @@
-# Retained migrations
+# Migration lifecycle
 
-This directory contains bounded migration tooling. Most scripts are **not** part of routine deployment; the explicit exception is `content-hygiene-shared.php`, which is release-owned and runs inside the protected Staging2/Production deployment transaction together with `audit-content-divergence.php`.
+`tools/migrations/` contains bounded migration and audit tooling. Presence in this directory does **not** mean a script runs on every release.
 
-A one-off migration remains here only while active code or data compatibility explicitly depends on proof that the migration has completed. After the migration has been executed with backup, dry-run evidence reports a clean state, and the associated compatibility guards are removed, the migration script should be deleted in the same reviewed cleanup cycle.
+The authoritative release-owned migration set is declared by the current deployment implementation/workflow. Do not copy that list into Markdown.
 
-## Shared release migration contract
+## Rules
 
-`content-hygiene-shared.php` and `audit-content-divergence.php` form one release contract:
+- A migration that mutates Production must execute only inside an approved rollback-protected release path.
+- A pre-mutation snapshot is mandatory for release-owned data changes.
+- Do not rewrite a migration that has already been applied as historical evidence; add a new bounded migration when a new state transition is required.
+- Keep a one-time migration only while runtime/data compatibility or an active verification contract still depends on it.
+- Once a one-time migration is complete and its compatibility guards are removed, delete the script in the same reviewed cleanup cycle.
+- Read-only collectors/audits may remain when they provide a reusable release or forensic contract.
 
-- the audit may report string/regex hygiene or retired-page state as migratable before cutover;
-- the shared migration applies those bounded changes;
-- the post-migration audit must report `Status: AUDIT_CLEAN`;
-- production executes the migration inside the rollback-protected release window after a mandatory SQL/theme snapshot;
-- the production database snapshot lives outside `public_html`.
+## Audit semantics
 
-### Retired strategy/prototype pages
+Callers must evaluate explicit status markers, not merely process exit `0`, when a script documents multiple non-error states such as clean versus pending-migratable.
 
-The following internal prototype names must never remain as public WordPress content records:
+A migration/audit pair must fail closed for non-migratable divergence and must verify the resulting state after mutation.
 
-- `/liposculpt-air/` → record status `trash`; HTTP 301 target `/remodelacion-corporal-laser-madrid/`.
-- `/v-lift-awake/` → record status `trash`; HTTP 301 target `/papada-definicion-mandibular-madrid/`.
+## Public-content retirement
 
-The shared migration uses `wp_trash_post()` and refuses the retirement mutation when `EMPTY_TRASH_DAYS < 1`, preventing accidental permanent deletion. Object-linked and direct custom-link navigation items to these retired routes are removed. The divergence audit treats any non-trash record for either slug as `AUDIT_PENDING_MIGRABLE`, and the post-migration audit must verify no non-trash record remains.
+When retiring a WordPress route/content record, preserve the intended redirect/publication contract and use WordPress APIs where the migration requires reversible trash semantics. Do not turn a bounded retirement into an unreviewed permanent deletion.
 
-This means these two records must not appear in the published WordPress page inventory, page sitemap or canonical Block C page matrix. Their old URLs remain useful only as permanent redirects for legacy links.
+The current route list, redirect targets and publication expectations are owned by machine-readable route/publication data and executable migration/audit code rather than this README.
 
-## Audit script exit code semantics
+## Documentation
 
-`audit-content-divergence.php` has the following exit code contract:
-
-- **Exit 0, Status: AUDIT_CLEAN** - No issues found.
-- **Exit 0, Status: AUDIT_PENDING_MIGRABLE** - Only bounded migratable issues are pending: string/regex hygiene and/or retired prototype page state.
-- **Exit 1, Status: AUDIT_FAIL** - Non-migratable issues found, such as H1 problems, missing legal pages or audit database/query errors.
-
-**Important:** Exit 0 does not always mean "content is clean". Callers must grep for the status string to determine actual audit state. This is intentional to allow migratable issues to pass pre-cutover checks while still being fixed by the shared migration.
-
+Do not add a Markdown file for an individual migration execution. Use the relevant PR/Issue and Actions artifact/log evidence; Git history preserves the retired implementation after cleanup.
