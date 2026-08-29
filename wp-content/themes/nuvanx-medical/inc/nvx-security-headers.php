@@ -7,10 +7,6 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Load the deterministic filter-priority registry before any governed callback
-// is registered. Schema modules loaded later in functions.php depend on it.
-require_once __DIR__ . '/nvx-filter-priorities.php';
-
 /**
  * Add essential HTTP security headers.
  *
@@ -66,4 +62,4 @@ function nvx_add_security_headers( $headers ) {
 
 	return $headers;
 }
-nvx_add_filter_with_priority( 'wp_headers', 'nvx_add_security_headers' );
+add_filter( 'wp_headers', 'nvx_add_security_headers', 42 );

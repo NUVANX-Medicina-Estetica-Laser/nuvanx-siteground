@@ -85,7 +85,7 @@ foreach ( $iterator as $file ) {
         continue;
     }
     $path = $file->getPathname();
-    if ( str_ends_with( $path, '/inc/nvx-seo-legacy-retirement.php' ) || str_ends_with( $path, '/inc/nvx-filter-priorities.php' ) ) {
+    if ( str_ends_with( $path, '/inc/nvx-seo-legacy-retirement.php' ) ) {
         continue;
     }
     $source = file_get_contents( $path );

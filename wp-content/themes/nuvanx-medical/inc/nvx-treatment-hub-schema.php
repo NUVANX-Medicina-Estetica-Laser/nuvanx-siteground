@@ -108,4 +108,4 @@ function nvx_treatment_hub_extend_yoast_graph( $graph, $context = null ) {
 
 	return array_values( $graph );
 }
-nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_treatment_hub_extend_yoast_graph', 2 );
+add_filter( 'wpseo_schema_graph', 'nvx_treatment_hub_extend_yoast_graph', 54, 2 );

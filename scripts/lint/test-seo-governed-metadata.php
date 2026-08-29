@@ -376,7 +376,6 @@ function get_template_directory() {
     return dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical';
 }
 
-require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-filter-priorities.php';
 require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-structured-data.php';
 
 // Test 1: Front page must report NO visible FAQ and return null for FAQ node

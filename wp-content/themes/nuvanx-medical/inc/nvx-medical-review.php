@@ -163,4 +163,4 @@ function nvx_medical_review_schema_graph( $graph ) {
 
 	return $graph;
 }
-nvx_add_filter_with_priority( 'wpseo_schema_graph', 'nvx_medical_review_schema_graph' );
+add_filter( 'wpseo_schema_graph', 'nvx_medical_review_schema_graph', 57 );
