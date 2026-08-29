@@ -8,6 +8,7 @@ import {
   validateDeployIdentity,
 } from './deploy-identity-contract.mjs';
 import { hasLegacyValoracionDirectForm } from './valoracion-form-contract.mjs';
+import { hasValidSignatureFrame } from './signature-frame-contract.mjs';
 
 const CANONICAL_PROD_ROOT = '/home/customer/www/nuvanx.com/public_html';
 const ALLOWED_ORIGIN_ALIASES = new Set(['nvx-prod', 'nvx-prod-audit', 'nvx-prod-hubspot', 'production-siteground']);
@@ -97,6 +98,12 @@ function renderedDocumentIssues(html, route) {
     if (!html.includes(HUBSPOT_FORM_ID)) issues.push('Missing canonical HubSpot form ID');
     if (hasLegacyValoracionDirectForm(html)) {
       issues.push('Legacy first-party valoración form still present');
+    }
+  }
+
+  if (['/protocolos-signature/', '/remodelacion-corporal-laser-madrid/', '/tratamiento-postparto-abdomen-contorno-corporal-madrid/'].includes(route)) {
+    if (!hasValidSignatureFrame(html)) {
+      issues.push('Missing valid Signature brand frame (requires standalone nvx-brand-page nvx-brand-page--signature root or outer nvx-brand-page with inner nvx-brand-page--signature nvx-brand-page__renderer-root)');
     }
   }
   return issues;
@@ -239,6 +246,42 @@ legacy_valoracion_direct_form_count() {
   ' -- "$body"
 }
 
+validate_signature_frame() {
+  local body="$1" route="$2"
+  php -r '
+    $html = @file_get_contents($argv[1]);
+    if (!is_string($html) || $html === "") { exit(1); }
+    $clean = preg_replace("~<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>~is", "", $html);
+    if (!is_string($clean)) { exit(1); }
+    $standalone = false;
+    if (preg_match_all("~<(?:div|article)\b[^>]*\bclass=[\"\x27]([^\"\x27]*)[\"\x27]~i", $clean, $m)) {
+      foreach ($m[1] as $classes) {
+        $tokens = preg_split("/\s+/", trim($classes));
+        if (in_array("nvx-brand-page", $tokens, true) && in_array("nvx-brand-page--signature", $tokens, true)) {
+          $standalone = true;
+          break;
+        }
+      }
+    }
+    $governed = false;
+    if (preg_match("~<(?:div|article)\b[^>]*\bclass=[\"\x27][^\"\x27]*\bnvx-brand-page\b[^\"\x27]*[\"\x27][^>]*>([\s\S]*)<\/(?:div|article)>~i", $clean, $outer)) {
+      if (preg_match_all("~<(?:div|article)\b[^>]*\bclass=[\"\x27]([^\"\x27]*)[\"\x27]~i", $outer[1], $inner_tags)) {
+        foreach ($inner_tags[1] as $classes) {
+          $tokens = preg_split("/\s+/", trim($classes));
+          if (in_array("nvx-brand-page--signature", $tokens, true) && in_array("nvx-brand-page__renderer-root", $tokens, true)) {
+            $governed = true;
+            break;
+          }
+        }
+      }
+    }
+    exit(($standalone || $governed) ? 0 : 1);
+  ' -- "$body" || {
+    echo "PRODUCTION_PROBE_FAIL route=$route reason=invalid_signature_frame mode=$probe_mode" >&2
+    return 1
+  }
+}
+
 ua='NUVANX-Production-Boundary/1.6'
 for route in \
   '/' \
@@ -356,18 +399,18 @@ do
         || { echo "PRODUCTION_PROBE_FAIL route=$route reason=legacy_direct_form count=$legacy_direct_forms mode=$probe_mode" >&2; cleanup; exit 1; }
       ;;
     '/protocolos-signature/')
-      require_body "$body" "$route" 'nvx-brand-page--signature' || { cleanup; exit 1; }
+      validate_signature_frame "$body" "$route" || { cleanup; exit 1; }
       require_body "$body" "$route" 'Una ruta de decisión, no un paquete cerrado' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Arquitecturas clínicas' || { cleanup; exit 1; }
       ;;
     '/remodelacion-corporal-laser-madrid/')
-      require_body "$body" "$route" 'nvx-brand-page--signature' || { cleanup; exit 1; }
+      validate_signature_frame "$body" "$route" || { cleanup; exit 1; }
       require_body "$body" "$route" 'Cómo se decide el plan corporal' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Zonas de valoración' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Tu primera valoración clínica' || { cleanup; exit 1; }
       ;;
     '/tratamiento-postparto-abdomen-contorno-corporal-madrid/')
-      require_body "$body" "$route" 'nvx-brand-page--signature' || { cleanup; exit 1; }
+      validate_signature_frame "$body" "$route" || { cleanup; exit 1; }
       require_body "$body" "$route" 'Qué se valora en postparto' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Rutas relacionadas' || { cleanup; exit 1; }
       require_body "$body" "$route" 'Tu primera valoración clínica' || { cleanup; exit 1; }

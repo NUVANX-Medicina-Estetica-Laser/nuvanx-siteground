@@ -17,6 +17,8 @@ PREMERGE_CONTRACT="$ROOT/scripts/ci/test-pre-merge-protection-contract.sh"
 BOUNDARY="$ROOT/scripts/production/verify-production-boundary.mjs"
 VALORACION_FORM_CONTRACT="$ROOT/scripts/production/valoracion-form-contract.mjs"
 VALORACION_FORM_CONTRACT_TEST="$ROOT/scripts/production/test-valoracion-form-contract.mjs"
+SIGNATURE_FRAME_CONTRACT="$ROOT/scripts/production/signature-frame-contract.mjs"
+SIGNATURE_FRAME_CONTRACT_TEST="$ROOT/scripts/production/test-signature-frame-contract.mjs"
 ENV_FLAGS="$ROOT/wp-content/themes/nuvanx-medical/inc/nvx-environment-flags.php"
 DEPLOY_STAMP="$ROOT/wp-content/themes/nuvanx-medical/inc/nvx-deploy-stamp.php"
 LCP_CSS_CONTRACT="$ROOT/scripts/lint/test-lcp-css-delivery.mjs"
@@ -30,7 +32,7 @@ SEO_GEO_AUDIT="$ROOT/scripts/production/seo-geo-origin-audit.sh"
 SEO_TOOLING_DIR="$ROOT/scripts/seo"
 THEME_DIR="$ROOT/wp-content/themes/nuvanx-medical"
 
-for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$PREMERGE_CONTRACT" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$CONVERSION_OWNERSHIP_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$WORDPRESS_SECURITY_CONTRACT" "$FORENSIC_SCANNER" "$HUBSPOT_ZERO_SUBMIT_CONTRACT" "$SEO_GEO_AUDIT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock" "$THEME_DIR/composer.json" "$THEME_DIR/phpcs.xml.dist"; do
+for required in "$BRIDAL" "$IDENTITY_CONTRACT" "$DEPLOY" "$WORKFLOW" "$PREMERGE_CONTRACT" "$BOUNDARY" "$VALORACION_FORM_CONTRACT" "$VALORACION_FORM_CONTRACT_TEST" "$SIGNATURE_FRAME_CONTRACT" "$SIGNATURE_FRAME_CONTRACT_TEST" "$ENV_FLAGS" "$DEPLOY_STAMP" "$LCP_CSS_CONTRACT" "$CONVERSION_OWNERSHIP_CONTRACT" "$META_BROWSER_OWNER_CONTRACT" "$SEO_OWNERSHIP_CONTRACT" "$WORDPRESS_SECURITY_CONTRACT" "$FORENSIC_SCANNER" "$HUBSPOT_ZERO_SUBMIT_CONTRACT" "$SEO_GEO_AUDIT" "$SEO_TOOLING_DIR/package-lock.json" "$THEME_DIR/composer.lock" "$THEME_DIR/composer.json" "$THEME_DIR/phpcs.xml.dist"; do
   [[ -s "$required" ]] || fail "missing_file:$required"
 done
 
@@ -165,6 +167,9 @@ pass_assert 'indexnow-github-202-siteground-public-edge'
 
 node "$VALORACION_FORM_CONTRACT_TEST" || fail 'valoracion_form_structural_boundary_behavior'
 pass_assert 'valoracion-form-structural-boundary'
+
+node "$SIGNATURE_FRAME_CONTRACT_TEST" || fail 'signature_frame_structural_boundary_behavior'
+pass_assert 'signature-frame-structural-boundary'
 
 python3 -m py_compile "$FORENSIC_SCANNER" || fail 'forensic_scanner_syntax'
 pass_assert 'forensic-scanner-syntax'

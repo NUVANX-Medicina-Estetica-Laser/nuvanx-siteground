@@ -171,9 +171,11 @@ jobs:
           find "$CANDIDATE_ROOT/wp-content/themes/nuvanx-medical" -path '*/vendor' -prune -o -name '*.php' -type f -print0 | xargs -0 -n1 php -l >/dev/null
           bash -n "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh"
           node --check "$CANDIDATE_ROOT/scripts/production/deploy-identity-contract.mjs"
+          node --check "$CANDIDATE_ROOT/scripts/production/signature-frame-contract.mjs"
           node --check "$CANDIDATE_ROOT/scripts/production/verify-production-boundary.mjs"
           node --check "$CANDIDATE_ROOT/scripts/production/verify-production-identity.mjs"
           node "$CANDIDATE_ROOT/scripts/production/test-deploy-identity-contract.mjs"
+          node "$CANDIDATE_ROOT/scripts/production/test-signature-frame-contract.mjs"
           node --check "$CANDIDATE_ROOT/scripts/seo/index-pages.js"
           bash -n "$CANDIDATE_ROOT/scripts/production/document-head-title-audit.sh"
           bash -n "$CANDIDATE_ROOT/scripts/production/seo-geo-origin-audit.sh"
