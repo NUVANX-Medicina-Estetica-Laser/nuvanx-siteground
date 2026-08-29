@@ -43,29 +43,26 @@
   color: var(--nvx-charcoal);
 }
 
-/* Ensure consistent top spacing after hero for all page types - más elegante */
+/* Ensure consistent top spacing after hero for both standard and managed page frames. */
 .nvx-page__content > .nvx-brand-section:first-of-type,
-.nvx-brand-page > .nvx-brand-section:first-of-type {
+.nvx-brand-page > .nvx-brand-section:first-of-type,
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-section:first-of-type {
   padding-top: var(--nvx-space-10);
 }
 
-/* Theme hero is a direct child of article (outside shell) */
-
-/* Body sections after a full-bleed hero keep readable gutters - diseño elegante */
-.nvx-page__content .nvx-brand-section,
-.nvx-brand-page > .nvx-brand-section {
+/* Body sections rendered inside the standard content wrapper. Managed
+ * .nvx-brand-page sections own their rhythm in the dedicated rule below. */
+.nvx-page__content .nvx-brand-section {
   width: 100%;
   padding-block: var(--nvx-pad-section);
 }
 
-
-
-/* Brand heroes inside content match home full-bleed, not shell box */
-/* NOTE: Double .nvx-brand-page nesting is supported by CSS and is "by design" */
-/* The refactor b5bf6ea6 that attempted to "fix" this was reverted due to regression */
+/* Brand heroes inside either canonical page context match Home full-bleed.
+ * Runtime wrapper governance marks a retained renderer root explicitly when
+ * the outer .nvx-brand-page owns the canonical frame. */
 .nvx-page__content .nvx-brand-hero,
 .nvx-brand-page > .nvx-brand-hero,
-.nvx-page__content .nvx-brand-page > .nvx-brand-hero {
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-hero {
   position: relative;
   display: block;
   width: calc(100vw - var(--nvx-scrollbar-width, 0px));
@@ -75,13 +72,14 @@
   overflow: hidden;
 }
 
-/* Fallback dark ink background for all brand heroes inside .nvx-brand-page */
+/* Fallback dark ink background for all brand heroes inside the page frame. */
 .nvx-brand-page .nvx-brand-hero {
   background: var(--nvx-ink);
 }
 
-/* Brand-page body sections: one vertical rhythm everywhere */
-.nvx-brand-page > .nvx-brand-section {
+/* Brand-page body sections: one vertical rhythm everywhere. */
+.nvx-brand-page > .nvx-brand-section,
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-section {
   width: 100%;
   margin: 0;
   padding-block: var(--nvx-pad-section);
@@ -107,8 +105,6 @@
   padding-inline: 0;
 }
 
-
-
 /*
  * Post-hero clinical intro is emitted as a normal brand-section
  * (.nvx-hero-intro) so gutters match Chamberí / hub / treatment sections.
@@ -118,14 +114,16 @@
 }
 
 .nvx-page__content .nvx-brand-hero__media,
-.nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media {
+.nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media,
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-hero .nvx-brand-hero__media {
   margin: 0;
   border-radius: 0;
   background: var(--nvx-ink);
 }
 
 .nvx-page__content .nvx-brand-hero__media img,
-.nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media img {
+.nvx-brand-page > .nvx-brand-hero .nvx-brand-hero__media img,
+.nvx-brand-page > .nvx-brand-page__renderer-root > .nvx-brand-hero .nvx-brand-hero__media img {
   width: 100%;
   height: 100%;
   max-height: none;
@@ -149,10 +147,6 @@
 
 .nvx-brand-section--soft {
   background: var(--nvx-surface-base);
-}
-
-.nvx-brand-page .nvx-brand-section {
-  padding-block: var(--nvx-pad-section);
 }
 
 /* Valoración form stage — inspired by header media (fondo-formulario):
@@ -398,8 +392,6 @@
 }
 
 @media (max-width: 600px) {
-
-
   .nvx-page.nvx-page--legal > .nvx-blog-article.nvx-brand-readable {
     padding-block: var(--nvx-space-6) var(--nvx-pad-section-tight);
   }

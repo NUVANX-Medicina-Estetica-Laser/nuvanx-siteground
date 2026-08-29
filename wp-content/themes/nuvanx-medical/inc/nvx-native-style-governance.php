@@ -222,9 +222,9 @@ function nvx_theme_get_compiled_critical_css_bundle( array $relative_files ): st
 		return $bundle_cache[ $cache_key ];
 	}
 
-	$theme_dir     = get_template_directory();
-	$manifest      = nvx_theme_get_css_manifest();
-	$critical_css  = '';
+	$theme_dir    = get_template_directory();
+	$manifest     = nvx_theme_get_css_manifest();
+	$critical_css = '';
 
 	if ( null !== $manifest && ! empty( $manifest['bundles']['core']['file'] ) ) {
 		$core_sources = $manifest['bundles']['core']['sources'] ?? array();
@@ -286,9 +286,9 @@ function nvx_theme_get_compiled_critical_css_bundle( array $relative_files ): st
 }
 
 /**
- * Inline the complete theme stylesheet contract before WordPress prints head
- * styles. This removes local theme <link> requests while preserving dynamic
- * wp_add_inline_style() additions such as the valoración form stage image.
+ * Inline the complete canonical theme stylesheet contract before WordPress
+ * prints head styles. Permanent CSS comes exclusively from governed source
+ * files/dist; only runtime additions registered through WordPress are appended.
  */
 function nvx_theme_inline_critical_style_foundation(): void {
 	if ( is_admin() ) {
@@ -297,21 +297,6 @@ function nvx_theme_inline_critical_style_foundation(): void {
 
 	$styles       = wp_styles();
 	$critical_css = nvx_theme_get_compiled_critical_css_bundle( nvx_theme_critical_stylesheet_files() );
-
-	if ( is_front_page() ) {
-		$critical_css .= "\n/* home-hero geometry reservation */\n"
-			. 'body.home .nvx-home-hero{height:var(--nvx-home-hero-h);min-height:var(--nvx-home-hero-h);display:flex;align-items:flex-end;overflow:hidden;}' . "\n";
-	}
-
-	$critical_css .= "\n/* interior-hero first paint */\n"
-		. '.nvx-brand-hero{background:var(--nvx-ink);color:var(--nvx-light);}'
-		. '.nvx-brand-hero .nvx-brand-microcopy,.nvx-brand-hero .nvx-brand-microcopy--dark,.nvx-brand-hero__copy .nvx-brand-microcopy,.nvx-brand-hero .nvx-brand-kicker,.nvx-brand-hero .nvx-brand-meta{color:var(--nvx-light);}'
-		. '.nvx-brand-hero__copy{box-sizing:border-box;width:var(--nvx-shell);max-width:100%;margin-inline:auto;padding-block:var(--nvx-space-8);padding-inline:var(--nvx-gutter-inner);}'
-		. '.nvx-header{min-height:var(--nvx-header-height-mobile);padding-block:var(--nvx-space-3);}'
-		. '.nvx-logo__img,.custom-logo{display:block;width:auto;height:var(--nvx-logo-height-mobile);max-width:var(--nvx-logo-width-mobile);object-fit:contain;}'
-		. '.nvx-brand-page>.nvx-brand-section,.nvx-page__content>.nvx-brand-section{box-sizing:border-box;padding-block:var(--nvx-pad-section);}'
-		. '.nvx-icon{display:inline-block;width:var(--nvx-icon-sm);height:var(--nvx-icon-sm);}'
-		. "\n";
 
 	foreach ( nvx_theme_local_style_handles() as $handle ) {
 		$inline_css = nvx_theme_style_after_data( $styles, $handle );
@@ -411,7 +396,7 @@ function nvx_theme_defer_local_script_tags( string $tag, string $handle, string 
 		return $tag;
 	}
 
-	$handles = array( 'nvx-main', 'nvx-conversion-events', 'nvx-runtime-governance', 'nvx-home-video', 'nvx-attribution-contract' );
+	$handles  = array( 'nvx-main', 'nvx-conversion-events', 'nvx-runtime-governance', 'nvx-home-video', 'nvx-attribution-contract' );
 	$is_local = in_array( $handle, $handles, true )
 		|| ( '' !== $src && str_contains( $src, '/themes/nuvanx-medical/assets/js/' ) );
 	if ( ! $is_local ) {

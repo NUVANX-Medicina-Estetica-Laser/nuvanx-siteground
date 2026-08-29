@@ -5,6 +5,10 @@ defined( 'ABSPATH' ) || exit;
 // rendering so translated hash links cannot bypass the server-side finalizer.
 require_once __DIR__ . '/inc/nvx-complianz-policy-routing.php';
 
+// Register canonical brand-page wrapper governance before the_content runs so
+// managed renderers cannot create a second .nvx-brand-page inside the global frame.
+require_once __DIR__ . '/inc/nvx-brand-page-wrapper-governance.php';
+
 // Public-media runtime callbacks are registered from functions.php before any
 // template can emit attachment markup. No output-buffer rewrite is used here.
 // SiteGround Optimizer + Complianz own
@@ -98,7 +102,9 @@ wp_head();
 
 <main id="nvx-main" class="nvx-main" tabindex="-1">
 	<?php
-	// Only add nvx-brand-page wrapper if post_content doesn't have standard wrapper
+	// Only add nvx-brand-page wrapper if post_content doesn't have standard wrapper.
+	// Managed renderer output is normalized by nvx-brand-page-wrapper-governance.php
+	// so this global frame can never be duplicated inside the_content.
 	if ( ! function_exists( 'nvx_page_has_standard_wrapper' ) || ! nvx_page_has_standard_wrapper() ) :
 		?>
 		<div class="nvx-brand-page">

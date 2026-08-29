@@ -129,23 +129,6 @@ function nvx_rewrite_complianz_policy_links( string $html ): string {
 	return str_replace( '{title}', 'Política de cookies', $filtered );
 }
 
-/**
- * Enforce the canonical 48px minimum touch target on first-visit consent
- * controls. Complianz owns the visual button styling; NUVANX only overrides
- * the minimum interactive geometry required by the mobile accessibility gate.
- */
-function nvx_complianz_enforce_touch_targets(): void {
-	if ( is_admin() ) {
-		return;
-	}
-
-	wp_add_inline_style(
-		'nvx-accessibility-governance',
-		'.cmplz-cookiebanner .cmplz-btn,#cmplz-cookiebanner-container .cmplz-btn{min-height:var(--nvx-touch-target-min,48px)!important;box-sizing:border-box;}'
-	);
-}
-add_action( 'wp_enqueue_scripts', 'nvx_complianz_enforce_touch_targets', 20 );
-
 // Retire the earlier token-dependent sanitizer as the effective routing owner,
 // then register one canonical finalizer for both Complianz filter surfaces.
 remove_filter( 'cmplz_banner_html', 'nvx_sanitize_complianz_banner_html', 20 );

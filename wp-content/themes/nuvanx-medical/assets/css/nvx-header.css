@@ -42,6 +42,15 @@
   transition: opacity var(--nvx-duration-fast) ease;
 }
 
+.nvx-logo__img,
+.custom-logo {
+  display: block;
+  width: auto;
+  height: var(--nvx-logo-height-mobile);
+  max-width: var(--nvx-logo-width-mobile);
+  object-fit: contain;
+}
+
 .nvx-logo:hover {
   opacity: 0.8;
 }

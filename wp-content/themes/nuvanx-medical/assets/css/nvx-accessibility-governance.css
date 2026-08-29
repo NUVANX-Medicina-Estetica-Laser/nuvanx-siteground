@@ -23,7 +23,8 @@
 .nvx-footer a,
 .nvx-btn,
 .nvx-button,
-.nvx-brand-btn {
+.nvx-brand-btn,
+.wp-block-button__link {
   min-height: var(--nvx-touch-target-min, 48px);
 }
 
@@ -56,6 +57,15 @@
   color: var(--nvx-light);
   background: var(--nvx-charcoal);
   border-color: var(--nvx-light);
+}
+
+/* Complianz renders its own button CSS and can load it after the theme bundle.
+ * Keep this one third-party containment override so the WCAG touch-target floor
+ * remains authoritative without restoring a PHP inline-style owner. */
+.cmplz-cookiebanner .cmplz-btn,
+#cmplz-cookiebanner-container .cmplz-btn {
+  min-height: var(--nvx-touch-target-min, 48px) !important; /* nvx-token-exception: THIRD_PARTY_CONTAINMENT — Complianz late CSS */
+  box-sizing: border-box;
 }
 
 /* Closed mobile navigation drawer: inert and non-interactive. */
@@ -94,10 +104,13 @@
 }
 
 /* Canonical conversion-control geometry. Color variants keep ownership of
- * their button custom properties; this layer owns shape, typography and focus. */
+ * their button custom properties; this layer owns shape, typography and focus.
+ * Gutenberg links consume this same contract instead of maintaining a parallel
+ * WordPress-specific button implementation. */
 .nvx-brand-btn,
 .nvx-btn,
-.nvx-button {
+.nvx-button,
+.wp-block-button__link {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -132,7 +145,8 @@
 
 .nvx-brand-btn:hover,
 .nvx-btn:hover,
-.nvx-button:hover {
+.nvx-button:hover,
+.wp-block-button__link:hover {
   background: var(--button-hover-bg, var(--nvx-charcoal));
   color: var(--button-hover-color, var(--nvx-light));
   border-color: var(--button-hover-border, var(--nvx-charcoal));
@@ -142,7 +156,8 @@
 
 .nvx-brand-btn:focus-visible,
 .nvx-btn:focus-visible,
-.nvx-button:focus-visible {
+.nvx-button:focus-visible,
+.wp-block-button__link:focus-visible {
   background: var(--button-hover-bg, var(--nvx-charcoal));
   color: var(--button-hover-color, var(--nvx-light));
   border-color: var(--button-hover-border, var(--nvx-charcoal));
@@ -158,13 +173,15 @@
 .nvx-button:disabled,
 .nvx-brand-btn[aria-disabled="true"],
 .nvx-btn[aria-disabled="true"],
-.nvx-button[aria-disabled="true"] {
+.nvx-button[aria-disabled="true"],
+.wp-block-button__link[aria-disabled="true"] {
   background: var(--button-bg, var(--nvx-ink));
   color: var(--button-color, var(--nvx-light));
   border-color: var(--button-border, var(--nvx-ink));
   transform: none;
   box-shadow: none;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 .nvx-brand-btn:disabled:focus-visible,
@@ -172,7 +189,8 @@
 .nvx-button:disabled:focus-visible,
 .nvx-brand-btn[aria-disabled="true"]:focus-visible,
 .nvx-btn[aria-disabled="true"]:focus-visible,
-.nvx-button[aria-disabled="true"]:focus-visible {
+.nvx-button[aria-disabled="true"]:focus-visible,
+.wp-block-button__link[aria-disabled="true"]:focus-visible {
   outline: none;
 }
 
@@ -347,32 +365,6 @@
   }
 }
 
-/* Reduced motion: disable nav transitions/animations, videos, and preserve immediate scroll. */
-@media (prefers-reduced-motion: reduce) {
-  .nvx-nav__link::after,
-  .nvx-nav__list > li > a::after,
-  .nvx-nav__list .sub-menu,
-  .nvx-button,
-  .nvx-btn,
-  .nvx-brand-btn,
-  .nvx-toast {
-    transition: none !important;
-  }
-
-  .nvx-mobile-nav {
-    animation: none !important;
-  }
-
-  video[autoplay],
-  .nvx-home-hero__video {
-    display: none !important;
-  }
-
-  html:focus-within {
-    scroll-behavior: auto;
-  }
-}
-
 /* ── Global Skip Link ─────────────────── */
 .nvx-skip-link {
   position: absolute;
@@ -394,27 +386,43 @@
   z-index: calc(var(--nvx-z-a11y) + 1);
   box-shadow: var(--nvx-shadow-focus-light);
 }
-@media (prefers-reduced-motion: reduce) {
-  .nvx-skip-link { transition: none; }
-}
 
-/* Global prefers-reduced-motion override (CSS-2) */
+/* Single reduced-motion policy. The universal duration overrides are the only
+ * deliberate global !important use here: they must beat route-local bundles
+ * that can load after core. Explicit transform/display resets remove motion
+ * that a near-zero duration alone would not eliminate. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important; /* nvx-token-exception: reduced-motion override */
-    animation-iteration-count: 1 !important;
+    animation-iteration-count: 1 !important; /* nvx-token-exception: reduced-motion override */
     transition-duration: 0.01ms !important; /* nvx-token-exception: reduced-motion override */
-    scroll-behavior: auto !important;
+    scroll-behavior: auto !important; /* nvx-token-exception: reduced-motion override */
   }
+
+  .nvx-mobile-nav {
+    animation: none !important; /* nvx-token-exception: reduced-motion override — drawer must not traverse the viewport */
+  }
+
+  video[autoplay],
+  .nvx-home-hero__video {
+    display: none !important; /* nvx-token-exception: reduced-motion override — autoplay media is removed entirely */
+  }
+
   .nvx-brand-btn:hover,
   .nvx-brand-btn:focus-visible,
   .nvx-btn:hover,
   .nvx-btn:focus-visible,
+  .nvx-button:hover,
+  .nvx-button:focus-visible,
+  .wp-block-button__link:hover,
+  .wp-block-button__link:focus-visible,
   .nvx-home-feature:hover,
   .nvx-home-feature:focus-within,
   .nvx-brand-card:hover,
-  .nvx-brand-card:focus-within {
-    transform: none !important;
+  .nvx-brand-card:focus-within,
+  .nvx-blog-card:hover .nvx-blog-card__image,
+  .nvx-blog-card:focus-within .nvx-blog-card__image {
+    transform: none !important; /* nvx-token-exception: reduced-motion override — route bundles may load after core */
   }
 }
 

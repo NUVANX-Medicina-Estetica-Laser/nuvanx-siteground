@@ -16,7 +16,8 @@
     "lint:endolaser-approval": "node scripts/lint/test-endolaser-claim-approval.mjs",
     "lint:clinical-evidence": "node scripts/lint/test-clinical-evidence-contract.mjs",
     "lint:clinics-hub-equipment": "node scripts/lint/test-clinics-hub-equipment-contract.mjs",
-    "lint:manifest": "node scripts/lint/test-css-manifest-contract.mjs",
+    "lint:css-ownership": "node scripts/lint/test-css-ownership-contract.mjs",
+    "lint:manifest": "node scripts/lint/test-css-manifest-contract.mjs && npm run lint:css-ownership",
     "lint": "npm run lint:colors && npm run lint:fontsize && npm run lint:styles && npm run lint:routes && npm run lint:contrast && npm run lint:complianz && npm run lint:schema && npm run lint:endolaser-approval && npm run lint:clinical-evidence && npm run lint:clinics-hub-equipment && npm run lint:manifest"
   },
   "engines": {

@@ -56,72 +56,6 @@ svg {
   max-width: 100%;
 }
 
-/*
- * First-paint geometry. Production still inlines only fonts+tokens+base
- * while header/layout/components/patterns arrive as later stylesheets.
- * These rules must match the later files so the Chamberí contact block
- * does not jump when that CSS lands.
- */
-.nvx-header {
-  min-height: var(--nvx-header-height-mobile);
-  padding-block: var(--nvx-space-3);
-}
-
-.nvx-logo__img,
-.custom-logo {
-  display: block;
-  width: auto;
-  height: var(--nvx-logo-height-mobile);
-  max-width: var(--nvx-logo-width-mobile);
-  object-fit: contain;
-}
-
-.nvx-icon {
-  display: inline-block;
-  width: var(--nvx-icon-sm);
-  height: var(--nvx-icon-sm);
-  vertical-align: -0.2em;
-  flex-shrink: 0;
-}
-
-.nvx-brand-hero {
-  background: var(--nvx-ink);
-  color: var(--nvx-light);
-}
-
-.nvx-brand-hero__copy {
-  box-sizing: border-box;
-  width: var(--nvx-shell);
-  max-width: 100%;
-  margin-inline: auto;
-  padding-block: var(--nvx-space-8);
-  padding-inline: var(--nvx-gutter-inner);
-}
-
-.nvx-brand-page > .nvx-brand-section,
-.nvx-page__content > .nvx-brand-section {
-  box-sizing: border-box;
-  padding-block: var(--nvx-pad-section);
-}
-
-.nvx-brand-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: var(--nvx-gap-base);
-  padding: 0;
-  list-style: none;
-}
-
-.nvx-brand-grid--2 > * {
-  grid-column: span 6;
-}
-
-@media (max-width: 640px) {
-  .nvx-brand-grid--2 > * {
-    grid-column: 1 / -1;
-  }
-}
-
 /* Form controls inherit typography; buttons keep visual contract from tokens/components. */
 button,
 input,
@@ -325,7 +259,8 @@ body:not(.home) .nvx-brand-hero__copy {
   }
 }
 
-/* Print styles for clinical environments (CSS-3) */
+/* Print styles for clinical environments (CSS-3). The forced display reset is
+ * deliberate print-policy containment, not cascade convenience. */
 @media print {
   .nvx-header,
   .nvx-footer,
@@ -334,7 +269,7 @@ body:not(.home) .nvx-brand-hero__copy {
   [class*="nvx-home-hero__video"],
   .nvx-hamburger,
   .nvx-mobile-nav {
-    display: none !important;
+    display: none !important; /* nvx-token-exception: PRINT_POLICY — interactive chrome must not print */
   }
   body {
     font-size: 12pt;
