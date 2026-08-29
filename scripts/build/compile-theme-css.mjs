@@ -2,9 +2,11 @@
 /**
  * Deterministic CSS compiler and manifest generator for nuvanx-medical theme.
  *
- * Compiles modular source CSS into immutable hashed distribution bundles and
- * generates dist/manifest.json for high-performance server delivery without
- * runtime multi-file disk reads.
+ * Compiles modular source CSS into immutable hashed distribution artifacts.
+ * Runtime consumes one aggregate core bundle plus one hashed file for each
+ * route-local stylesheet. Single-source "bundles" are intentionally forbidden:
+ * they duplicate the exact route CSS with a different hash and create a second
+ * representation with no runtime consumer.
  *
  * @package nuvanx-siteground
  */
@@ -32,12 +34,6 @@ const BUNDLE_DEFINITIONS = {
     'assets/css/nvx-footer.css',
     'assets/css/nvx-accessibility-governance.css',
   ],
-  'home-v3': ['assets/css/nvx-home-v3.css'],
-  posts: ['assets/css/nvx-posts.css'],
-  'soluciones-medicas': ['assets/css/nvx-soluciones-medicas.css'],
-  'cases-holding': ['assets/css/nvx-cases-holding.css'],
-  'equipo-medico': ['assets/css/nvx-equipo-medico.css'],
-  'portfolio-hub': ['assets/css/nvx-portfolio-hub.css'],
 };
 
 /**
@@ -66,7 +62,8 @@ function normalizeCss(raw) {
 async function main() {
   await fs.mkdir(DIST_DIR, { recursive: true });
 
-  // Clean existing .css and manifest files in dist/
+  // dist/ is generated state, not an archive. Remove every prior CSS artifact
+  // and manifest before rebuilding the exact current source graph.
   const existingFiles = await fs.readdir(DIST_DIR);
   for (const file of existingFiles) {
     if (file.endsWith('.css') || file === 'manifest.json') {
@@ -82,7 +79,8 @@ async function main() {
     files: {},
   };
 
-  // Compile individual source files
+  // Compile each canonical source once. Route-local CSS is consumed through
+  // manifest.files; core sources are also aggregated below for one runtime read.
   const srcFiles = await fs.readdir(CSS_SRC_DIR);
   for (const srcFile of srcFiles) {
     if (!srcFile.endsWith('.css')) continue;
@@ -102,8 +100,12 @@ async function main() {
     };
   }
 
-  // Compile aggregate bundles
+  // Only true multi-source aggregate bundles belong here.
   for (const [bundleName, sourceList] of Object.entries(BUNDLE_DEFINITIONS)) {
+    if (sourceList.length < 2) {
+      throw new Error(`Bundle ${bundleName} must aggregate at least two sources`);
+    }
+
     const parts = [];
     for (const relSrc of sourceList) {
       const fullSrc = path.join(THEME_DIR, relSrc);
