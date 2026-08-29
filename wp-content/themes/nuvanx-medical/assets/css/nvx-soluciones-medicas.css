@@ -30,16 +30,6 @@
   margin: 0;
 }
 
-/* Full-bleed hero when solutions is rendered outside .nvx-page__content. */
-.nvx-solutions-page > .nvx-brand-hero {
-  position: relative;
-  display: block;
-  width: calc(100vw - var(--nvx-scrollbar-width, 0px));
-  max-width: calc(100vw - var(--nvx-scrollbar-width, 0px));
-  margin-inline: calc(50% - 50vw + (var(--nvx-scrollbar-width, 0px) / 2));
-  overflow: hidden;
-}
-
 .nvx-solutions-shell {
   width: var(--nvx-shell);
   margin-inline: auto;
