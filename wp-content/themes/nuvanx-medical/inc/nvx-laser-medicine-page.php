@@ -111,7 +111,7 @@ function nvx_laser_hero_markup(): string {
 	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
 	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
 	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
-	$clinic_meta = $chamberi_name . ' (' . $chamberi_reg . ') · Salamanca–' . $goya_name . ' (' . $goya_reg . ') · Indicación médica personalizada';
+	$clinic_meta = $chamberi_name . ' (' . $chamberi_reg . ') · ' . $goya_name . ' (' . $goya_reg . ') · Indicación médica personalizada';
 
 	// Prefer featured image so this hub matches photo brand-heroes on peer routes.
 	$media = '';

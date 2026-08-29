@@ -276,7 +276,7 @@ function nvx_aesthetic_treatment_render( array $page ): void {
 	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
 	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
 	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
-	$clinic_meta = $chamberi_name . ' (' . $chamberi_reg . ') · Salamanca–' . $goya_name . ' (' . $goya_reg . ')';
+	$clinic_meta = $chamberi_name . ' (' . $chamberi_reg . ') · ' . $goya_name . ' (' . $goya_reg . ')';
 	if ( 'neuromoduladores-faciales-madrid' === (string) ( $page['slug'] ?? '' ) && function_exists( 'nvx_tariff_price_label' ) ) {
 		$from = nvx_tariff_price_label( 'neuromoduladores', 'entrecejo' );
 		if ( '' !== $from ) {

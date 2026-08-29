@@ -77,7 +77,7 @@ function nvx_strategy_why_nuvanx_markup(): string {
 	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
 	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
 	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
-	$clinic_section = 'NUVANX atiende en ' . $chamberi_name . ' (' . $chamberi_reg . ') y Salamanca–' . $goya_name . ' (' . $goya_reg . '), con equipo médico colegiado.';
+	$clinic_section = 'NUVANX atiende en ' . $chamberi_name . ' (' . $chamberi_reg . ') y ' . $goya_name . ' (' . $goya_reg . '), con equipo médico colegiado.';
 
 	$html  = '<article class="nvx-brand-readable nvx-strategy-page">';
 	$html .= '<section class="nvx-brand-hero"><div class="nvx-brand-hero__inner"><div class="nvx-brand-hero__copy"><p class="nvx-eyebrow">Criterio médico NUVANX</p>';

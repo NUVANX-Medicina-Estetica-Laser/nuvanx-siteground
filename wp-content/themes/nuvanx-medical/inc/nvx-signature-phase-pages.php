@@ -119,13 +119,13 @@ function nvx_signature_phase_markup( array $page ): string {
 	$ficha_links  = is_array( $page['ficha_links'] ?? null ) ? $page['ficha_links'] : array();
 	$related      = is_array( $page['related_fichas'] ?? null ) ? $page['related_fichas'] : array();
 	$price_range  = (string) ( $page['price_range'] ?? '' );
-	$clinics      = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
-	$chamberi_reg = (string) ( $clinics['chamberi']['reg'] ?? '' );
-	$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
-	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
-	$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
-	$clinic_meta_label = $chamberi_name . ' (Reg. Sanitario ' . $chamberi_reg . ') y Salamanca–' . $goya_name . ' (Reg. Sanitario ' . $goya_reg . ')';
-	$clinic_meta_short = $chamberi_name . ' (' . $chamberi_reg . ') · Salamanca–' . $goya_name . ' (' . $goya_reg . ')';
+	$clinics           = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$chamberi_reg      = (string) ( $clinics['chamberi']['reg'] ?? '' );
+	$goya_reg          = (string) ( $clinics['goya']['reg'] ?? '' );
+	$chamberi_name     = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+	$goya_name         = (string) ( $clinics['goya']['short_name'] ?? '' );
+	$clinic_meta_label = $chamberi_name . ' (Reg. Sanitario ' . $chamberi_reg . ') y ' . $goya_name . ' (Reg. Sanitario ' . $goya_reg . ')';
+	$clinic_meta_short = $chamberi_name . ' (' . $chamberi_reg . ') · ' . $goya_name . ' (' . $goya_reg . ')';
 	if ( 'papada-definicion-mandibular-madrid' === $slug && function_exists( 'nvx_tariff_price_label' ) ) {
 		$from = nvx_tariff_price_label( 'Endolift®', 'papada' );
 		if ( '' !== $from ) {
@@ -206,8 +206,14 @@ function nvx_signature_phase_markup( array $page ): string {
  * }>
  */
 function nvx_signature_hub_catalog(): array {
-	$contour = nvx_signature_contour_label();
-	$short   = nvx_signature_contour_label_short();
+	$contour           = nvx_signature_contour_label();
+	$short             = nvx_signature_contour_label_short();
+	$clinics           = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$chamberi_reg      = (string) ( $clinics['chamberi']['reg'] ?? '' );
+	$goya_reg          = (string) ( $clinics['goya']['reg'] ?? '' );
+	$chamberi_name     = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+	$goya_name         = (string) ( $clinics['goya']['short_name'] ?? '' );
+	$clinic_meta_short = $chamberi_name . ' (' . $chamberi_reg . ') · ' . $goya_name . ' (' . $goya_reg . ')';
 
 	return array(
 		'signature-index'      => array(
@@ -241,7 +247,7 @@ function nvx_signature_hub_catalog(): array {
 			'lead'      => 'Lectura respetuosa de abdomen, flancos y calidad del tejido después del embarazo. Se separa grasa subcutánea, laxitud, diástasis y expectativas realistas antes de proponer cualquier modalidad.',
 			'intro'     => 'El postparto no es un protocolo estándar. La valoración considera lactancia, tiempo desde el parto, pared abdominal, cicatrices y disponibilidad de recuperación. Si no hay indicación proporcionada, se explica la alternativa o la espera. ' . $clinic_meta_short . ' · Indicación solo tras valoración.',
 			'seo_title' => 'Tratamiento Postparto Abdomen Madrid | Contorno tras el Embarazo | NUVANX',
-			'seo_desc'  => 'Post-Maternity Contour™ en Madrid: valoración de grasa, laxitud y pared abdominal tras el embarazo. Diástasis y lactancia se evalúan antes de indicar. ' . $chamberi_name . ' (' . $chamberi_reg . ') y Salamanca–' . $goya_name . ' (' . $goya_reg . ').',
+			'seo_desc'  => 'Post-Maternity Contour™ en Madrid: valoración de grasa, laxitud y pared abdominal tras el embarazo. Diástasis y lactancia se evalúan antes de indicar. ' . $chamberi_name . ' (' . $chamberi_reg . ') y ' . $goya_name . ' (' . $goya_reg . ').',
 		),
 	);
 }
@@ -471,8 +477,13 @@ function nvx_signature_hub_shell_close(): string {
  * @param array<string, string> $hub
  */
 function nvx_signature_hub_markup( array $hub ): string {
-	$kind = (string) ( $hub['kind'] ?? '' );
-	$html = nvx_signature_hub_shell_open( $hub );
+	$kind          = (string) ( $hub['kind'] ?? '' );
+	$clinics       = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+	$chamberi_reg  = (string) ( $clinics['chamberi']['reg'] ?? '' );
+	$goya_reg      = (string) ( $clinics['goya']['reg'] ?? '' );
+	$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
+	$goya_name     = (string) ( $clinics['goya']['short_name'] ?? '' );
+	$html          = nvx_signature_hub_shell_open( $hub );
 
 	if ( 'index' === $kind ) {
 		$html .= '<section class="nvx-brand-section"><div class="nvx-brand-section__inner">';
@@ -545,7 +556,7 @@ function nvx_signature_hub_markup( array $hub ): string {
 				),
 				array(
 					'q' => '¿Dónde?',
-					'a' => 'Valoración en ' . $chamberi_name . ' (' . $chamberi_reg . ') y Salamanca–' . $goya_name . ' (' . $goya_reg . '), con plan documentado si procede.',
+					'a' => 'Valoración en ' . $chamberi_name . ' (' . $chamberi_reg . ') y ' . $goya_name . ' (' . $goya_reg . '), con plan documentado si procede.',
 				),
 			)
 		);

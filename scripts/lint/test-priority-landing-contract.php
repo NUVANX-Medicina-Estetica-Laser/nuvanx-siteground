@@ -211,6 +211,15 @@ if ( ! str_contains( $signature, "return 'nvx_signature_phase_pages'" )
 	$fail( 'signature pages must declare owner and drop the prose wrapper' );
 }
 
+if ( ! str_contains( $signature, '$clinic_meta_short = $chamberi_name' ) ) {
+	$fail( 'signature hub catalog must initialize clinic metadata' );
+}
+
+if ( str_contains( $signature, "Salamanca–' . \$goya_name" )
+	|| str_contains( $signature, 'Salamanca–Salamanca' ) ) {
+	$fail( 'signature pages must not double Salamanca- prefix for Goya clinic' );
+}
+
 if ( str_contains( $solutions, PROSE_WRAPPER )
 	|| str_contains( $valoracion, PROSE_WRAPPER ) ) {
 	$fail( 'soluciones and valoracion templates must not emit the conflicting wrapper' );
