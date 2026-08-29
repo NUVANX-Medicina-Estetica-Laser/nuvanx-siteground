@@ -1,120 +1,65 @@
-# Security Policy
+# Security policy
 
-## SSH Key Rotation Policy
+This repository contains the production WordPress theme and release tooling for NUVANX. Security controls are enforced through code, branch protection and the two canonical GitHub Actions workflows.
 
-### Staging2 Deployment SSH Keys
+## Secrets and credentials
 
-**Rotation Schedule:**
-- Primary SSH key for staging2 deployment must be rotated every 90 days
-- Rotation should be scheduled during low-traffic periods
-- Alert via GitHub Issues 7 days before scheduled rotation
+- Never commit API keys, access tokens, private keys, OAuth credentials, service-account JSON, database credentials or WordPress secrets.
+- Never paste secrets into issues, PR comments, Actions logs, documentation or chat transcripts.
+- Runtime credentials must be supplied through the approved private secret/variable surfaces.
+- Gitleaks is part of the repository security gate. A historical false positive may be allowlisted only with the narrowest exact fingerprint/commit/path/rule evidence; broad rule suppression is not acceptable.
 
-**Rotation Process:**
-1. Generate new SSH key pair: `ssh-keygen -t ed25519 -a 100 -f staging2_new_key`
-2. Add new public key to SiteGround staging2 server
-3. Update GitHub Secret `STAGING2_SSH_PRIVATE_KEY` with new private key
-4. Update GitHub Secret `STAGING2_SSH_KNOWN_HOSTS` if host key changed
-5. Test deployment with new credentials
-6. Remove old SSH key from SiteGround server
-7. Document key rotation in the private infrastructure password manager / DevOps vault.
+## GitHub Actions
 
-**Emergency Rotation:**
-- If key compromise is suspected, rotate immediately
-- Revolve all related credentials (SiteGround, any services using same key)
-- Document incident in SECURITY.md
+- Only `.github/workflows/staging.yml` and `.github/workflows/production.yml` are supported.
+- External Actions must be pinned to immutable commit SHAs.
+- Checkout must not persist repository credentials unless a reviewed use case explicitly requires it.
+- Workflow self-mutation and temporary credentialed workflows are prohibited.
+- Production is manual-only and requires immutable exact-SHA Staging acceptance evidence.
 
-## Security Incident Log
+## SSH and hosting
 
-### July 2026 Incident & Remediation
+- Strict host-key verification is mandatory. `StrictHostKeyChecking=no` is prohibited.
+- SiteGround access uses bounded retries and explicit transport classification.
+- A TCP timeout or SSH transport exit `255` blocks the operation but does not establish an application defect.
+- Direct host deployment must not bypass the canonical Production workflow or its release identity contract.
 
-- **Incident Summary:** Detection of exposed credentials in historical git commits (`refs/pull/*/head` refs).
-- **Remediation Actions Taken:**
-  1. ⏳ **PENDIENTE** — Rotación de credenciales DB y claves SSH en SiteGround.
-  2. ✅ Externalized all production configurations and secrets from codebase tracking.
-  3. ✅ Purged sensitive refs from `origin` repository.
-  4. ⏳ **PENDIENTE** — Submitted GitHub Support Ticket to purge cached `refs/pull/*/head` objects on GitHub servers.
+## Production mutation controls
 
-### Secret Management
+A production release must retain all of these protections:
 
-**GitHub Secrets (staging2):**
-- `STAGING2_SSH_HOST` - SiteGround staging server hostname
-- `STAGING2_SSH_PORT` - SSH port (default: 18765)
-- `STAGING2_SSH_USER` - SSH username
-- `STAGING2_SSH_PRIVATE_KEY` - Private SSH key for deployment
-- `STAGING2_SSH_KNOWN_HOSTS` - Known hosts fingerprint
+1. exact candidate SHA validation;
+2. successful immutable Staging acceptance evidence;
+3. FIFO mutation serialization;
+4. production environment preflight;
+5. pre-mutation rollback snapshot;
+6. guarded atomic cutover;
+7. exact disk/public release identity verification;
+8. compensating rollback for a failed post-cutover mandatory gate.
 
-**Application Secrets:**
-- HubSpot Form ID and Portal ID stored in WordPress constants
-- Clinic contact/WhatsApp numbers centrally defined in `inc/nvx-business-config.php` and normalized by `inc/nvx-config-helpers.php`
-- Medical colegiado numbers externalized to `inc/data/config.json`
+Do not weaken these controls to recover from a failed deployment.
 
-**Local Development:**
-- Never commit `wp-config.php` with real database credentials
-- Use environment variables for local development secrets
-- Add `wp-config.php` to `.gitignore` if it contains sensitive data
+## Data and evidence handling
 
-### Dependency Security
+- Production audits should be read-only unless the workflow explicitly owns a reviewed mutation.
+- Diagnostic artifacts must be redacted and bounded; do not publish raw secret-bearing configuration or private source extracts as public artifacts.
+- Database backups must remain outside `public_html` and be cleaned according to the deployment contract.
+- QA submissions must be identifiable as QA/test data and must not create unintended production sales or advertising side effects.
 
-**PHP Dependencies:**
-- Run `composer audit` regularly to check for vulnerable packages
-- Update dependencies monthly: `composer update`
-- Review security advisories for WordPress plugins used
+## WordPress application security
 
-**Node.js Dependencies:**
-- Run `npm audit` regularly
-- Fix critical vulnerabilities immediately
-- Keep Playwright and testing dependencies updated
+Theme/runtime changes must preserve:
 
-### Code Security Practices
+- output escaping and sanitization appropriate to context;
+- nonce/capability checks for state-changing WordPress operations;
+- governed security headers;
+- consent and analytics ownership contracts;
+- no executable secrets in theme files or public assets.
 
-**Input Validation:**
-- All user input must be escaped using WordPress functions
-- Use `esc_html()`, `esc_attr()`, `esc_url()`, `wp_kses_post()`
-- Never trust $_GET, $_POST, or $_REQUEST directly
+The executable security contracts under `scripts/lint/` are authoritative for implementation details.
 
-**Database Queries:**
-- Use WordPress $wpdb prepare() for all database queries
-- Never concatenate user input into SQL queries
-- Sanitize all data before database insertion
+## Reporting
 
-**File Access:**
-- Validate all file paths before including files
-- Use `is_readable()` and `realpath()` for file operations
-- Restrict file access to theme directory only
+Do not open a public issue containing an undisclosed vulnerability, credential or exploit detail. Use the repository/organization's private security reporting channel when available, or contact the repository owner privately before publishing sensitive details.
 
-### Reporting Security Issues
-
-**To report a security vulnerability:**
-1. Do not create a public GitHub issue
-2. Send details to: security@nuvanx.com
-3. Include steps to reproduce the vulnerability
-4. Allow 7 days for remediation before public disclosure
-
-**Response Timeline:**
-- Initial response within 48 hours
-- Fix timeline based on severity (Critical: 48h, High: 7 days, Medium: 14 days)
-- Security advisory published after fix deployment
-
-## Monitoring and Logging
-
-**Security Monitoring:**
-- Monitor GitHub Actions for failed deployments
-- Review error logs for suspicious activity
-- Track failed login attempts to admin areas
-
-**Audit Logging:**
-- All deployments logged via GitHub Actions
-- SSH access logged by SiteGround
-- WordPress admin actions logged via security plugins
-
-## Compliance
-
-**Data Protection:**
-- GDPR compliance for user data handling
-- Patient data handled according to medical data regulations
-- Regular privacy policy reviews
-
-**Medical Standards:**
-- Colegiado numbers accurately displayed
-- Medical claims evidence-based
-- Clear disclaimer about individual results variation
+Historical incidents, closed investigations and remediated one-time procedures belong in Git history, PRs and Actions evidence rather than this living policy.
