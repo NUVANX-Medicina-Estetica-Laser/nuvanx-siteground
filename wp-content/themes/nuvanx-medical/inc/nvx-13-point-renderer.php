@@ -219,36 +219,4 @@ function nvx_match_catalog_page( string $slug, array $catalog ): ?array {
 	return null;
 }
 
-/**
- * Registra un catálogo de páginas en the_content de forma centralizada.
- *
- * @param callable      $catalog_callback Callback que devuelve un catálogo tipo array<string, array<string,mixed>>.
- * @param int           $priority         Prioridad del hook de contenido (por defecto 22).
- * @param callable|null $render_callback Opcional. Función que renderiza la página (por defecto nvx_render_13_point_matrix).
- */
-function nvx_register_catalog_content_filter( callable $catalog_callback, int $priority = 22, ?callable $render_callback = null ): void {
-	if ( null === $render_callback ) {
-		$render_callback = 'nvx_render_13_point_matrix';
-	}
 
-	add_filter(
-		'the_content',
-		static function ( string $content ) use ( $catalog_callback, $render_callback ): string {
-			if ( is_admin() || ! is_main_query() || ! in_the_loop() || ! is_page() ) {
-				return $content;
-			}
-
-			$slug    = (string) get_post_field( 'post_name', get_queried_object_id() );
-			$catalog = (array) call_user_func( $catalog_callback );
-			$matched = nvx_match_catalog_page( $slug, $catalog );
-
-			if ( null !== $matched ) {
-				$markup = call_user_func( $render_callback, $matched );
-				return '' === $markup ? $content : $markup;
-			}
-
-			return $content;
-		},
-		$priority
-	);
-}

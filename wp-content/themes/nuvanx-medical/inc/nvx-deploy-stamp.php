@@ -98,15 +98,4 @@ function nvx_render_deploy_stamp_meta(): void {
 	}
 }
 
-/**
- * Validate deploy stamp chain of trust.
- *
- * @param string $expected_sha Expected SHA to verify against.
- * @return bool True if chain of trust is valid, false otherwise.
- */
-function nvx_validate_deploy_stamp_chain( string $expected_sha ): bool {
-	$deployed_sha = nvx_get_deploy_stamp_value( 'DEPLOY_SHA' );
-	return '' !== $deployed_sha && hash_equals( $expected_sha, $deployed_sha );
-}
-
 add_action( 'wp_head', 'nvx_render_deploy_stamp_meta', 1 );

@@ -139,27 +139,6 @@ function nvx_aesthetic_schema_procedure_node(
 }
 
 /**
- * Build FAQ Question nodes for a treatment key.
- *
- * @param array<int,array{q:string,a:string}> $faqs FAQ catalogue rows.
- * @return array<int,array<string,mixed>>
- */
-function nvx_aesthetic_schema_faq_questions( array $faqs ): array {
-	$questions = array();
-	foreach ( $faqs as $faq ) {
-		$questions[] = array(
-			'@type'          => 'Question',
-			'name'           => $faq['q'],
-			'acceptedAnswer' => array(
-				'@type' => 'Answer',
-				'text'  => $faq['a'],
-			),
-		);
-	}
-	return $questions;
-}
-
-/**
  * Point the matching WebPage node at the MedicalProcedure entity.
  *
  * @param array<int,array<string,mixed>> $graph Yoast graph.

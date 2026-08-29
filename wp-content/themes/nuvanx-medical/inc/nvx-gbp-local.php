@@ -39,11 +39,6 @@ function nvx_gbp_clinic_profile( string $clinic_key ): array {
 	return is_array( $clinic ) ? $clinic : array();
 }
 
-function nvx_gbp_primary_category(): string {
-	$catalog = nvx_gbp_profiles_catalog();
-	$category = trim( (string) ( $catalog['primary_category'] ?? '' ) );
-	return '' !== $category ? $category : 'Clínica de medicina estética';
-}
 
 function nvx_gbp_review_url( string $clinic_key ): string {
 	$profile  = nvx_gbp_clinic_profile( $clinic_key );
@@ -494,11 +489,6 @@ function nvx_goya_clinical_team_markup(): string {
 	return $html;
 }
 
-/** Backward-compatible Chamberí helper used by schema. */
-function nvx_chamberi_landing_photos(): array {
-	return nvx_clinic_landing_photos( 'chamberi' );
-}
-
 /**
  * Absolute URLs of existing clinic photos for Schema.org image.
  *
@@ -514,11 +504,6 @@ function nvx_clinic_schema_image_urls( string $clinic_key ): array {
 		}
 	}
 	return $urls;
-}
-
-function nvx_chamberi_schema_image_url(): string {
-	$urls = nvx_clinic_schema_image_urls( 'chamberi' );
-	return $urls[0] ?? '';
 }
 
 function nvx_gbp_review_email_subject( string $clinic_key ): string {

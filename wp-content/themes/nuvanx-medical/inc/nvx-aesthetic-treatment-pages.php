@@ -192,11 +192,6 @@ function nvx_aesthetic_treatment_current(): ?array {
 	return $catalog[ $key ] ?? null;
 }
 
-/** Whether the current page is one of the governed aesthetic treatment pages. */
-function nvx_is_aesthetic_treatment_page(): bool {
-	return null !== nvx_aesthetic_treatment_current_key();
-}
-
 /**
  * Render one treatment data row.
  *

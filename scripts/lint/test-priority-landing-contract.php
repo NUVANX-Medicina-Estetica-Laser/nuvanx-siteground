@@ -38,7 +38,7 @@ if ( ! str_contains( $helpers, 'function nvx_clinical_authority_byline_markup' )
 }
 
 if ( ! str_contains( $sede, 'Medicina estética en Chamberí, Madrid' )
-	|| ( ! str_contains( $sede, 'nvx_clinic_landing_photos' ) && ! str_contains( $sede, 'nvx_chamberi_landing_photos' ) ) ) {
+	|| ! str_contains( $sede, 'nvx_clinic_landing_photos' ) ) {
 	$fail( 'chamberi landing must have local-intent H1 and photo gallery' );
 }
 
