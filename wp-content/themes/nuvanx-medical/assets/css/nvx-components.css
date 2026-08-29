@@ -462,6 +462,13 @@ body .joinchat__qr canvas {
 }
 .nvx-brand-card__media{margin:calc(-1 * var(--nvx-pad-card)) calc(-1 * var(--nvx-pad-card)) var(--nvx-space-3);overflow:hidden;border-radius:var(--nvx-radius-card) var(--nvx-radius-card) 0 0;background:var(--nvx-surface-base)}
 .nvx-brand-card__media img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:0}
+/* Equipment cards: product shots must be seen fully — contain, not crop */
+.nvx-clinics-equipment__media img {
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  background: var(--nvx-surface-base);
+  padding: var(--nvx-space-3, 1rem);
+}
 /* Team / staff portraits — vertical frame, not landscape body crop */
 .nvx-brand-card--team{
   grid-column:span 4;

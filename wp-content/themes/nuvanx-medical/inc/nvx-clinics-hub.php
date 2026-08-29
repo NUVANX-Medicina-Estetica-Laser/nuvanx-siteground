@@ -150,7 +150,7 @@ function nvx_clinics_hub_equipment_section_markup(): string {
 	$html .= '<p class="nvx-brand-kicker">' . esc_html__( 'Tecnología clínica', 'nuvanx-medical' ) . '</p>';
 	$html .= '<h2 id="nvx-clinics-equipment-title" class="nvx-brand-title">' . esc_html__( 'Equipos con los que trabajamos', 'nuvanx-medical' ) . '</h2>';
 	$html .= '<p class="nvx-brand-lead">' . esc_html__( 'Esta selección identifica plataformas tecnológicas utilizadas en nuestra práctica. No asigna un equipo concreto a una sede; la disponibilidad y la indicación se confirman siempre durante la valoración médica.', 'nuvanx-medical' ) . '</p>';
-	$html .= '<div class="nvx-brand-grid nvx-clinics-equipment__grid">' . implode( '', $cards ) . '</div>';
+	$html .= '<div class="nvx-brand-grid nvx-brand-grid--4 nvx-clinics-equipment__grid">' . implode( '', $cards ) . '</div>';
 	$html .= '</div></section>';
 	return $html;
 }
