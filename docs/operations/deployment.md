@@ -1,179 +1,177 @@
-# Deployment operations
+# Deployment and release operations
 
-Mutating deploy scripts require `--confirm` or `NUVANX_CONFIRM=yes`.
+This is the single durable runbook for Staging2, Production, SSH transport, mutation ordering, rollback and release evidence.
 
-## Identity and invariants
+The current workflow YAML and invoked scripts are authoritative when implementation details differ from prose.
 
-- Canonical source branch: `master`
-- Deployment identity: full lowercase 40-character Git SHA
-- Staging2: `https://staging2.nuvanx.com`
-- Production: `https://nuvanx.com`
-- Live theme marker: `wp-content/themes/nuvanx-medical/.nvx-deploy-sha`
-- Persistent GitHub Actions workflows: exactly **two**
-- Cross-environment mutation lock: `nuvanx-environment-mutation`
+## 1. Canonical workflows
 
-Branch names, tags and release-control files express intent. They are not proof of what is live. The environment marker plus successful validation evidence are authoritative.
+The repository supports exactly:
 
-## Canonical workflow model
+- `.github/workflows/staging.yml`
+- `.github/workflows/production.yml`
 
-Only these workflows are persistent:
+Do not create one-time, diagnostic, migration-specific or integration-specific workflows. Reusable logic belongs in scripts invoked by one of these two workflows.
 
-1. `.github/workflows/staging.yml`
-2. `.github/workflows/production.yml`
+## 2. Release state machine
 
-The same two workflow blobs are kept on `master` and `release/production`. Repository hygiene inside `staging.yml` rejects any future third workflow.
+A normal release follows this order:
 
-### Staging
+1. PR/static checks on the proposed change.
+2. Merge to `master`.
+3. Staging run for the exact resulting `master` SHA.
+4. Successful immutable Staging acceptance evidence for that exact SHA.
+5. Manual Production dispatch for the same SHA.
+6. Production preflight, backup and guarded cutover.
+7. Exact production boundary/identity verification.
+8. Required post-cutover gates; compensating rollback if a mandatory post-cutover gate fails.
 
-`staging.yml` owns the complete Staging2 lifecycle in one workflow:
+A previous Staging acceptance cannot authorize a newer SHA. Any merge that advances `master` creates a new candidate.
 
-- static repository, PHP, JavaScript and design-system gates;
-- exact-SHA Staging2 deployment from `master`;
-- strict environment-isolation checks;
-- rollback snapshot of theme, required MU plugins and Staging2 database;
-- required MU-plugin and content-hygiene deployment;
-- cache purge and exact `.nvx-deploy-sha` verification;
-- public Staging2 boundary validation;
-- WordPress template validation;
-- canonical Block C browser acceptance and valoración-placement validation;
-- read-only proof that production remained unchanged;
-- automatic full Staging2 rollback after a failed mutation;
-- same-repository, label-gated PR preview using trusted `master` tooling.
+## 3. Staging2
 
-A relevant push to `master` can mutate **Staging2 only**. It never authorizes production.
+Staging2 is the production-eligibility environment, not an informal preview.
 
-The production-eligible Staging2 evidence artifact is:
+The canonical Staging workflow owns:
 
-```text
-staging2-block-c-<sha>
-```
+- repository/static quality gates;
+- secret scanning;
+- FIFO mutation ordering;
+- strict SiteGround SSH setup;
+- rollback snapshot before runtime mutation;
+- environment isolation checks;
+- immutable candidate deployment;
+- cache purge and exact deployment identity;
+- publication/sitemap and public-boundary verification;
+- page/template/browser acceptance;
+- read-only confirmation that Production was not changed;
+- immutable acceptance artifact creation.
 
-The runtime acceptance inventory is dynamic and validates every trusted published WordPress page at the configured viewports. Canonical manifest membership is enforced before the browser matrix runs.
+The workflow may use multiple fresh hosted runners serially to survive transient SiteGround transport failures. A later runner may skip work only when the same run already produced its valid completion marker.
 
-**Failure interpretation is part of the deployment contract.** Before diagnosing a red Staging/PR-preview job as a candidate regression, apply the canonical taxonomy in [`staging-transient-classification.md`](./staging-transient-classification.md). In particular, `EX_TEMPFAIL (75)`, a classified SiteGround `202`/captcha challenge, SSH transport `255`, and `FAIL_CONFIG (78)` do not establish an application defect. They remain NO-GO because evidence is incomplete and require targeted recovery or a fresh exact-SHA run. Only `FAIL_REAL` or equivalent non-transient application/contract evidence establishes a candidate defect.
+## 4. Production
 
-### Production
+Production is **manual-only**. A successful Staging run proves eligibility but does not authorize release.
 
-`production.yml` owns the complete production lifecycle in one workflow:
+Normal release requirements:
 
-- read-only Staging2 and production identity gate;
-- resolution of the SHA **actually deployed on Staging2** from `.nvx-deploy-sha`;
-- verification that the live Staging2 SHA is contained in `origin/master`;
-- verification of a successful, non-expired exact-SHA `staging2-block-c-<sha>` artifact from `master`;
-- exact candidate materialization from Git history;
-- strict production SSH/preflight checks;
-- guarded atomic production cutover through `tools/deploy/deploy-to-prod.sh`;
-- exact public and on-disk production SHA verification;
-- SEO/GEO, document-title and IndexNow post-release validation;
-- optional Lighthouse matrix and optional live HubSpot E2E for explicit manual runs.
+- candidate is a full lowercase 40-character SHA;
+- candidate is contained in `master`;
+- normal `release` mode requires candidate == current `master` HEAD;
+- candidate has successful immutable Staging acceptance evidence;
+- release tooling is materialized from the exact candidate;
+- production environment identity/preconditions pass before mutation.
 
-Staging and production use the same `nuvanx-environment-mutation` concurrency group. A Staging2 mutation therefore cannot advance the live staging payload while Production is resolving, validating and promoting it.
+Production may also be run with `deploy=false` for verification-only audits, or in SSH connectivity probe mode. Those modes must not perform a cutover.
 
-## Production authorization
+### Do not rerun mutating jobs
 
-Production is dispatched manually from the `Production` workflow with the requested candidate SHA.
+The FIFO contract intentionally rejects a GitHub Actions rerun of a mutating run/attempt:
 
-On every release, `production.yml` runs `scripts/ci/verify-staging-acceptance.sh` to require exact, immutable, successful acceptance evidence (`staging2-block-c-<sha>`) from a completed canonical `master` Staging run before any production mutation. Production also acquires a FIFO environment mutation turn via `scripts/ci/wait-for-environment-mutation-turn.sh`.
+`MUTATION_FIFO=FAIL reason=rerun_forbidden ... action=start_new_run`
 
-**Never infer acceptance from `master` advancing alone.** The correct acceptance signal is a completed canonical Staging run that produced a successful `staging2-block-c-<sha>` artifact. This artifact must:
-- Be from a `master` branch run (not a fork or PR)
-- Contain the exact SHA being promoted
-- Have passed all browser acceptance tests (Block C matrix)
-- Be verified as non-expired and unmodified
+When a Staging/Production mutation run fails and a retry is appropriate, start a **new canonical workflow run**. Do not use “Re-run failed jobs” to bypass mutation ordering.
 
-Simply having the SHA on `master` is insufficient for production authorization. The artifact provides immutable proof that the specific SHA passed all acceptance tests on Staging2.
+## 5. Mutation ordering
 
-This removes the stale-manifest race that can occur when Staging2 advances after a release candidate file was written.
+Each workflow run has a unique GitHub concurrency group. Cross-workflow ordering is enforced by `scripts/ci/wait-for-environment-mutation-turn.sh`.
 
-## Trigger ownership
+The FIFO contract exists so a newer Staging or Production run cannot overtake an older pending mutation. Do not weaken, bypass or replace this with a single GitHub concurrency slot that can discard pending SHAs.
 
-Only canonical workflows `staging.yml` and `production.yml` are authorized to use `GITHUB_TOKEN` for repository mutations. Any third workflow attempting to mutate the repository via the GitHub API will be rejected by the repository hygiene gate in `staging.yml`.
+## 6. SiteGround SSH
 
-This GITHUB_TOKEN recursion invariant prevents workflow self-mutation attacks where a malicious or transient workflow could modify its own definition or create new workflows. The canonical workflows enforce this by checking that exactly two workflow files exist (`staging.yml` and `production.yml`) and rejecting any additional or modified workflow configurations.
+SSH configuration is centralized in `scripts/production/configure-siteground-ssh.sh` and used by both canonical workflows.
 
-**Example:** The staging2 workflow file (`.github/workflows/staging.yml`) is one of the two trusted workflows that owns the complete Staging2 lifecycle. Any attempt to create a third workflow file (e.g., `staging2-helper.yml`) would be detected and rejected by the repository hygiene check.
+Security/transport rules:
 
-## Reconciliación del contrato de HubSpot
+- strict host-key verification is mandatory;
+- primary and approved fallback endpoints are attempted with bounded retries;
+- no `StrictHostKeyChecking=no`;
+- credentials remain in GitHub secret surfaces;
+- transport classification is separate from application classification.
 
-La reconciliación del formulario canónico de valoración es una operación manual, limitada y auditable. Se ejecuta exclusivamente desde `staging.yml` mediante el input `reconcile_hubspot_attribution=true`; no se activa en los pushes ordinarios. El runner ejecuta `scripts/ci/provision-hubspot-attribution-contract.sh --apply` sólo bajo ese input, con `NUVANX_CONFIRM=yes` dentro del entorno efímero y con el secreto de repositorio `HUBSPOT_ACCESS_TOKEN`.
+### Failure classification
 
-El reconciliador puede crear únicamente las propiedades administradas por el contrato y añadir al formulario canónico los campos faltantes como ocultos. Antes de autorizar una candidata, verifica que cada campo de atribución sea único, oculto, opcional y mantenga su tipo semántico; el control QA `nvx_is_test_lead` debe conservarse como `single_checkbox`, mientras que el resto se mantiene como `single_line_text`.
+Use evidence, not the workflow color alone:
 
-Tras una reconciliación manual debe completarse una nueva aceptación de Staging2 para el SHA exacto. La evidencia debe demostrar un nuevo submit QA con el mismo `nvx_lead_id` en formulario first-party, HubSpot y `public.web_lead_captures`, donde `is_test_lead = true`, `reconciliation_status = 'qa_suppressed'` y `applied_lead_id IS NULL`. No puede existir proyección a Deals, ni conversión hacia Google Data Manager, ni otra salida comercial de QA. Una reconciliación satisfactoria por sí misma nunca autoriza una promoción a producción.
+| Class | Meaning | Action |
+| --- | --- | --- |
+| `FAIL_REAL` | deterministic candidate/application failure | fix source/data, then obtain new exact-SHA acceptance |
+| `TRANSIENT_INFRASTRUCTURE` / `75` | temporary transport/infrastructure failure | candidate defect not established; start a fresh run when retrying |
+| `FAIL_CONFIG` / `78` | missing/invalid environment or configuration precondition | correct configuration; do not patch app code to mask it |
+| SSH `255` / bounded TCP timeout | transport exhausted | no mutation should be inferred unless logs prove a later mutation step ran |
+| SiteGround HTTP `202` challenge | public-edge anti-bot condition | use the workflow's deterministic origin/approved fallback evidence; `202` alone is not PASS or app failure |
 
-## Staging2 secrets
+Staging acceptance is fail-closed: incomplete evidence never becomes production eligibility.
 
-Required:
+## 7. Production mutation and rollback
 
-- `STAGING2_SSH_HOST`
-- `STAGING2_SSH_PORT`
-- `STAGING2_SSH_USER`
-- `STAGING2_SSH_PRIVATE_KEY`
-- `STAGING2_SSH_KNOWN_HOSTS`
+The guarded Production path must preserve this sequence:
 
-Required only for the manual HubSpot reconciliation gate:
+1. validate exact candidate and accepted tooling;
+2. wait for mutation turn;
+3. configure strict SSH;
+4. verify Production preflight;
+5. upload exact accepted payload/tooling to an isolated remote release path;
+6. create the rollback snapshot required by `deploy-to-prod.sh`;
+7. execute guarded atomic cutover;
+8. verify public/origin boundary and exact disk SHA;
+9. verify the full deployment identity chain;
+10. run required origin audits;
+11. compensate automatically if a mandatory post-cutover gate fails;
+12. clean remote release payload and temporary identities.
 
-- `HUBSPOT_ACCESS_TOKEN`
+Never deploy the theme by copying files directly into Production outside this transaction.
 
-## Production secrets
+## 8. Deployment identity
 
-Required for production mutation and production-origin audits:
+A valid release must converge on one identity across the theme/disk marker, deployment stamp and rendered public metadata. The workflow verifies the expected SHA and run identity after cutover.
 
-- `PROD_SSH_HOST`
-- `PROD_SSH_PORT`
-- `PROD_SSH_USER`
-- `PROD_SSH_PRIVATE_KEY`
-- `PROD_SSH_KNOWN_HOSTS`
+Do not manually edit `.nvx-deploy-sha` or `.nvx-deploy-stamp.json` to manufacture a PASS. They are outputs of the canonical deploy transaction.
 
-## Local Staging2 acceptance
+## 9. Migrations
 
-Install the scoped dependencies, then execute the resilient entrypoint from the repository root:
+Production deployment owns only the explicit retained migration set declared by the deployment script/workflow. Required migration payload and the deployment script must remain in lockstep.
 
-```bash
-cd scripts/staging2
-npm ci --ignore-scripts
-npx playwright install chromium
-cd ../..
-EXPECTED_SHA=<40-char-sha> BASE_URL=https://staging2.nuvanx.com node scripts/staging2/block-c-entrypoint.mjs
-# Note: ORIGIN_SSH_ALIAS (defaults to 'nvx-staging2') requires SSH host configuration for published post WP-CLI inventory
-EXPECTED_SHA=<40-char-sha> BASE_URL=https://staging2.nuvanx.com ORIGIN_SSH_ALIAS=nvx-staging2 node scripts/staging2/valoracion-placement.mjs
-```
+Rules:
 
-The Staging acceptance runners adhere to the following exit-code contracts. The detailed cross-run interpretation is canonicalized in [`staging-transient-classification.md`](./staging-transient-classification.md).
+- snapshot before mutation;
+- no destructive ad-hoc SQL in the workflow;
+- do not rewrite an already-applied historical migration;
+- delete completed one-time migrations once no compatibility guard/runtime dependency requires them;
+- preserve fail-closed post-migration audits.
 
-### Valoración and quality orchestrator (`valoracion-placement.mjs`)
-The orchestrator sequences three isolated validation stages:
-1. **SiteGround transient classifier (`test-siteground-transient-classifier.mjs`)**: deterministic classifier unit test suite (exit `0` on pass, exit `1` on regression).
-2. **Governed blog head contract (`governed-blog-head-contract.mjs`)**: validates SEO, titles, canonicals, og:url, and `noindex` across published journal entries with 4 bounded retries per post (exit `0` on pass, exit `1` on real assertion failure, exit `75` on transient challenge exhaustion with Staging2 rollback explicitly disarmed).
-3. **Valoración placement runner (`valoracion-placement-resilient.mjs`)**: validates visual geometry, SHA meta tags, and HubSpot interactive mounting across viewports, automatically retried across up to 3 outer QA cycles on transient failure (`EX_TEMPFAIL` 75) with backoff to absorb transient mount jitter (exit `0` on pass, exit `1` on real assertion failure, exit `75` on transient exhaustion with rollback triggered).
-- `0`: All stages passed (`STAGING_ACCEPTANCE_COMPONENT=PASS`).
-- `1`: Real assertion failure (`VALORACION_PLACEMENT=FAIL_REAL` or real contract defect). Fails immediately on the first cycle to preserve failure evidence and save CI time.
-- `75` (`EX_TEMPFAIL`): Transient challenge exhaustion. If originating from the governed blog head stage, Staging2 rollback is disarmed (`STAGING_MUTATION_ARMED=0`); if originating from the valoración placement runner (`VALORACION_PLACEMENT=TRANSIENT_ONLY`), Staging2 rollback is triggered. Diagnostics are written to GitHub Step Summary. This is an evidence NO-GO, not proof of a candidate defect.
+See [`../../tools/migrations/README.md`](../../tools/migrations/README.md).
 
-### Block C matrix runner (`block-c-entrypoint.mjs` / `block-c-matrix.mjs`)
-- `0`: Validation passed (`BLOCK_C_RESILIENT=PASS` or a successful targeted-recovery PASS). All published routes/viewports have complete required acceptance evidence. Eligible for the Block C portion of Production acceptance.
-- `1` or another non-transient code with `FAIL_REAL`: Real browser/contract assertion failure or malformed application evidence. This establishes a candidate/contract defect and remains a hard NO-GO.
-- `75` (`EX_TEMPFAIL`): `TRANSIENT_INFRASTRUCTURE`; candidate defect **not established**. The full 228-case matrix runs once per runner. Isolated transient route/viewport evidence is revalidated through bounded targeted public-browser recovery rather than replaying the full matrix. If evidence still cannot be completed, the run remains ineligible for Production and a fresh exact-SHA acceptance run is required.
-- `78` (`EX_CONFIG`): CI/configuration contract failure; candidate defect **not established**. Correct the acceptance configuration and rerun the same exact candidate where applicable.
-- SSH/preflight `255`: transport/infrastructure failure; candidate defect **not established**. Do not patch candidate code based only on this signal.
+## 10. Helper ownership
 
-A red GitHub job can therefore mean either a real candidate failure **or** a deliberately blocking transient/configuration state. Inspect the explicit `BLOCK_C_*` classification marker before attributing the failure to application code. `TRANSIENT_INFRASTRUCTURE` is still NO-GO; it is simply not a demonstrated code regression.
+`tools/deploy/` contains implementation helpers, not separate release paths:
 
-## Repository hygiene
+- `deploy-to-staging2.sh` — Staging deployment implementation.
+- `deploy-to-prod.sh` — guarded Production deployment implementation with rollback contract.
+- `flush-prod-cache.sh` — bounded cache helper when explicitly invoked by an approved operational path.
 
-Repository hygiene is part of `staging.yml`; it is no longer a separate workflow. It rejects transient one-shot workflows, workflow self-mutation, tracked generated/local debris, empty/editor-residue files and any `.github/workflows` state other than `production.yml` plus `staging.yml`. Gitleaks runs on the applicable trusted Staging workflow paths.
+`scripts/production/` contains identity, boundary, SEO/origin, SSH and compensating-rollback tooling.
 
-Operational evidence belongs in GitHub Actions artifacts or Git history, not as permanent root-level audit dumps.
+Do not execute these helpers as an informal substitute for the canonical workflows.
 
-## Release record
+## 11. Post-release audits
 
-For every production release retain:
+Production can run reusable optional verification jobs without creating new workflows, including:
 
-- exact live-and-accepted Staging2 SHA;
-- exact Block C run/artifact;
-- environment identity evidence;
-- rollback/backup evidence;
-- production public-boundary evidence;
-- post-release audit evidence.
+- SEO/GEO + Search Console + IndexNow;
+- Lighthouse performance matrix;
+- HubSpot zero-submit contract verification;
+- final-close redacted inventory;
+- MU-plugin private forensic extraction.
 
-Never store secret values in repository documents or HTML.
+These are retained because they are reusable production controls, not one-time workflows.
+
+## 12. Evidence and documentation
+
+- Actions logs/artifacts are the evidence for a specific run/SHA.
+- GitHub Issues/PRs own current blockers and remediation state.
+- Markdown documents describe stable operational rules only.
+- Git history preserves retired investigations and superseded procedures.
+
+Do not add a new Markdown file merely to record one deployment, one incident or one audit result.
