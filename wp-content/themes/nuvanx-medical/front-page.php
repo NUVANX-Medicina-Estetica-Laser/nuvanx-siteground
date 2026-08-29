@@ -28,7 +28,7 @@ ob_start();
 			<h1 id="nvx-home-hero-title" class="nvx-home-hero__title">Primero el diagnóstico médico. Luego, el tratamiento adecuado.<span class="nvx-hero-title-location"> Madrid.</span></h1>
 			<p class="nvx-home-hero__lead">Antes de recomendar nada, escuchamos qué te preocupa y entendemos qué tendría sentido mejorar en tu caso.</p>
 			<div class="nvx-brand-actions">
-				<a href="<?php echo esc_url( home_url( '/madrid/valoracion/' ) ); ?>" class="nvx-brand-btn nvx-btn--primary">Valoración gratuita — sin compromiso</a>
+				<a href="<?php echo esc_url( home_url( '/madrid/valoracion/' ) ); ?>" class="nvx-brand-btn nvx-btn--light">Valoración gratuita — sin compromiso</a>
 			</div>
 		</div>
 		<a href="#nvx-home-philosophy-title" class="nvx-home-hero__scroll-cue" aria-label="<?php esc_attr_e( 'Desplazarse al contenido', 'nuvanx-medical' ); ?>">
@@ -227,7 +227,7 @@ ob_start();
 		<h2 id="nvx-home-closure-title" class="nvx-home-closure__title">Primero el diagnóstico médico. Luego, el tratamiento adecuado</h2>
 		<p class="nvx-home-closure__desc">Presupuesto y plan documentado por escrito en la primera visita. Tiempos de recuperación informados según el protocolo.</p>
 		<div class="nvx-home-closure__actions">
-			<a href="<?php echo esc_url( home_url( '/madrid/valoracion/' ) ); ?>" class="nvx-brand-btn nvx-btn--primary nvx-open-valoracion-modal" data-nvx-valoracion-modal="1" aria-haspopup="dialog" data-gtag="click-reserve">Definir mi plan clínico</a>
+			<a href="<?php echo esc_url( home_url( '/madrid/valoracion/' ) ); ?>" class="nvx-brand-btn nvx-btn--light nvx-open-valoracion-modal" data-nvx-valoracion-modal="1" aria-haspopup="dialog" data-gtag="click-reserve">Definir mi plan clínico</a>
 			<a href="<?php echo esc_url( nvx_cta_whatsapp_url() ); ?>" class="nvx-brand-btn nvx-btn--secondary-on-dark" target="_blank" rel="noopener noreferrer" data-gtag="click-whatsapp">Contactar por WhatsApp</a>
 		</div>
 	</section>
