@@ -73,14 +73,6 @@ function nvx_journal_tech_article_current_slug(): string {
 	return isset( nvx_journal_tech_article_map()[ $name ] ) ? $name : '';
 }
 
-function nvx_journal_laserlipo_vs_lipo_catalog(): array {
-	return nvx_journal_tech_article_catalog( NVX_JOURNAL_LASERLIPO_VS_LIPO_SLUG );
-}
-
-function nvx_journal_laserlipo_vs_lipo_is_request(): bool {
-	return NVX_JOURNAL_LASERLIPO_VS_LIPO_SLUG === nvx_journal_tech_article_current_slug();
-}
-
 /**
  * @param array<int,string> $items
  */
@@ -221,10 +213,6 @@ function nvx_journal_tech_article_markup( string $slug ): string {
 	return $html;
 }
 
-function nvx_journal_laserlipo_vs_lipo_markup(): string {
-	return nvx_journal_tech_article_markup( NVX_JOURNAL_LASERLIPO_VS_LIPO_SLUG );
-}
-
 function nvx_journal_tech_article_content( string $content ): string {
 	$slug = nvx_journal_tech_article_current_slug();
 	if ( '' === $slug ) {
@@ -277,15 +265,3 @@ function nvx_journal_tech_article_seed_staging2(): void {
 	}
 }
 add_action( 'init', 'nvx_journal_tech_article_seed_staging2', 32 );
-
-function nvx_journal_laserlipo_vs_lipo_content( string $content ): string {
-	return nvx_journal_tech_article_content( $content );
-}
-
-function nvx_journal_laserlipo_vs_lipo_title( $title, $post_id = 0 ) {
-	return nvx_journal_tech_article_title( $title, $post_id );
-}
-
-function nvx_journal_laserlipo_vs_lipo_seed_staging2(): void {
-	nvx_journal_tech_article_seed_staging2();
-}
