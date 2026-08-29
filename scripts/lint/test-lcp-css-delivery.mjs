@@ -18,6 +18,18 @@ const components = fs.readFileSync(
   'wp-content/themes/nuvanx-medical/assets/css/nvx-components.css',
   'utf8',
 );
+const homeCss = fs.readFileSync(
+  'wp-content/themes/nuvanx-medical/assets/css/nvx-home-v3.css',
+  'utf8',
+);
+const patternsCss = fs.readFileSync(
+  'wp-content/themes/nuvanx-medical/assets/css/nvx-patterns-editorial.css',
+  'utf8',
+);
+const headerCss = fs.readFileSync(
+  'wp-content/themes/nuvanx-medical/assets/css/nvx-header.css',
+  'utf8',
+);
 
 assert.match(
   functionsPhp,
@@ -48,6 +60,11 @@ assert.match(
   governance,
   /assets\/css\/nvx-patterns-editorial\.css/,
   'interior hero CSS must be reserved before deferred assets',
+);
+assert.match(
+  governance,
+  /assets\/css\/nvx-header\.css/,
+  'header geometry CSS must be part of the inline bundle',
 );
 assert.match(
   governance,
@@ -192,29 +209,24 @@ assert.match(
   'sanitary registration must use copyright-scale type',
 );
 assert.match(
-  governance,
-  /home-hero geometry reservation/,
-  'front-page critical CSS must reserve home hero geometry',
+  homeCss,
+  /\.nvx-home-hero\s*\{[\s\S]*?height:\s*var\(--nvx-home-hero-h\);[\s\S]*?min-height:\s*var\(--nvx-home-hero-h\);[\s\S]*?display:\s*flex;[\s\S]*?align-items:\s*flex-end;[\s\S]*?overflow:\s*hidden;/,
+  'front-page canonical CSS must reserve home hero geometry',
 );
 assert.match(
-  governance,
-  /interior-hero first paint/,
-  'interior brand heroes must reserve the dark stage in the inline bundle',
+  patternsCss,
+  /\.nvx-brand-hero\s*\{[^}]*background:\s*var\(--nvx-ink\);[^}]*color:\s*var\(--nvx-light\);/,
+  'canonical interior hero CSS must reserve the dark stage in the inline bundle',
 );
 assert.match(
-  governance,
-  /\.nvx-brand-hero \.nvx-brand-microcopy--dark[^{]*\{[^}]*color:var\(--nvx-light\)|\.nvx-brand-hero \.nvx-brand-microcopy,\.nvx-brand-hero \.nvx-brand-microcopy--dark[^{]*color:var\(--nvx-light\)/,
-  'first-paint snippet must lock Signature/bridal microcopy to solid light',
+  patternsCss,
+  /\.nvx-brand-hero__copy,[\s\S]*?padding-block:\s*var\(--nvx-space-8\);/,
+  'canonical interior hero CSS must reserve hero copy padding before first paint',
 );
 assert.match(
-  governance,
-  /\.nvx-brand-hero__copy\{[^}]*padding-block:var\(--nvx-space-8\)/,
-  'interior hero copy padding must be reserved in the inline first-paint snippet',
-);
-assert.match(
-  governance,
-  /\.nvx-header\{min-height:var\(--nvx-header-height-mobile\)/,
-  'header height must be reserved in the inline first-paint snippet',
+  headerCss,
+  /\.nvx-header\s*\{[^}]*min-height:\s*var\(--nvx-header-height-mobile\);/,
+  'canonical header CSS must reserve mobile header height before first paint',
 );
 
 const baseCss = fs.readFileSync(
@@ -230,19 +242,19 @@ const fontsCss = fs.readFileSync(
   'utf8',
 );
 assert.match(
-  baseCss,
-  /\.nvx-brand-hero__copy\s*\{[\s\S]*padding-block:\s*var\(--nvx-space-8\)/,
-  'base CSS must reserve interior hero padding before deferred stylesheets',
+  layoutCss,
+  /\.nvx-brand-page > \.nvx-brand-section,[\s\S]*?padding-block:\s*var\(--nvx-pad-section\);/,
+  'canonical layout CSS must reserve brand-section padding on first paint',
 );
 assert.match(
-  baseCss,
-  /\.nvx-brand-page > \.nvx-brand-section/,
-  'base CSS must reserve brand-section padding on first paint',
+  headerCss,
+  /\.nvx-logo__img,\s*\.custom-logo\s*\{[^}]*height:\s*var\(--nvx-logo-height-mobile\);[^}]*max-width:\s*var\(--nvx-logo-width-mobile\);/,
+  'canonical header CSS must reserve logo geometry on first paint',
 );
-assert.match(
+assert.doesNotMatch(
   baseCss,
-  /\.nvx-logo__img/,
-  'base CSS must reserve logo geometry on first paint',
+  /home-hero geometry reservation|interior-hero first paint/,
+  'base CSS must not recreate retired PHP first-paint snippet ownership',
 );
 assert.doesNotMatch(
   layoutCss,
