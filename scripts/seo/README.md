@@ -21,7 +21,11 @@ Do not add an SEO-specific workflow. If a tool becomes release-critical, wire it
 
 ## Measurement ownership
 
-Scripts in this directory must not create a competing browser/form-conversion owner. Canonical conversion ownership is enforced by repository contracts and live platform configuration; this README intentionally does not mirror account IDs, campaign state or current Primary/Secondary settings.
+Canonical form-conversion ownership is:
+
+`HubSpot successful submit → GA4 generate_lead → downstream Google Ads import`
+
+Direct browser form-to-Ads tags are not the canonical owner. The executable conversion contract and live platform configuration own account IDs, labels and Primary/Secondary state; this README intentionally does not mirror those changing values.
 
 ## Release-critical file
 
