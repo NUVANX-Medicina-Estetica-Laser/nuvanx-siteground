@@ -4,14 +4,11 @@
  *
  * Validates:
  * 1. dist/manifest.json exists and conforms to schema 1.
- * 2. All bundles declared in manifest exist on disk with matching content hashes.
- * 3. All source CSS files are accounted for in the manifest.
- * 4. Compiling matches exact hashes (deterministic build).
- * 5. Each bundle is reconstructible from its declared sources — the
- *    concatenation of normalised source files (with compiler-identical
- *    comment headers and join logic) must produce byte-exact bundle content,
- *    matching hash and size recorded in the manifest.
- * 6. No orphan CSS files exist in dist/ that are not referenced by the manifest.
+ * 2. `core` is the only aggregate bundle; single-source bundles are forbidden.
+ * 3. Every canonical source CSS file is represented exactly once in manifest.files.
+ * 4. All generated files exist with matching content hashes.
+ * 5. Each aggregate bundle is reconstructible byte-for-byte from its sources.
+ * 6. No orphan or historical CSS artifact exists in dist/.
  */
 
 import fs from 'node:fs/promises';
@@ -22,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.join(__dirname, '../..');
 const THEME_DIR = path.join(ROOT_DIR, 'wp-content/themes/nuvanx-medical');
+const CSS_SRC_DIR = path.join(THEME_DIR, 'assets/css');
 const DIST_DIR = path.join(THEME_DIR, 'dist');
 const MANIFEST_PATH = path.join(DIST_DIR, 'manifest.json');
 
@@ -45,13 +43,45 @@ async function testManifestContract() {
   }
 
   const bundles = manifest.bundles;
+  const files = manifest.files;
   if (!bundles || !bundles.core || !bundles.core.file) {
     throw new Error('Manifest missing core bundle');
+  }
+  if (!files || typeof files !== 'object') {
+    throw new Error('Manifest missing files map');
+  }
+
+  const bundleNames = Object.keys(bundles).sort();
+  if (bundleNames.length !== 1 || bundleNames[0] !== 'core') {
+    throw new Error(
+      `Only the multi-source core bundle is allowed; found: ${bundleNames.join(', ') || '(none)'}`
+    );
+  }
+
+  const sourceCssFiles = (await fs.readdir(CSS_SRC_DIR))
+    .filter((file) => file.endsWith('.css'))
+    .map((file) => `assets/css/${file}`)
+    .sort();
+  const manifestSourceFiles = Object.keys(files).sort();
+
+  if (JSON.stringify(sourceCssFiles) !== JSON.stringify(manifestSourceFiles)) {
+    const missing = sourceCssFiles.filter((file) => !manifestSourceFiles.includes(file));
+    const stale = manifestSourceFiles.filter((file) => !sourceCssFiles.includes(file));
+    throw new Error(
+      `Manifest/source CSS mismatch: missing=[${missing.join(', ')}] stale=[${stale.join(', ')}]`
+    );
   }
 
   const referencedFiles = new Set();
 
   for (const [name, info] of Object.entries(bundles)) {
+    if (!Array.isArray(info.sources) || info.sources.length < 2) {
+      throw new Error(`Bundle ${name} must aggregate at least two source files`);
+    }
+
+    if (referencedFiles.has(info.file)) {
+      throw new Error(`Generated CSS artifact referenced more than once: ${info.file}`);
+    }
     referencedFiles.add(info.file);
 
     const bundleFilePath = path.join(DIST_DIR, info.file);
@@ -64,10 +94,6 @@ async function testManifestContract() {
 
     if (!info.file.includes(info.hash)) {
       throw new Error(`Bundle ${name} filename ${info.file} does not contain hash ${info.hash}`);
-    }
-
-    if (!Array.isArray(info.sources) || info.sources.length === 0) {
-      throw new Error(`Bundle ${name} missing sources array`);
     }
 
     const parts = [];
@@ -98,12 +124,15 @@ async function testManifestContract() {
     if (reconstructed !== distContent) {
       throw new Error(
         `Bundle ${name} source reconstruction content mismatch: ` +
-        `dist file does not equal concatenation of declared sources`
+        'dist file does not equal concatenation of declared sources'
       );
     }
   }
 
-  for (const [relPath, info] of Object.entries(manifest.files)) {
+  for (const [relPath, info] of Object.entries(files)) {
+    if (referencedFiles.has(info.file)) {
+      throw new Error(`Generated CSS artifact referenced more than once: ${info.file}`);
+    }
     referencedFiles.add(info.file);
 
     const distFilePath = path.join(DIST_DIR, info.file);
@@ -123,20 +152,21 @@ async function testManifestContract() {
     }
   }
 
-  const distFiles = (await fs.readdir(DIST_DIR))
-    .filter((f) => f.endsWith('.css'));
+  const distFiles = (await fs.readdir(DIST_DIR)).filter((file) => file.endsWith('.css')).sort();
+  const expectedDistFiles = [...referencedFiles].sort();
+  const orphans = distFiles.filter((file) => !referencedFiles.has(file));
+  const missingDist = expectedDistFiles.filter((file) => !distFiles.includes(file));
 
-  const orphans = distFiles.filter((f) => !referencedFiles.has(f));
-  if (orphans.length > 0) {
+  if (orphans.length > 0 || missingDist.length > 0) {
     throw new Error(
-      `Orphan dist CSS files not referenced by manifest: ${orphans.join(', ')}`
+      `Generated CSS set mismatch: orphan=[${orphans.join(', ')}] missing=[${missingDist.join(', ')}]`
     );
   }
 
   console.log(
-    `CSS_MANIFEST_CONTRACT=PASS bundles=${Object.keys(bundles).length} ` +
-    `files=${Object.keys(manifest.files).length} ` +
-    `bundle_reconstruction=verified hash_integrity=verified orphan_check=clean`
+    `CSS_MANIFEST_CONTRACT=PASS bundles=${bundleNames.length} ` +
+    `files=${manifestSourceFiles.length} bundle_reconstruction=verified ` +
+    'hash_integrity=verified duplicate_check=clean orphan_check=clean source_coverage=complete'
   );
 }
 
