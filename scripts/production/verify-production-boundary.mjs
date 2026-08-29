@@ -250,31 +250,69 @@ validate_signature_frame() {
   local body="$1" route="$2"
   php -r '
     $html = @file_get_contents($argv[1]);
-    if (!is_string($html) || $html === "") { exit(1); }
-    $clean = preg_replace("~<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>~is", "", $html);
+    if (!is_string($html) || trim($html) === "") { exit(1); }
+    $clean = preg_replace("/<!--.*?-->/s", "", $html);
+    $clean = preg_replace("~<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>~is", "", $clean);
     if (!is_string($clean)) { exit(1); }
-    $standalone = false;
-    if (preg_match_all("~<(?:div|article)\b[^>]*\bclass=[\"\x27]([^\"\x27]*)[\"\x27]~i", $clean, $m)) {
-      foreach ($m[1] as $classes) {
-        $tokens = preg_split("/\s+/", trim($classes));
-        if (in_array("nvx-brand-page", $tokens, true) && in_array("nvx-brand-page--signature", $tokens, true)) {
-          $standalone = true;
-          break;
-        }
-      }
+
+    $voidElements = array_flip(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
+    $stack = [];
+
+    if (!preg_match_all("~<\s*(/)?\s*([a-zA-Z0-9:-]+)([^>]*?)(\/?)>~s", $clean, $matches, PREG_SET_ORDER)) {
+      exit(1);
     }
+
+    $standalone = false;
     $governed = false;
-    if (preg_match("~<(?:div|article)\b[^>]*\bclass=[\"\x27][^\"\x27]*\bnvx-brand-page\b[^\"\x27]*[\"\x27][^>]*>([\s\S]*)<\/(?:div|article)>~i", $clean, $outer)) {
-      if (preg_match_all("~<(?:div|article)\b[^>]*\bclass=[\"\x27]([^\"\x27]*)[\"\x27]~i", $outer[1], $inner_tags)) {
-        foreach ($inner_tags[1] as $classes) {
-          $tokens = preg_split("/\s+/", trim($classes));
-          if (in_array("nvx-brand-page--signature", $tokens, true) && in_array("nvx-brand-page__renderer-root", $tokens, true)) {
-            $governed = true;
+
+    foreach ($matches as $m) {
+      $isClosing = $m[1] === "/";
+      $tag = strtolower($m[2]);
+      $attrStr = $m[3];
+      $isSelfClosing = ($m[4] === "/") || isset($voidElements[$tag]);
+
+      if ($isClosing) {
+        for ($i = count($stack) - 1; $i >= 0; $i--) {
+          if ($stack[$i]["tag"] === $tag) {
+            array_splice($stack, $i);
             break;
           }
         }
+        continue;
+      }
+
+      $classes = [];
+      if (preg_match("/\bclass=[\"\x27]([^\"\x27]*)[\"\x27]/i", $attrStr, $cm)) {
+        $tokens = preg_split("/\s+/", trim($cm[1]));
+        $classes = array_values(array_filter($tokens));
+      }
+
+      if ($tag === "div" || $tag === "article") {
+        $hasBrandPage = in_array("nvx-brand-page", $classes, true);
+        $hasSignature = in_array("nvx-brand-page--signature", $classes, true);
+        $hasRendererRoot = in_array("nvx-brand-page__renderer-root", $classes, true);
+
+        $hasBrandPageAncestor = false;
+        foreach ($stack as $parent) {
+          if (in_array("nvx-brand-page", $parent["classes"], true)) {
+            $hasBrandPageAncestor = true;
+            break;
+          }
+        }
+
+        if ($hasBrandPage && $hasSignature && !$hasBrandPageAncestor) {
+          $standalone = true;
+        }
+        if (!$hasBrandPage && $hasSignature && $hasRendererRoot && $hasBrandPageAncestor) {
+          $governed = true;
+        }
+      }
+
+      if (!$isSelfClosing) {
+        $stack[] = ["tag" => $tag, "classes" => $classes];
       }
     }
+
     exit(($standalone || $governed) ? 0 : 1);
   ' -- "$body" || {
     echo "PRODUCTION_PROBE_FAIL route=$route reason=invalid_signature_frame mode=$probe_mode" >&2

@@ -5,11 +5,13 @@ const validStandalone = [
   '<article class="nvx-brand-page nvx-brand-page--signature"><div class="entry-content nvx-page__content"><section class="nvx-brand-hero"></section></div></article>',
   '<div class="nvx-brand-hero-wrapper nvx-brand-page nvx-brand-page--signature extra-class"><main></main></div>',
   '<article class="nvx-brand-page--signature nvx-brand-page"><div class="entry-content"></div></article>',
+  '<div class="other-wrapper"><article class="nvx-brand-page nvx-brand-page--signature"><div class="entry-content"></div></article></div>',
 ];
 
 const validGoverned = [
   '<div class="nvx-brand-page" id="nvx-site-root"><main><article class="nvx-brand-page--signature nvx-brand-page__renderer-root"><div class="entry-content"></div></article></main></div>',
   '<div class="site-frame nvx-brand-page"><article class="nvx-brand-page__renderer-root nvx-brand-page--signature"><section></section></article></div>',
+  '<article class="nvx-brand-page"><div class="nvx-brand-page--signature nvx-brand-page__renderer-root"></div></article>',
 ];
 
 const invalid = [
@@ -23,6 +25,20 @@ const invalid = [
   '<span class="nvx-brand-page nvx-brand-page--signature">Text</span>',
   // Empty
   '',
+  // Redundant nested duplicate frames (outer global + inner standalone unstripped)
+  '<div class="nvx-brand-page"><article class="nvx-brand-page nvx-brand-page--signature"><div class="entry-content"></div></article></div>',
+  '<article class="nvx-brand-page"><div class="nvx-brand-page nvx-brand-page--signature"></div></article>',
+  // Sibling outer and inner elements (not an ancestor)
+  '<div class="nvx-brand-page"></div><article class="nvx-brand-page--signature nvx-brand-page__renderer-root"><div class="entry-content"></div></article>',
+  // Modifier-only outer class (token exactness)
+  '<div class="nvx-brand-page--hero-frame"><article class="nvx-brand-page--signature nvx-brand-page__renderer-root"><div class="entry-content"></div></article></div>',
+  // Matching markup inside HTML comment
+  '<!-- <article class="nvx-brand-page nvx-brand-page--signature"><div class="entry-content"></div></article> -->',
+  // Inner renderer root with redundant nvx-brand-page in governed frame
+  '<div class="nvx-brand-page"><article class="nvx-brand-page nvx-brand-page--signature nvx-brand-page__renderer-root"><div class="entry-content"></div></article></div>',
+  // Matching class inside script or style block
+  '<script>const html = \'<article class="nvx-brand-page nvx-brand-page--signature"></article>\';</script>',
+  '<style>.nvx-brand-page.nvx-brand-page--signature { display: block; }</style>',
 ];
 
 for (const [index, html] of validStandalone.entries()) {
