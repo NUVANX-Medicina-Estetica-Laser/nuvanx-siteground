@@ -158,6 +158,7 @@
   --nvx-radius-image: 0;
   --nvx-radius-legal-card-mobile: 16px;
   --nvx-footer-link-gap: 12px;
+  --nvx-footer-column-gap: var(--nvx-space-5);
 
   /* Home video stage: keep the upper frame open; scrim only under the bottom copy. */
   --nvx-home-hero-overlay: linear-gradient(
