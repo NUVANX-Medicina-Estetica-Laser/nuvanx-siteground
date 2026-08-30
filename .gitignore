@@ -90,7 +90,16 @@ scratch/
 /.nvx-deploy-sha
 /wp-content/themes/nuvanx-medical/.nvx-deploy-sha
 
+# CI/CD artifacts — never commit, use GitHub Actions Artifacts
+scripts/production/artifacts/
+scripts/staging2/artifacts/
+scripts/seo/artifacts/
+
+# SEO credentials y raw data
+scripts/seo/credentials.json
 scripts/seo/raw-ads-audit-data.json
 scripts/seo/run-e2e-qa-test.js
-scripts/seo/artifacts/
-scripts/staging2/artifacts/
+
+# Worktree residue (git worktree add crea estos en el runner)
+.git/worktrees/
+.vscode/
