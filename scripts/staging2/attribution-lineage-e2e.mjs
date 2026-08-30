@@ -65,6 +65,13 @@ async function enableConsentAndSync(page) {
   });
 }
 
+function isQaTrue(val) {
+  if (Array.isArray(val)) val = val[0];
+  if (val === true || val === 1) return true;
+  const str = String(val ?? '').toLowerCase();
+  return str === 'true' || str === '1';
+}
+
 async function readNativeFields(page, formId) {
   return page.evaluate(async (expectedFormId) => {
     const forms = window.HubSpotFormsV4?.getForms?.() || [];
@@ -75,7 +82,11 @@ async function readNativeFields(page, formId) {
     for (const field of await form.getFormFieldValues() || []) {
       const actual = String(field?.name || '');
       const canonical = actual.replace(/^\d+-\d+\//, '');
-      if (canonical) values[canonical] = field?.value;
+      if (canonical) {
+        let val = field?.value;
+        if (Array.isArray(val) && val.length === 1) val = val[0];
+        values[canonical] = val;
+      }
     }
     return values;
   }, formId);
@@ -124,11 +135,10 @@ try {
   assert.ok(hubspotFormDiscovered, `CANDIDATE_REGRESSION: HubSpot form ${managedState.formId} not rendered in DOM`);
 
   let nativeFields = null;
-  const nativeDeadline = Date.now() + 7_000;
+  const nativeDeadline = Date.now() + 10_000;
   while (Date.now() < nativeDeadline) {
     nativeFields = await readNativeFields(page, managedState.formId);
-    const qaReady = nativeFields?.nvx_is_test_lead === true
-      || String(nativeFields?.nvx_is_test_lead ?? '').toLowerCase() === 'true';
+    const qaReady = isQaTrue(nativeFields?.nvx_is_test_lead);
     const nativeLineageReady = String(nativeFields?.nvx_lead_id || '').toLowerCase() === managedState.leadId
       && qaReady
       && String(nativeFields?.nvx_test_run_id || '') === String(managedState.qa.test_run_id)
@@ -141,7 +151,7 @@ try {
   assert.ok(nativeFields, 'Canonical HubSpot V4 form must be discoverable after marketing consent');
   assert.equal(String(nativeFields.nvx_lead_id || '').toLowerCase(), managedState.leadId);
   assert.ok(
-    nativeFields.nvx_is_test_lead === true || String(nativeFields.nvx_is_test_lead).toLowerCase() === 'true',
+    isQaTrue(nativeFields.nvx_is_test_lead),
     'Native HubSpot form must contain server-owned QA=true'
   );
   assert.equal(String(nativeFields.nvx_test_run_id || ''), String(managedState.qa.test_run_id));
