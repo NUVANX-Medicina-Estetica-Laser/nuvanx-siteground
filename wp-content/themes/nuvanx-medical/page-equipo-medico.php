@@ -146,7 +146,7 @@ get_header();
 	  <div class="doc" itemscope itemtype="https://schema.org/Person">
 	    <div class="doc-hero doc-hero--with-portrait">
 	      <div class="doc-portrait">
-	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/dra-ivon-yamileth-rivera-deras.webp' ); ?>" alt="<?php esc_attr_e( 'Dra. Ivon Yamileth Rivera Deras — Well-Aging y Geriatría Preventiva NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
+	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/nvx-dra-paola-rivera-deras.webp' ); ?>" alt="<?php esc_attr_e( 'Dra. Ivon Yamileth Rivera Deras — Well-Aging y Geriatría Preventiva NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
 	      </div>
 	      <div class="doc-hero__info">
 	        <div class="doc-name" itemprop="name">Dra. Ivon Yamileth Rivera Deras</div>
