@@ -15,6 +15,7 @@ if (fs.existsSync(integrationPath)) {
   await import('./test-attribution-integration-wiring.mjs');
 }
 await import('./test-hubspot-v4-hidden-lineage.mjs');
+await import('./test-hubspot-v4-runtime-contract.mjs');
 await import('./test-lead-captured-server-relay.mjs');
 await import('./test-google-attribution-relay-auth.mjs');
 await import('./test-supabase-relay-queue.mjs');
