@@ -136,7 +136,7 @@ get_header();
 					<p class="nvx-brand-body"><?php esc_html_e( 'Una evolución clínica documentada ilustra una respuesta tisular concreta ante una indicación precisa. La idoneidad de cada procedimiento y el plan de tratamiento se determinan tras la exploración anatómica y ecográfica en consulta.', 'nuvanx-medical' ); ?></p>
 				</div>
 				<div>
-					<p class="nvx-brand-body"><?php esc_html_e( 'Disponemos de consulta presencial de valoración médica en nuestras clínicas de Chamberí (C/ Manuel Silvela 8) y Salamanca–Goya (C/ Castelló 30), Madrid.', 'nuvanx-medical' ); ?></p>
+					<p class="nvx-brand-body"><?php esc_html_e( 'Disponemos de consulta presencial de valoración médica en nuestras clínicas de Chamberí (Calle de Fernández de la Hoz, 4) y Salamanca–Goya (Calle de Fernán González, 26), Madrid.', 'nuvanx-medical' ); ?></p>
 				</div>
 			</div>
 		</div>
