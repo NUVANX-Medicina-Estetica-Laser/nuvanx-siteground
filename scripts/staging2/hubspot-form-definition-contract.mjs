@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { EX_TEMPFAIL } from './siteground-transient-classifier.mjs';
 
 export const REQUIRED_NATIVE_LINEAGE_FIELDS = Object.freeze([
   'nvx_lead_id',
@@ -9,72 +8,34 @@ export const REQUIRED_NATIVE_LINEAGE_FIELDS = Object.freeze([
   'nvx_google_click_id',
 ]);
 
-const HUBSPOT_FORM_V2_BASE = 'https://api.hubapi.com/forms/v2/forms';
-
-function transientError(message) {
-  const error = new Error(message);
-  error.exitCode = EX_TEMPFAIL;
-  return error;
-}
-
 function canonicalFieldName(name) {
   return String(name || '').trim().replace(/^\d+-\d+\//, '');
 }
 
-export async function fetchHubSpotFormDefinition(formId, options = {}) {
-  const normalizedFormId = String(formId || '').trim().toLowerCase();
-  assert.match(
-    normalizedFormId,
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    'Canonical HubSpot form id must be a UUID before form-definition verification'
-  );
-
-  const timeoutMs = Number(options.timeoutMs || 12_000);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const url = `${HUBSPOT_FORM_V2_BASE}/${encodeURIComponent(normalizedFormId)}`;
-
-  let response;
-  try {
-    response = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      redirect: 'error',
-      signal: controller.signal,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw transientError(`HubSpot form-definition transport unavailable: ${message}`);
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  if (response.status === 429 || response.status >= 500) {
-    throw transientError(`HubSpot form-definition endpoint transient status=${response.status}`);
-  }
-  if (!response.ok) {
-    throw new Error(`CANDIDATE_REGRESSION: HubSpot form-definition endpoint status=${response.status}`);
-  }
-
-  let payload;
-  try {
-    payload = await response.json();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`CANDIDATE_REGRESSION: HubSpot form-definition response is not valid JSON: ${message}`);
-  }
-
+function resolveFormDefinition(payload) {
+  if (!payload || typeof payload !== 'object') return {};
+  if (payload.form && typeof payload.form === 'object') return payload.form;
+  if (payload.formDefinition && typeof payload.formDefinition === 'object') return payload.formDefinition;
   return payload;
 }
 
 export function inspectHubSpotFormDefinition(payload, expectedFormId) {
   const expected = String(expectedFormId || '').trim().toLowerCase();
-  const actual = String(payload?.guid || payload?.id || '').trim().toLowerCase();
-  const groups = Array.isArray(payload?.formFieldGroups)
-    ? payload.formFieldGroups
-    : (Array.isArray(payload?.fieldGroups) ? payload.fieldGroups : []);
+  const definition = resolveFormDefinition(payload);
+  const actual = String(
+    definition?.guid || definition?.id || definition?.formId || payload?.formId || ''
+  ).trim().toLowerCase();
 
-  const fields = groups.flatMap((group) => Array.isArray(group?.fields) ? group.fields : []);
+  const groups = [
+    definition?.formFieldGroups,
+    definition?.fieldGroups,
+    payload?.formFieldGroups,
+    payload?.fieldGroups,
+  ].find((candidate) => Array.isArray(candidate)) || [];
+
+  let fields = groups.flatMap((group) => Array.isArray(group?.fields) ? group.fields : []);
+  if (fields.length === 0 && Array.isArray(definition?.fields)) fields = definition.fields;
+
   const index = new Map();
   for (const field of fields) {
     const canonical = canonicalFieldName(field?.name);
@@ -88,13 +49,17 @@ export function inspectHubSpotFormDefinition(payload, expectedFormId) {
     return field && field.hidden !== true;
   });
 
+  const publishedValue = definition?.isPublished ?? payload?.isPublished;
+  const updatedAt = definition?.updatedAt ?? definition?.internalUpdatedAt ?? payload?.updatedAt ?? null;
+
   return {
-    schema: 1,
+    schema: 2,
+    source: payload?.form && typeof payload.form === 'object' ? 'hubspot_embed_v3' : 'hubspot_form_definition',
     expected_form_id: expected,
     actual_form_id: actual,
-    form_name: String(payload?.name || ''),
-    published: payload?.isPublished === undefined ? null : payload.isPublished === true,
-    updated_at: payload?.updatedAt ?? null,
+    form_name: String(definition?.name || ''),
+    published: publishedValue === undefined ? null : publishedValue === true,
+    updated_at: updatedAt,
     required_fields: [...REQUIRED_NATIVE_LINEAGE_FIELDS],
     available_field_names: [...index.keys()].sort(),
     missing_fields: missing,
