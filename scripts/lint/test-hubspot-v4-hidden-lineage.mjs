@@ -10,15 +10,11 @@ assert.ok(api, 'HubSpot attribution sync API must already be exposed by integrat
 const calls = [];
 const values = new Map([
   ['0-1/nvx_lead_id', []],
-  ['0-1/nvx_is_test_lead', false],
+  ['0-1/nvx_is_test_lead', []],
   ['0-1/nvx_test_run_id', []],
   ['0-1/nvx_utm_source', []],
   ['0-1/nvx_google_click_id', []],
 ]);
-
-function isBooleanField(name) {
-  return name === '0-1/nvx_is_test_lead';
-}
 
 const form = {
   getFormId: () => FORM_ID,
@@ -26,13 +22,9 @@ const form = {
   getFieldValue: async (name) => values.get(name),
   setFieldValue: async (name, value) => {
     calls.push({ name, value });
-    if (isBooleanField(name)) {
-      if (typeof value !== 'boolean') throw new TypeError('single checkbox requires boolean');
-      values.set(name, value);
-      return;
-    }
-    // Reproduce the updated HubSpot Forms V4 Hidden-field contract: hidden
-    // fields reject scalar strings and accept string arrays.
+    // Reproduce HubSpot Forms V4 Hidden-field contract: every lineage field in
+    // the canonical form, including the QA marker backed by a checkbox CRM
+    // property, is configured as Hidden and therefore accepts string[].
     if (!Array.isArray(value)) throw new TypeError('hidden field requires string[]');
     values.set(name, value);
   },
@@ -57,7 +49,7 @@ globalThis.window.HubSpotFormsV4 = {
 assert.equal(await api.syncForm(form), true, 'V4 hidden fields must synchronize with the documented string[] type');
 
 assert.deepEqual(values.get('0-1/nvx_lead_id'), [LEAD_ID]);
-assert.equal(values.get('0-1/nvx_is_test_lead'), true);
+assert.deepEqual(values.get('0-1/nvx_is_test_lead'), ['true']);
 assert.deepEqual(values.get('0-1/nvx_test_run_id'), [TEST_RUN_ID]);
 assert.deepEqual(values.get('0-1/nvx_utm_source'), ['google']);
 assert.deepEqual(values.get('0-1/nvx_google_click_id'), ['GCLID-HIDDEN-V4']);
@@ -67,7 +59,7 @@ assert.equal(leadWrites.length, 1, 'Hidden lead id must be written once with Hub
 assert.deepEqual(leadWrites[0].value, [LEAD_ID]);
 
 const qaWrites = calls.filter((call) => call.name === '0-1/nvx_is_test_lead');
-assert.equal(qaWrites.length, 1, 'Single checkbox must remain native boolean and must not use hidden fallback');
-assert.equal(qaWrites[0].value, true);
+assert.equal(qaWrites.length, 1, 'Hidden QA checkbox property must use HubSpot Hidden-field string[] representation');
+assert.deepEqual(qaWrites[0].value, ['true']);
 
-console.log('HUBSPOT_V4_HIDDEN_LINEAGE=PASS hidden_array_direct=1 readback_verified=1 qa_boolean=1');
+console.log('HUBSPOT_V4_HIDDEN_LINEAGE=PASS hidden_array_direct=1 readback_verified=1 qa_hidden_string_array=1');
