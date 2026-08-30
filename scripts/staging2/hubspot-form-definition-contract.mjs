@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EX_TEMPFAIL } from './siteground-transient-classifier.mjs';
 
 export const REQUIRED_NATIVE_LINEAGE_FIELDS = Object.freeze([
   'nvx_lead_id',
@@ -17,6 +18,108 @@ function resolveFormDefinition(payload) {
   if (payload.form && typeof payload.form === 'object') return payload.form;
   if (payload.formDefinition && typeof payload.formDefinition === 'object') return payload.formDefinition;
   return payload;
+}
+
+export function isHubSpotEmbedDefinitionUrl(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const trustedHost = host === 'forms.hsforms.com' || host.endsWith('.hsforms.com');
+    return trustedHost && /\/embed\/v3\/form\/[^/]+\/[^/]+\/json$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+export function embedResponseMatchesForm(entry, formId) {
+  try {
+    const pathname = new URL(entry?.url || '').pathname.toLowerCase();
+    return pathname.endsWith(`/${String(formId || '').toLowerCase()}/json`);
+  } catch {
+    return false;
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function waitForHubSpotEmbedDefinition(entries, formId, timeoutMs = 15_000, pollIntervalMs = 50) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (true) {
+    const matching = entries.filter((candidate) => embedResponseMatchesForm(candidate, formId));
+
+    const successfulEntry = matching.find((candidate) => {
+      try {
+        const status = typeof candidate.response?.status === 'function'
+          ? candidate.response.status()
+          : candidate.response?.status;
+        return status === 200;
+      } catch {
+        return false;
+      }
+    });
+
+    if (successfulEntry) {
+      let payload;
+      try {
+        payload = typeof successfulEntry.response.json === 'function'
+          ? await successfulEntry.response.json()
+          : successfulEntry.response.json;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`CANDIDATE_REGRESSION: HubSpot embed definition is not valid JSON: ${message}`);
+      }
+
+      const parsedUrl = new URL(successfulEntry.url);
+      return {
+        payload,
+        source: `${parsedUrl.origin}${parsedUrl.pathname}`,
+      };
+    }
+
+    if (Date.now() >= deadline) {
+      if (matching.length === 0) {
+        const error = new Error(
+          `HubSpot embed definition response for form ${formId} was not captured before timeout`
+        );
+        error.exitCode = EX_TEMPFAIL;
+        throw error;
+      }
+
+      const lastEntry = matching[matching.length - 1];
+      const status = typeof lastEntry.response?.status === 'function'
+        ? lastEntry.response.status()
+        : lastEntry.response?.status;
+
+      if (status === 429 || status >= 500) {
+        const error = new Error(`HubSpot embed definition temporarily unavailable status=${status}`);
+        error.exitCode = EX_TEMPFAIL;
+        throw error;
+      }
+
+      assert.equal(status, 200, `CANDIDATE_REGRESSION: HubSpot embed definition status=${status}`);
+
+      let payload;
+      try {
+        payload = typeof lastEntry.response.json === 'function'
+          ? await lastEntry.response.json()
+          : lastEntry.response.json;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`CANDIDATE_REGRESSION: HubSpot embed definition is not valid JSON: ${message}`);
+      }
+
+      const parsedUrl = new URL(lastEntry.url);
+      return {
+        payload,
+        source: `${parsedUrl.origin}${parsedUrl.pathname}`,
+      };
+    }
+
+    await delay(pollIntervalMs);
+  }
 }
 
 export function inspectHubSpotFormDefinition(payload, expectedFormId) {

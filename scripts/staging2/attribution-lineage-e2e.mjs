@@ -5,6 +5,8 @@ import { chromium } from 'playwright';
 import {
   assertHubSpotFormDefinitionContract,
   inspectHubSpotFormDefinition,
+  isHubSpotEmbedDefinitionUrl,
+  waitForHubSpotEmbedDefinition,
 } from './hubspot-form-definition-contract.mjs';
 import { EX_TEMPFAIL, getGitHubEventPath, EXECUTION_PATHS } from './siteground-transient-classifier.mjs';
 
@@ -41,71 +43,6 @@ function isTransient(error) {
   const message = error instanceof Error ? error.message : String(error);
   if (/CANDIDATE_REGRESSION|AssertionError/i.test(message)) return false;
   return /ERR_(?:CONNECTION|NAME|TIMED_OUT)|navigation.*timeout|net::|429|502|503|504|temporar/i.test(message);
-}
-
-function isHubSpotEmbedDefinitionUrl(value) {
-  try {
-    const url = new URL(value);
-    const host = url.hostname.toLowerCase();
-    const trustedHost = host === 'forms.hsforms.com' || host.endsWith('.hsforms.com');
-    return trustedHost && /\/embed\/v3\/form\/[^/]+\/[^/]+\/json$/i.test(url.pathname);
-  } catch {
-    return false;
-  }
-}
-
-function embedResponseMatchesForm(entry, formId) {
-  try {
-    const pathname = new URL(entry.url).pathname.toLowerCase();
-    return pathname.endsWith(`/${String(formId || '').toLowerCase()}/json`);
-  } catch {
-    return false;
-  }
-}
-
-async function waitForHubSpotEmbedDefinition(entries, formId, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs;
-  let entry = null;
-  let lastMatchingEntry = null;
-
-  while (Date.now() < deadline) {
-    const matches = entries.filter((candidate) => embedResponseMatchesForm(candidate, formId));
-    if (matches.length > 0) {
-      lastMatchingEntry = matches.at(-1) || lastMatchingEntry;
-      entry = [...matches].reverse().find((candidate) => candidate.response.status() === 200) || null;
-      if (entry) break;
-    }
-    await delay(100);
-  }
-
-  if (!entry && !lastMatchingEntry) {
-    const error = new Error(
-      `HubSpot embed definition response for form ${formId} was not captured before timeout`
-    );
-    error.exitCode = EX_TEMPFAIL;
-    throw error;
-  }
-
-  entry = entry || lastMatchingEntry;
-  const status = entry.response.status();
-  if (status === 429 || status >= 500) {
-    throw new Error(`HubSpot embed definition temporarily unavailable status=${status}`);
-  }
-  assert.equal(status, 200, `CANDIDATE_REGRESSION: HubSpot embed definition status=${status}`);
-
-  let payload;
-  try {
-    payload = await entry.response.json();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`CANDIDATE_REGRESSION: HubSpot embed definition is not valid JSON: ${message}`);
-  }
-
-  const parsedUrl = new URL(entry.url);
-  return {
-    payload,
-    source: `${parsedUrl.origin}${parsedUrl.pathname}`,
-  };
 }
 
 async function assertHealthyNavigation(page, target) {
