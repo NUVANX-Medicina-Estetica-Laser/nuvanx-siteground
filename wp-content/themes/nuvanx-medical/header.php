@@ -50,9 +50,25 @@ wp_head();
 		$logo_url       = $logo_id > 0 ? wp_get_attachment_url( $logo_id ) : '';
 		$logo_available = is_string( $logo_file ) && '' !== $logo_file && is_readable( $logo_file ) && is_string( $logo_url ) && '' !== $logo_url;
 		if ( $logo_available ) :
-			?>
+			$logo_img = wp_get_attachment_image(
+				$logo_id,
+				'medium',
+				false,
+				array(
+					'class'    => 'nvx-logo__img',
+					'alt'      => '',
+					'decoding' => 'async',
+					'sizes'    => '(max-width: 768px) 152px, 160px',
+				)
+			);
+			if ( ! empty( $logo_img ) ) :
+				echo $logo_img; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_get_attachment_image escapes attributes.
+			else :
+				?>
 		<img src="<?php echo esc_url( $logo_url ); ?>" class="nvx-logo__img" alt="" width="160" height="154" decoding="async">
-		<?php else : ?>
+				<?php
+			endif;
+		else : ?>
 		<span class="nvx-logo__wordmark" aria-hidden="true">NUVANX</span>
 		<span class="nvx-logo__tagline" aria-hidden="true">MEDICINA ESTÉTICA LÁSER</span>
 		<?php endif; ?>

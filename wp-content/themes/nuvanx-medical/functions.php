@@ -33,7 +33,15 @@ require_once __DIR__ . '/inc/nvx-config-helpers.php';
 function nvx_theme_setup(): void {
 	add_theme_support( 'title-tag' );
 	add_theme_support( 'post-thumbnails' );
-	add_theme_support( 'custom-logo' );
+	add_theme_support(
+		'custom-logo',
+		array(
+			'height'      => 154,
+			'width'       => 160,
+			'flex-height' => true,
+			'flex-width'  => true,
+		)
+	);
 	add_theme_support(
 		'html5',
 		array( 'search-form', 'comment-form', 'comment-list', 'gallery', 'caption', 'style', 'script' )
