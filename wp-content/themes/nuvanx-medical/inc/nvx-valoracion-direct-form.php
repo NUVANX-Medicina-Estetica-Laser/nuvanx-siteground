@@ -206,7 +206,7 @@ function nvx_valoracion_has_marketing_consent(): bool {
  */
 function nvx_valoracion_log_outcome( string $outcome, string $reason = '', int $status = 0, array $qa_context = array() ): void {
 	$allowed_outcomes = array( 'FAILURE', 'SUCCESS' );
-	$allowed_reasons  = array( 'nonce', 'rate_limit', 'validation', 'hubspot_transport', 'hubspot_http' );
+	$allowed_reasons  = array( 'nonce', 'rate_limit', 'validation', 'hubspot_config', 'hubspot_transport', 'hubspot_http' );
 	$outcome          = strtoupper( $outcome );
 	if ( ! in_array( $outcome, $allowed_outcomes, true ) ) {
 		return;
@@ -301,9 +301,12 @@ function nvx_valoracion_emit_direct_success(): void {
 	}
 	$GLOBALS['nvx_valoracion_direct_success_ready'] = false;
 
-	$form_id = function_exists( 'nvx_hubspot_secure_form_id' )
-		? nvx_hubspot_secure_form_id()
-		: ( defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) NVX_VALORACION_HS_FRAME_FORM_ID : '5042522a-0bc5-4381-ac3e-5aee8649b69c' );
+	$form_id = function_exists( 'nvx_hubspot_secure_form_id' ) ? nvx_hubspot_secure_form_id() : '';
+	if ( '' === $form_id ) {
+		error_log( 'NVX_VALORACION_CONVERSION_SUPPRESSED reason=hubspot_identity_not_configured' );
+		return;
+	}
+
 	$event = array(
 		'event'             => 'nvx_conversion_signal',
 		'nvx_event_name'    => 'generate_lead',
@@ -464,12 +467,8 @@ function nvx_valoracion_maybe_handle_direct_submit(): void {
 	}
 
 	// QA context for logging (no personal data)
-	$portal = function_exists( 'nvx_hubspot_secure_portal_id' )
-		? nvx_hubspot_secure_portal_id()
-		: ( defined( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ? (string) NVX_VALORACION_HS_FRAME_PORTAL_ID : '147416356' );
-	$form = function_exists( 'nvx_hubspot_secure_form_id' )
-		? nvx_hubspot_secure_form_id()
-		: ( defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) NVX_VALORACION_HS_FRAME_FORM_ID : '5042522a-0bc5-4381-ac3e-5aee8649b69c' );
+	$portal = function_exists( 'nvx_hubspot_secure_portal_id' ) ? nvx_hubspot_secure_portal_id() : '';
+	$form   = function_exists( 'nvx_hubspot_secure_form_id' ) ? nvx_hubspot_secure_form_id() : '';
 	$qa_context = array(
 		'portal_id' => $portal,
 		'form_id' => $form,
@@ -500,17 +499,14 @@ add_action( 'template_redirect', 'nvx_valoracion_maybe_handle_direct_submit', 0 
  * @return array{ok:bool,reason:string,status:int}
  */
 function nvx_valoracion_forward_to_hubspot( array $fields, array $context ): array {
-	$portal = function_exists( 'nvx_hubspot_secure_portal_id' )
-		? nvx_hubspot_secure_portal_id()
-		: ( defined( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ? (string) NVX_VALORACION_HS_FRAME_PORTAL_ID : '147416356' );
-	$form = function_exists( 'nvx_hubspot_secure_form_id' )
-		? nvx_hubspot_secure_form_id()
-		: ( defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) NVX_VALORACION_HS_FRAME_FORM_ID : '5042522a-0bc5-4381-ac3e-5aee8649b69c' );
-	$url = 'https://api.hsforms.com/submissions/v3/integration/submit/' . rawurlencode( $portal ) . '/' . rawurlencode( $form );
-
 	$failed = static function ( string $reason, int $status ): array {
 		return array( 'ok' => false, 'reason' => $reason, 'status' => $status );
 	};
+
+	$url = function_exists( 'nvx_hubspot_secure_original_url' ) ? nvx_hubspot_secure_original_url() : '';
+	if ( '' === $url ) {
+		return $failed( 'hubspot_config', 0 );
+	}
 
 	$body = wp_json_encode(
 		array(

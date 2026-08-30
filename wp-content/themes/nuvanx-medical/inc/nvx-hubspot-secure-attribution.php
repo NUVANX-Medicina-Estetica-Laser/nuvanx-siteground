@@ -19,49 +19,136 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Resolve the canonical HubSpot identity (portal ID and form ID) as a validated pair.
+ *
+ * Fails closed if a higher-priority identity source is configured but malformed,
+ * preventing silent fallback to a different account or legacy identity.
+ *
+ * @return array{portal_id:string,form_id:string}
+ */
+function nvx_hubspot_secure_identity(): array {
+	$sources = array(
+		// 1. Canonical constants
+		array(
+			'portal' => defined( 'NVX_HUBSPOT_PORTAL_ID' ) ? (string) NVX_HUBSPOT_PORTAL_ID : null,
+			'form'   => defined( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) ? (string) NVX_HUBSPOT_VALORACION_FORM_ID : null,
+		),
+		// 2. Legacy constants
+		array(
+			'portal' => defined( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ? (string) NVX_VALORACION_HS_FRAME_PORTAL_ID : null,
+			'form'   => defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) NVX_VALORACION_HS_FRAME_FORM_ID : null,
+		),
+		// 3. Canonical environment variables
+		array(
+			'portal' => false !== getenv( 'NVX_HUBSPOT_PORTAL_ID' ) ? (string) getenv( 'NVX_HUBSPOT_PORTAL_ID' ) : null,
+			'form'   => false !== getenv( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) ? (string) getenv( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) : null,
+		),
+		// 4. Legacy environment variables
+		array(
+			'portal' => false !== getenv( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ? (string) getenv( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) : null,
+			'form'   => false !== getenv( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) getenv( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) : null,
+		),
+	);
+
+	foreach ( $sources as $source ) {
+		$raw_portal = $source['portal'];
+		$raw_form   = $source['form'];
+
+		if ( null === $raw_portal && null === $raw_form ) {
+			continue;
+		}
+
+		$portal = null !== $raw_portal ? trim( $raw_portal ) : '';
+		$form   = null !== $raw_form ? strtolower( trim( $raw_form ) ) : '';
+
+		$valid_portal = 1 === preg_match( '/^\d{1,20}$/', $portal );
+		$valid_form   = 1 === preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $form );
+
+		if ( $valid_portal && $valid_form ) {
+			return array(
+				'portal_id' => $portal,
+				'form_id'   => $form,
+			);
+		}
+
+		// Present but invalid/partial in this layer: fail closed immediately.
+		return array(
+			'portal_id' => '',
+			'form_id'   => '',
+		);
+	}
+
+	return array(
+		'portal_id' => '',
+		'form_id'   => '',
+	);
+}
+
+/**
  * Resolve the canonical HubSpot portal id used by the first-party form.
+ *
+ * Account identity must be provisioned by the environment. Never fall back to
+ * a production portal when configuration is missing or malformed.
  */
 function nvx_hubspot_secure_portal_id(): string {
-	if ( defined( 'NVX_HUBSPOT_PORTAL_ID' ) && '' !== (string) NVX_HUBSPOT_PORTAL_ID ) {
-		return (string) NVX_HUBSPOT_PORTAL_ID;
+	$identity = nvx_hubspot_secure_identity();
+	$portal   = $identity['portal_id'];
+	if ( '' !== $portal ) {
+		return $portal;
 	}
-	if ( defined( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) && '' !== (string) NVX_VALORACION_HS_FRAME_PORTAL_ID ) {
-		return (string) NVX_VALORACION_HS_FRAME_PORTAL_ID;
-	}
-	$env = (string) ( getenv( 'NVX_HUBSPOT_PORTAL_ID' ) ?: '' );
-	return '' !== $env ? $env : '147416356';
+
+	return '';
 }
 
 /**
  * Resolve the canonical HubSpot valoración form id.
+ *
+ * Form identity must be provisioned by the environment. Never fall back to a
+ * production form when configuration is missing or malformed.
  */
 function nvx_hubspot_secure_form_id(): string {
-	if ( defined( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) && '' !== (string) NVX_HUBSPOT_VALORACION_FORM_ID ) {
-		return (string) NVX_HUBSPOT_VALORACION_FORM_ID;
+	$identity = nvx_hubspot_secure_identity();
+	$form     = $identity['form_id'];
+	if ( '' !== $form ) {
+		return $form;
 	}
-	if ( defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) && '' !== (string) NVX_VALORACION_HS_FRAME_FORM_ID ) {
-		return (string) NVX_VALORACION_HS_FRAME_FORM_ID;
-	}
-	$env = (string) ( getenv( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) ?: '' );
-	return '' !== $env ? $env : '5042522a-0bc5-4381-ac3e-5aee8649b69c';
+
+	return '';
+}
+
+/** Whether the environment has a valid canonical HubSpot form identity. */
+function nvx_hubspot_secure_identity_configured(): bool {
+	return '' !== nvx_hubspot_secure_portal_id() && '' !== nvx_hubspot_secure_form_id();
 }
 
 /**
  * Return the exact public Forms API URL used by nvx_valoracion_forward_to_hubspot().
  */
 function nvx_hubspot_secure_original_url(): string {
+	$portal = nvx_hubspot_secure_portal_id();
+	$form   = nvx_hubspot_secure_form_id();
+	if ( '' === $portal || '' === $form ) {
+		return '';
+	}
+
 	return 'https://api.hsforms.com/submissions/v3/integration/submit/'
-		. rawurlencode( nvx_hubspot_secure_portal_id() ) . '/'
-		. rawurlencode( nvx_hubspot_secure_form_id() );
+		. rawurlencode( $portal ) . '/'
+		. rawurlencode( $form );
 }
 
 /**
  * Return the authenticated HubSpot server-to-server submit URL.
  */
 function nvx_hubspot_secure_submit_url(): string {
+	$portal = nvx_hubspot_secure_portal_id();
+	$form   = nvx_hubspot_secure_form_id();
+	if ( '' === $portal || '' === $form ) {
+		return '';
+	}
+
 	return 'https://api.hsforms.com/submissions/v3/integration/secure/submit/'
-		. rawurlencode( nvx_hubspot_secure_portal_id() ) . '/'
-		. rawurlencode( nvx_hubspot_secure_form_id() );
+		. rawurlencode( $portal ) . '/'
+		. rawurlencode( $form );
 }
 
 /**
@@ -232,8 +319,22 @@ function nvx_hubspot_secure_payload_is_staging_qa( array $payload ): bool {
  * still reach HubSpot. On Staging2, only server-owned QA payloads may leave.
  */
 function nvx_hubspot_secure_pre_http_request( $preempt, array $args, string $url ) {
-	if ( nvx_hubspot_secure_original_url() !== $url ) {
+	$original_url = nvx_hubspot_secure_original_url();
+	if ( '' === $original_url ) {
+		$public_submit_prefix = 'https://api.hsforms.com/submissions/v3/integration/submit/';
+		if ( 0 === strpos( $url, $public_submit_prefix ) ) {
+			return new WP_Error( 'nvx_missing_hubspot_identity', 'HubSpot portal/form identity is not configured.' );
+		}
 		return $preempt;
+	}
+
+	if ( $original_url !== $url ) {
+		return $preempt;
+	}
+
+	$secure_url = nvx_hubspot_secure_submit_url();
+	if ( '' === $secure_url ) {
+		return new WP_Error( 'nvx_missing_hubspot_identity', 'HubSpot portal/form identity is not configured.' );
 	}
 
 	if ( ! defined( 'NVX_HUBSPOT_ACCESS_TOKEN' ) ) {
@@ -261,7 +362,7 @@ function nvx_hubspot_secure_pre_http_request( $preempt, array $args, string $url
 	}
 
 	return wp_remote_post(
-		nvx_hubspot_secure_submit_url(),
+		$secure_url,
 		array(
 			'method'  => 'POST',
 			'timeout' => 15,

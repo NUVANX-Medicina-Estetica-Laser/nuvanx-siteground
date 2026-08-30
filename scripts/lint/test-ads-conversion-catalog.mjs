@@ -10,8 +10,8 @@ assert.equal(fs.existsSync(catalogPath), true, 'Ads conversion catalog must exis
 assert.equal(fs.existsSync(catalogPhp), true, 'Ads conversion catalog loader must exist');
 
 const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-const sendTo = catalog?.google_ads?.phone_whatsapp_send_to || '';
-assert.equal(catalog.schema, 1);
+const sendTo = catalog?.google_ads?.phone_whatsapp?.send_to || catalog?.google_ads?.phone_whatsapp_send_to || '';
+assert.equal(catalog.schema, 2);
 assert.match(sendTo, /^AW-[0-9]{8,12}\/[A-Za-z0-9_-]+$/);
 
 const gtm = fs.readFileSync(gtmPath, 'utf8');

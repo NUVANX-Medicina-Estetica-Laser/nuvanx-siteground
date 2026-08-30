@@ -321,18 +321,7 @@ add_filter( 'the_content', 'nvx_valoracion_form_stage_class', NVX_HOOK_PRIO_VALO
 ═══════════════════════════════════════════════════════════
 	Valoración HubSpot mount (absorbed from retired MU plugin)
 	Single canonical lazy frame; no eager hsforms <script>.
-	function_exists guards allow one-release coexistence until MU is removed.
 	═══════════════════════════════════════════════════════════ */
-
-if ( ! defined( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ) {
-	define( 'NVX_VALORACION_HS_FRAME_PORTAL_ID', '147416356' );
-}
-if ( ! defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ) {
-	define( 'NVX_VALORACION_HS_FRAME_FORM_ID', '5042522a-0bc5-4381-ac3e-5aee8649b69c' );
-}
-if ( ! defined( 'NVX_VALORACION_HS_FRAME_REGION' ) ) {
-	define( 'NVX_VALORACION_HS_FRAME_REGION', 'eu1' );
-}
 
 /**
  * Whether the current request is the canonical valoración form route.
@@ -351,15 +340,23 @@ if ( ! function_exists( 'nvx_valoracion_native_hubspot_is_target_page' ) ) {
  */
 if ( ! function_exists( 'nvx_valoracion_native_hubspot_mount_markup' ) ) {
 	function nvx_valoracion_native_hubspot_mount_markup(): string {
-		$portal_id   = esc_attr( (string) NVX_VALORACION_HS_FRAME_PORTAL_ID );
-		$form_id     = esc_attr( (string) NVX_VALORACION_HS_FRAME_FORM_ID );
-		$region      = esc_attr( (string) NVX_VALORACION_HS_FRAME_REGION );
+		$portal_id = function_exists( 'nvx_hubspot_secure_portal_id' ) ? nvx_hubspot_secure_portal_id() : '';
+		$form_id   = function_exists( 'nvx_hubspot_secure_form_id' ) ? nvx_hubspot_secure_form_id() : '';
+		$region    = defined( 'NVX_VALORACION_HS_FRAME_REGION' ) ? strtolower( trim( (string) NVX_VALORACION_HS_FRAME_REGION ) ) : 'eu1';
+		if ( 1 !== preg_match( '/^[a-z]{2,4}\d{1,2}$/', $region ) ) {
+			$region = 'eu1';
+		}
+
+		if ( '' === $portal_id || '' === $form_id ) {
+			return '<!-- NVX_HUBSPOT_FORM_UNAVAILABLE identity_not_configured -->';
+		}
+
 		$privacy_url = esc_url( home_url( '/politica-privacidad/' ) );
 
 		// The published HubSpot V4 iframe is the single interactive form on this
 		// route. Rendering the first-party fallback beside it asks visitors for the
 		// same details twice and produces two consent paths.
-		return '<div class="hs-form-frame" data-region="' . $region . '" data-form-id="' . $form_id . '" data-portal-id="' . $portal_id . '" data-nvx-hubspot-lazy="1"></div>'
+		return '<div class="hs-form-frame" data-region="' . esc_attr( $region ) . '" data-form-id="' . esc_attr( $form_id ) . '" data-portal-id="' . esc_attr( $portal_id ) . '" data-nvx-hubspot-lazy="1"></div>'
 			. '<p class="nvx-copy nvx-hubspot-privacy">' . esc_html__( 'Al facilitar tus datos aceptas la', 'nuvanx-medical' ) . ' <a class="nvx-text-link" href="' . $privacy_url . '">' . esc_html__( 'Política de privacidad', 'nuvanx-medical' ) . '</a>.</p>';
 	}
 }

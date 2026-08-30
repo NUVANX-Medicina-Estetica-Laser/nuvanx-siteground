@@ -1,9 +1,10 @@
 <?php
 /**
- * Theme-owned Google Ads click conversion catalog.
+ * Google Ads click conversion governed mirror.
  *
+ * Google Ads is the external authority. The repository stores only the
+ * browser-facing send_to mirror plus explicit ownership/verification metadata.
  * Form measurement remains HubSpot -> GA4 generate_lead -> Ads import.
- * This module only exposes the separate phone/WhatsApp click send_to.
  *
  * @package nuvanx-medical
  */
@@ -12,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/** Canonical send_to format owned by ads-conversion-catalog.json. */
+/** Validate the browser-facing Google Ads send_to format. */
 function nvx_ads_is_send_to( string $value ): bool {
 	return 1 === preg_match( '/^AW-[0-9]{8,12}\/[A-Za-z0-9_-]+$/', $value );
 }
@@ -20,7 +21,7 @@ function nvx_ads_is_send_to( string $value ): bool {
 /**
  * Resolve the phone/WhatsApp Google Ads click conversion.
  *
- * @return string Empty when the catalog is missing or invalid.
+ * @return string Empty when the governed mirror is missing or invalid.
  */
 function nvx_ads_phone_whatsapp_send_to(): string {
 	if ( ! function_exists( 'nvx_catalog_json_load' ) ) {
@@ -28,13 +29,22 @@ function nvx_ads_phone_whatsapp_send_to(): string {
 	}
 
 	$catalog = nvx_catalog_json_load( 'ads-conversion-catalog.json' );
-	$google  = isset( $catalog['google_ads'] ) && is_array( $catalog['google_ads'] )
+	if ( 2 !== (int) ( $catalog['schema'] ?? 0 ) ) {
+		return '';
+	}
+
+	$google = isset( $catalog['google_ads'] ) && is_array( $catalog['google_ads'] )
 		? $catalog['google_ads']
 		: array();
-	$value   = isset( $google['phone_whatsapp_send_to'] )
-		? trim( (string) $google['phone_whatsapp_send_to'] )
-		: '';
+	$phone  = isset( $google['phone_whatsapp'] ) && is_array( $google['phone_whatsapp'] )
+		? $google['phone_whatsapp']
+		: array();
 
+	if ( 'google_ads' !== (string) ( $google['authority'] ?? '' ) || '' === trim( (string) ( $google['owner'] ?? '' ) ) ) {
+		return '';
+	}
+
+	$value = trim( (string) ( $phone['send_to'] ?? '' ) );
 	return nvx_ads_is_send_to( $value ) ? $value : '';
 }
 
