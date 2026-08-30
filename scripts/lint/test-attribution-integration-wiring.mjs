@@ -21,6 +21,10 @@ assert.match(syncSource, /form\.setFieldValue\(actualName,/);
 assert.match(syncSource, /'nvx_lead_id'/);
 assert.match(syncSource, /'nvx_is_test_lead'/);
 assert.match(syncSource, /'nvx_test_run_id'/);
+assert.match(syncSource, /HIDDEN_BOOLEAN_FIELDS/,
+  'HubSpot sync must distinguish hidden QA checkbox properties from visible Single checkbox fields');
+assert.match(syncSource, /HIDDEN_BOOLEAN_FIELDS\.has\(propertyName\).*\['true'\].*\['false'\]|HIDDEN_BOOLEAN_FIELDS\.has\(propertyName\).*'true'.*'false'/s,
+  'Hidden QA marker must use HubSpot Hidden-field string[] representation');
 assert.match(syncSource, /await Promise\.resolve\(form\.setFieldValue\(actualName,/,
   'HubSpot V4 field writes must complete before lineage validation continues');
 assert.match(syncSource, /await setField\(form, index, propertyName, payload\[propertyName\]\)/,
@@ -49,7 +53,8 @@ assert.match(integration, /'timeout'\s*=>\s*3/);
 assert.match(integration, /'blocking'\s*=>\s*true/);
 assert.match(integration, /nvx_attribution_submission_id_from_lead/);
 assert.match(integration, /nvx_supabase_relay_dispatch/);
-assert.match(syncSource, /typeof value === 'boolean'\) return value;/);
+assert.match(syncSource, /typeof value === 'boolean'\) return value;/,
+  'Visible Single checkbox fields must retain HubSpot native boolean support');
 assert.doesNotMatch(integration, /NVX_GOOGLE_CLICK_ATTRIBUTION_ENDPOINT/);
 const collectorPayload = integration.match(/\$collector_payload = array\(([\s\S]*?)\n\t\);/)?.[1] || '';
 assert.ok(collectorPayload);
@@ -65,7 +70,7 @@ let consent = false;
 const writes = new Map();
 const fields = [
   { name: '0-1/nvx_lead_id', value: '' },
-  { name: '0-1/nvx_is_test_lead', value: false },
+  { name: '0-1/nvx_is_test_lead', value: [] },
   { name: '0-1/nvx_test_run_id', value: '' },
   { name: '7-12/nvx_utm_source', value: 'stale-source' },
   { name: '0-1/nvx_google_click_id', value: 'STALE-GCLID' },
@@ -109,15 +114,16 @@ globalThis.document = {
 await import(new URL('../../wp-content/themes/nuvanx-medical/assets/js/nvx-hubspot-attribution-sync.js', import.meta.url).href);
 const api = globalThis.window.NUVANXHubSpotAttributionSync;
 assert.equal(api.canonicalPropertyName('7-12/nvx_utm_source'), 'nvx_utm_source');
+assert.equal(api.HIDDEN_BOOLEAN_FIELDS.has('nvx_is_test_lead'), true);
 
 await api.syncForm(form);
 assert.deepEqual(writes.get('0-1/nvx_lead_id'), ['11111111-1111-4111-8111-111111111111']);
-assert.equal(typeof writes.get('0-1/nvx_is_test_lead'), 'boolean');
-assert.equal(writes.get('0-1/nvx_is_test_lead'), true);
+assert.deepEqual(writes.get('0-1/nvx_is_test_lead'), ['true']);
 assert.deepEqual(writes.get('7-12/nvx_utm_source'), []);
 assert.deepEqual(writes.get('0-1/nvx_google_click_id'), []);
 
-// HubSpot V4 Single checkbox consumes native booleans, not 'true'/'false' strings.
+// nvx_is_test_lead is a checkbox-backed CRM property, but it is configured as
+// Hidden in the canonical form and therefore uses HubSpot Hidden-field string[].
 globalThis.window.NUVANXAttributionContract.buildFormPayload = () => ({
   nvx_lead_id: '11111111-1111-4111-8111-111111111111',
   nvx_is_test_lead: false,
@@ -125,8 +131,7 @@ globalThis.window.NUVANXAttributionContract.buildFormPayload = () => ({
 });
 writes.clear();
 await api.syncForm(form);
-assert.equal(typeof writes.get('0-1/nvx_is_test_lead'), 'boolean');
-assert.equal(writes.get('0-1/nvx_is_test_lead'), false);
+assert.deepEqual(writes.get('0-1/nvx_is_test_lead'), ['false']);
 globalThis.window.NUVANXAttributionContract.buildFormPayload = buildQaTruePayload;
 
 writes.clear();
@@ -137,8 +142,7 @@ assert.equal(writes.size, 0);
 consent = true;
 writes.clear();
 await api.syncForm(form);
-assert.equal(typeof writes.get('0-1/nvx_is_test_lead'), 'boolean');
-assert.equal(writes.get('0-1/nvx_is_test_lead'), true);
+assert.deepEqual(writes.get('0-1/nvx_is_test_lead'), ['true']);
 assert.deepEqual(writes.get('7-12/nvx_utm_source'), ['google']);
 assert.deepEqual(writes.get('0-1/nvx_google_click_id'), ['GCLID-TEST']);
 
@@ -147,6 +151,7 @@ writes.clear();
 listeners.get('wp_listen_for_consent_change')?.();
 await new Promise((resolve) => setTimeout(resolve, 80));
 assert.deepEqual(writes.get('0-1/nvx_lead_id'), ['11111111-1111-4111-8111-111111111111']);
+assert.deepEqual(writes.get('0-1/nvx_is_test_lead'), ['true']);
 assert.deepEqual(writes.get('7-12/nvx_utm_source'), []);
 assert.deepEqual(writes.get('0-1/nvx_google_click_id'), []);
 
@@ -179,4 +184,4 @@ assert.equal(unhandled.length, 0, 'HubSpot async sync entry points must consume 
 // installs, so load it only after the API contract above has been exercised.
 await import('./test-hubspot-v4-hidden-lineage.mjs');
 
-console.log('ATTRIBUTION_INTEGRATION_WIRING=PASS lineage=1 hidden_fields=string_array consent_split=1 qa_boolean=native_true+false canonical_form=1 async_field_writes=awaited async_rejections=contained applied_lead_id=untouched');
+console.log('ATTRIBUTION_INTEGRATION_WIRING=PASS lineage=1 hidden_fields=string_array consent_split=1 qa_hidden_string_array=true+false canonical_form=1 async_field_writes=awaited async_rejections=contained applied_lead_id=untouched');

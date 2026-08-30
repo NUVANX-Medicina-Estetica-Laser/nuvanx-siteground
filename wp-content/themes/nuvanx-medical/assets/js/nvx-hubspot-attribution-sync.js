@@ -8,6 +8,9 @@
 		'nvx_is_test_lead',
 		'nvx_test_run_id',
 	]);
+	var HIDDEN_BOOLEAN_FIELDS = new Set([
+		'nvx_is_test_lead',
+	]);
 	// Prefer the PHP SSOT injected before this file; keep a fallback if inline config is absent.
 	var MARKETING_FIELDS = Array.isArray(window.nvxAttributionMarketingFields)
 		? window.nvxAttributionMarketingFields
@@ -74,8 +77,12 @@
 		return index;
 	}
 
-	function hubSpotFieldValue(value) {
-		// HubSpot V4 Single checkbox requires a native boolean, not 'true'/'false'.
+	function hubSpotFieldValue(value, propertyName) {
+		// nvx_is_test_lead is deliberately Hidden in the canonical HubSpot form.
+		// HubSpot Forms V4 requires string[] for Hidden fields, even when the
+		// underlying CRM property is a single-checkbox enumeration.
+		if (HIDDEN_BOOLEAN_FIELDS.has(propertyName)) return [value === true ? 'true' : 'false'];
+		// Preserve native booleans for genuine visible Single checkbox fields.
 		if (typeof value === 'boolean') return value;
 		// Every non-boolean field synchronized by this module is an attribution
 		// property configured as Hidden in the canonical form. HubSpot V4 requires
@@ -116,8 +123,8 @@
 	}
 
 	function hiddenFieldFallback(value) {
-		if (typeof value === 'boolean') return value;
 		if (Array.isArray(value)) return value;
+		if (typeof value === 'boolean') return [value ? 'true' : 'false'];
 		var scalar = value === undefined || value === null ? '' : String(value);
 		return scalar === '' ? [] : [scalar];
 	}
@@ -125,7 +132,7 @@
 	async function setField(form, index, propertyName, value) {
 		var actualName = index.get(propertyName);
 		if (!actualName) return false;
-		var expected = hubSpotFieldValue(value);
+		var expected = hubSpotFieldValue(value, propertyName);
 		var primarySucceeded = false;
 		try {
 			// HubSpot V4 may complete field writes asynchronously. Wait for the
@@ -139,10 +146,9 @@
 		if (typeof form.getFieldValue !== 'function') return primarySucceeded;
 		if (primarySucceeded && await verifyFieldValue(form, actualName, expected)) return true;
 
-		// Updated HubSpot Forms V4 requires string[] for Hidden fields. Attribution
-		// properties are intentionally hidden in the live form, so retry with the
-		// documented Hidden-field representation only when scalar/boolean write
-		// did not survive read-back. Never accept a write without verifying it.
+		// HubSpot Forms V4 requires string[] for Hidden fields. Retry with the
+		// Hidden-field representation only when the primary write did not survive
+		// read-back. Never accept a write without verifying it.
 		var fallback = hiddenFieldFallback(expected);
 		try {
 			await Promise.resolve(form.setFieldValue(actualName, fallback));
@@ -243,6 +249,7 @@
 		syncExistingForms: syncExistingForms,
 		canonicalPropertyName: canonicalPropertyName,
 		FIRST_PARTY_FIELDS: FIRST_PARTY_FIELDS,
+		HIDDEN_BOOLEAN_FIELDS: HIDDEN_BOOLEAN_FIELDS,
 		MARKETING_FIELDS: MARKETING_FIELDS,
 	});
 }());
