@@ -102,17 +102,6 @@ const sitemapPings = [
   { name: 'Yandex Sitemaps Ping', url: (s) => `https://webmaster.yandex.com/ping?sitemap=${encodeURIComponent(s)}` }
 ];
 
-const botAgents = [
-  { name: 'Googlebot Mobile', ua: 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
-  { name: 'Googlebot Desktop', ua: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
-  { name: 'Bingbot', ua: 'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)' },
-  { name: 'OpenAI SearchBot (ChatGPT)', ua: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; OAI-SearchBot/1.0; +https://openai.com/bot)' },
-  { name: 'Anthropic ClaudeBot', ua: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-SearchBot/1.0; +https://www.anthropic.com/claudebot)' },
-  { name: 'PerplexityBot (Perplexity AI)', ua: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)' },
-  { name: 'Applebot (Apple Search & Siri)', ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15 (Applebot/0.1; +http://www.apple.com/go/applebot)' },
-  { name: 'Meta WhatsApp/IG (facebookexternalhit)', ua: 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' },
-  { name: 'LinkedInBot', ua: 'LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)' }
-];
 
 async function submitIndexNowHubs() {
   console.log(`\n=== 1. Envíos IndexNow a Motores de Búsqueda (${allUrls.length} URLs) ===`);
@@ -160,37 +149,18 @@ async function pingSitemaps() {
   return results;
 }
 
-async function warmUpRobots() {
-  console.log(`\n=== 3. Warm-up y Registro de Entidades para Bots de Búsqueda e IA ===`);
-  const results = [];
-  
-  for (const bot of botAgents) {
-    let success = 0;
-    for (const url of allUrls) {
-      try {
-        const res = await fetch(url, {
-          method: 'GET',
-          headers: { 'User-Agent': bot.ua, 'Accept': 'text/html,application/xhtml+xml' }
-        });
-        if (res.status === 200) success++;
-      } catch {}
-    }
-    console.log(`  🤖 ${bot.name}: ${success}/${allUrls.length} URLs reconocidas y cacheadas con éxito`);
-    results.push({ bot: bot.name, crawled: success, total: allUrls.length });
-  }
-  return results;
-}
-
 async function run() {
   const t0 = Date.now();
-  console.log('INICIANDO INDEXACIÓN Y REGISTRO OMNICANAL EN TODOS LOS MOTORES Y ROBOTS...');
+  console.log('=== nuvanx — Omnichannel Indexing (IndexNow + Sitemaps) ===');
+  console.log(`Timestamp: ${new Date().toISOString()}`);
+  console.log(`Total URLs: ${allUrls.length}`);
   
   const indexNow = await submitIndexNowHubs();
   const sitemapPingsResult = await pingSitemaps();
-  const botsResult = await warmUpRobots();
 
   const duration = ((Date.now() - t0) / 1000).toFixed(1);
-  console.log(`\nPROCESO COMPLETADO EN ${duration}s.`);
+  const accepted = indexNow.filter(r => r.ok).length;
+  console.log(`\n=== Proceso completado en ${duration}s (${accepted}/${indexNowEndpoints.length} IndexNow hubs exitosos) ===`);
 
   const summaryPath = '/Users/MARIA/Desktop/nuvanx-siteground/scripts/seo/omnichannel-indexing-summary.json';
   fs.writeFileSync(summaryPath, JSON.stringify({
@@ -198,9 +168,9 @@ async function run() {
     totalUrls: allUrls.length,
     indexNow,
     sitemapPings: sitemapPingsResult,
-    botsWarmup: botsResult,
     durationSeconds: Number(duration)
   }, null, 2), 'utf8');
+  console.log(`Resumen guardado en: ${summaryPath}`);
 }
 
 run().catch(console.error);

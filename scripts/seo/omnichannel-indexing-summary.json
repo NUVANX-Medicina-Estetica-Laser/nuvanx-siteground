@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-30T22:11:50.197Z",
+  "timestamp": "2026-08-30T22:38:41.032Z",
   "totalUrls": 76,
   "indexNow": [
     {
@@ -14,7 +14,7 @@
     },
     {
       "hub": "Yandex Webmaster",
-      "status": 202,
+      "status": 200,
       "ok": true
     },
     {
@@ -75,52 +75,5 @@
       "status": 200
     }
   ],
-  "botsWarmup": [
-    {
-      "bot": "Googlebot Mobile",
-      "crawled": 0,
-      "total": 76
-    },
-    {
-      "bot": "Googlebot Desktop",
-      "crawled": 76,
-      "total": 76
-    },
-    {
-      "bot": "Bingbot",
-      "crawled": 76,
-      "total": 76
-    },
-    {
-      "bot": "OpenAI SearchBot (ChatGPT)",
-      "crawled": 76,
-      "total": 76
-    },
-    {
-      "bot": "Anthropic ClaudeBot",
-      "crawled": 76,
-      "total": 76
-    },
-    {
-      "bot": "PerplexityBot (Perplexity AI)",
-      "crawled": 76,
-      "total": 76
-    },
-    {
-      "bot": "Applebot (Apple Search & Siri)",
-      "crawled": 76,
-      "total": 76
-    },
-    {
-      "bot": "Meta WhatsApp/IG (facebookexternalhit)",
-      "crawled": 19,
-      "total": 76
-    },
-    {
-      "bot": "LinkedInBot",
-      "crawled": 0,
-      "total": 76
-    }
-  ],
-  "durationSeconds": 74.1
+  "durationSeconds": 5
 }
