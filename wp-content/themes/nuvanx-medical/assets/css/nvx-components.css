@@ -1473,9 +1473,12 @@ body.nvx-valoracion-modal-open{
   color: var(--nvx-ink);
 }
 
-/* Bridal studio — route-owned editorial layout restored after component cleanup. */
+/* Bridal studio — route-owned editorial layout restored after component cleanup.
+ * overflow is intentionally absent: the section contains no full-bleed elements
+ * and hidden here creates a formatting context that breaks margin inheritance from
+ * nvx-brand-section__inner children. */
 .nvx-bridal-studio {
-  /* overflow: hidden removed to preserve canonical shell alignment */
+  /* overflow: removed — see nvx-components.css audit 2026-08-30 */
 }
 
 .nvx-bridal-studio__intro {
