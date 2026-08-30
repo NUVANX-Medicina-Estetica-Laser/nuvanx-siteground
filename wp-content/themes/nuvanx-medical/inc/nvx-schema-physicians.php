@@ -95,20 +95,31 @@ function nvx_schema_physician_ivon( $organization_id ) {
 		'@id'              => $ivon_id,
 		'name'             => 'Ivon Yamileth Rivera Deras',
 		'honorificPrefix'  => 'Dra.',
-		'jobTitle'         => 'Especialista en geriatría, longevidad y well-aging · NUVANX',
-		'description'      => NVX_SD_LABEL_COLEGIADO_PREFIX . $colegiado . '. Médico especialista (FEA) en Hospital Universitario La Paz (Recuperación Funcional / Hospital de Día Geriátrico) y Hospital Central de la Cruz Roja. Investigadora y consultora para OXON Epidemiology; coordinación científica SEMEG; colaboración EuGMS; profesora UEM. Coautora de obras de bioética y geriatría clínica. Integra well-aging basado en evidencia en NUVANX.',
+		'jobTitle'         => 'Especialista en Geriatría y Medicina Familiar y Comunitaria · NUVANX',
+		'description'      => NVX_SD_LABEL_COLEGIADO_PREFIX . $colegiado . '. Especialista vía MIR en Geriatría y en Medicina Familiar y Comunitaria. Actividad asistencial actual en Hospital Universitario Vithas Arturo Soria y Hospital Universitario de Getafe; Medical Advisor y Medical Monitor en OXON Epidemiology; profesora asociada de Medicina en la Universidad Europea de Madrid. Coordinación científica y colaboración en deterioro cognitivo con SEMEG. Cursa el Máster de Formación Permanente Internacional en Medicina Estética, Antienvejecimiento y Nutrición de la UCAM (2026–2027).',
 		'url'              => $equipo . '#physician-rivera-deras',
 		'image'            => get_template_directory_uri() . '/assets/images/team/nvx-dra-paola-rivera-deras.webp',
-		'medicalSpecialty' => 'https://schema.org/Geriatric',
+		'medicalSpecialty' => array(
+			'https://schema.org/Geriatric',
+			'https://schema.org/PrimaryCare',
+		),
 		'worksFor'         => array(
 			array( '@id' => $organization_id ),
 			array(
 				'@type' => 'Hospital',
-				'name'  => 'Hospital Universitario La Paz',
+				'name'  => 'Hospital Universitario Vithas Arturo Soria',
 			),
 			array(
 				'@type' => 'Hospital',
-				'name'  => 'Hospital Central de la Cruz Roja San José y Santa Adela',
+				'name'  => 'Hospital Universitario de Getafe',
+			),
+			array(
+				'@type' => 'Organization',
+				'name'  => 'OXON Epidemiology',
+			),
+			array(
+				'@type' => 'CollegeOrUniversity',
+				'name'  => 'Universidad Europea de Madrid',
 			),
 		),
 		'hasCredential'    => array(
@@ -118,35 +129,34 @@ function nvx_schema_physician_ivon( $organization_id ) {
 				'identifier'         => $colegiado,
 				'name'               => 'Colegiada ICOMEM ' . $colegiado,
 			),
+			array(
+				'@type'              => 'EducationalOccupationalCredential',
+				'credentialCategory' => 'Especialidad médica vía MIR',
+				'name'               => 'Especialista en Geriatría — Hospital Central de la Cruz Roja San José y Santa Adela',
+			),
+			array(
+				'@type'              => 'EducationalOccupationalCredential',
+				'credentialCategory' => 'Especialidad médica vía MIR',
+				'name'               => 'Especialista en Medicina Familiar y Comunitaria — Hospital Universitario de Guadalajara',
+			),
 		),
-		'memberOf'         => array(
+		'affiliation'       => array(
 			array(
 				'@type' => 'MedicalOrganization',
 				'name'  => NVX_SD_SOCIEDAD_SEMEG,
 			),
-			array(
-				'@type' => 'Organization',
-				'name'  => 'European Geriatric Medicine Society (EuGMS)',
-			),
-			array(
-				'@type' => 'Organization',
-				'name'  => 'OXON Epidemiology',
-			),
-		),
-		'alumniOf'         => array(
-			array(
-				'@type' => 'CollegeOrUniversity',
-				'name'  => 'Universidad Europea de Madrid',
-			),
 		),
 		'knowsAbout'       => array(
 			'Geriatría',
+			'Medicina Familiar y Comunitaria',
+			'Nutrición clínica',
 			'Well-aging',
-			'Longevidad',
-			'Medicina preventiva del envejecimiento',
 			'Deterioro cognitivo',
-			'Recuperación funcional geriátrica',
+			'Enfermedad de Alzheimer',
+			'Fragilidad',
+			'Seguridad del paciente',
 			'Real-World Evidence',
+			'Medicina estética, antienvejecimiento y nutrición — formación de posgrado en curso',
 		),
 	);
 }
@@ -224,19 +234,49 @@ function nvx_schema_physician_fabio( $organization_id ) {
 function nvx_schema_ivon_publications( $author_id ) {
 	return array(
 		array(
-			'@type'  => 'Book',
-			'@id'    => home_url( '/equipo-medico/#work-inmortalidad-sin-juventud' ),
-			'name'   => 'El tormento de la inmortalidad sin juventud',
-			'author' => array( '@id' => $author_id ),
+			'@type'         => 'ScholarlyArticle',
+			'@id'           => home_url( '/equipo-medico/#work-ivon-j-ageing-longev-2026' ),
+			'name'          => 'Oral Nutritional Supplementation in Routine Clinical Practice to Improve Physical Performance and Nutrition in Frail Adults at Risk of Falls: Preliminary Evidence',
+			'author'        => array( '@id' => $author_id ),
+			'url'           => 'https://doi.org/10.3390/jal6010015',
+			'sameAs'        => 'https://doi.org/10.3390/jal6010015',
+			'identifier'    => array(
+				'@type'      => 'PropertyValue',
+				'propertyID' => 'DOI',
+				'value'      => '10.3390/jal6010015',
+			),
+			'datePublished' => '2026',
 		),
 		array(
-			'@type'     => 'Book',
-			'@id'       => home_url( '/equipo-medico/#work-manual-caidas-semeg' ),
-			'name'      => 'Manual de manejo de personas mayores que sufren caídas',
-			'author'    => array( '@id' => $author_id ),
+			'@type'  => 'ScholarlyArticle',
+			'@id'    => home_url( '/equipo-medico/#work-ivon-neurama-2025' ),
+			'name'   => 'Integración de biomarcadores y valoración geriátrica integral en el diagnóstico de deterioro cognitivo en adultos mayores',
+			'author' => array( '@id' => $author_id ),
+			'datePublished' => '2025',
+		),
+		array(
+			'@type'  => 'Book',
+			'@id'    => home_url( '/equipo-medico/#work-ivon-sindrome-titono' ),
+			'name'   => 'Síndrome de Titono',
+			'author' => array( '@id' => $author_id ),
+			'datePublished' => '2026',
+		),
+		array(
+			'@type'  => 'Book',
+			'@id'    => home_url( '/equipo-medico/#work-ivon-sindrome-tantalo' ),
+			'name'   => 'Síndrome del Tántalo',
+			'author' => array( '@id' => $author_id ),
+			'datePublished' => '2026',
+		),
+		array(
+			'@type'  => 'CreativeWork',
+			'@id'    => home_url( '/equipo-medico/#work-ivon-protocolo-deterioro-cognitivo' ),
+			'name'   => 'Protocolo - Consulta de deterioro cognitivo',
+			'author' => array( '@id' => $author_id ),
+			'datePublished' => '2026',
 			'publisher' => array(
-				'@type' => 'Organization',
-				'name'  => 'Sociedad Española de Medicina Geriátrica (SEMEG)',
+				'@type' => 'MedicalOrganization',
+				'name'  => NVX_SD_SOCIEDAD_SEMEG,
 			),
 		),
 	);

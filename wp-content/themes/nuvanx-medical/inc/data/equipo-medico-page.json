@@ -50,30 +50,30 @@
     },
     "ivon": {
         "name": "@nvx-t:Dra. Ivon Yamileth Rivera Deras",
-        "kicker": "@nvx-t:Well-aging y geriatría preventiva",
-        "h2": "@nvx-t:Dra. Ivon Yamileth Rivera Deras: Referente Científico en Well-Aging y Geriatría Preventiva",
+        "kicker": "@nvx-t:Geriatría · Medicina familiar · Well-aging",
+        "h2": "@nvx-t:Dra. Ivon Yamileth Rivera Deras: Especialista en Geriatría, Medicina Familiar y Well-Aging",
         "bio_paragraphs": [
-            "@nvx-t:Colegiada ICOMEM %s. La Dra. Rivera Deras aporta experiencia en medicina funcional, longevidad y well-aging. Su actividad asistencial e investigadora contribuye a que los protocolos se revisen con criterio clínico y evidencia aplicable."
+            "@nvx-t:Colegiada ICOMEM %s. Especialista MIR en Geriatría y en Medicina Familiar y Comunitaria, con Máster Internacional en Medicina Estética, Antienvejecimiento y Nutrición (UCAM en curso). Su actividad asistencial, docente e investigadora aporta rigor científico y medicina basada en la evidencia a los protocolos de longevidad y well-aging de NUVANX."
         ],
         "public": {
-            "kicker": "@nvx-t:Asistencia pública",
-            "heading": "@nvx-t:Actividad asistencial hospitalaria",
-            "lead": "@nvx-t:Médico Especialista (FEA) por concurso selectivo en el Hospital Universitario La Paz, en Unidad de Recuperación Funcional y Hospital de Día Geriátrico. Forma parte del cuadro médico del Hospital Central de la Cruz Roja San José y Santa Adela, centro de referencia en neurorrehabilitación y atención al adulto mayor."
+            "kicker": "@nvx-t:Actividad asistencial",
+            "heading": "@nvx-t:Actividad asistencial actual",
+            "lead": "@nvx-t:Facultativa en el Hospital Universitario Vithas Arturo Soria (Servicio de Geriatría · Urgencias y consulta de alta resolución) y en el Hospital Universitario de Getafe (valoración integral e interconsulta). Medical Advisor y Medical Monitor en OXON Epidemiology. Responsable previa de Unidad de Memoria y Seguridad del Paciente en Hospital Universitario La Paz–Cantoblanco (2022–2025)."
         },
         "research": {
-            "kicker": "@nvx-t:Investigación",
-            "heading": "@nvx-t:Investigación, sociedades y academia",
+            "kicker": "@nvx-t:Investigación y docencia",
+            "heading": "@nvx-t:Investigación, docencia y sociedades científicas",
             "items": [
-                { "title": "@nvx-t:Real-World Evidence", "body": "@nvx-t:Investigadora clínica externa y consultora médica para OXON Epidemiology." },
-                { "title": "@nvx-t:SEMEG y EuGMS", "body": "@nvx-t:Coordinadora científica de las Jornadas de Deterioro Cognitivo de la Sociedad Española de Medicina Geriátrica (SEMEG) y colaboración activa con la European Geriatric Medicine Society (EuGMS)." },
-                { "title": "@nvx-t:Universidad Europea de Madrid", "body": "@nvx-t:Profesora e investigadora en la UEM, vinculada al Hospital Vithas Madrid Arturo Soria. Formación continuada de facultativos, enfermería y TCAE en hospitales del SERMAS." },
-                { "title": "@nvx-t:Obra escrita y publicaciones", "body": "@nvx-t:Coautora de obras bioéticas y clínicas como «El tormento de la inmortalidad sin juventud» y del «Manual de manejo de personas mayores que sufren caídas» (SEMEG), además de trabajos sobre cribado cognitivo temprano." }
+                { "title": "@nvx-t:Docencia universitaria (UEM)", "body": "@nvx-t:Profesora Asociada de Medicina en la Universidad Europea de Madrid, responsable de la asignatura de Geriatría en el Grado en Medicina." },
+                { "title": "@nvx-t:OXON Epidemiology y Real-World Evidence", "body": "@nvx-t:Medical Advisor y Medical Monitor · asesoramiento científico-clínico, seguridad del paciente y supervisión médica de estudios." },
+                { "title": "@nvx-t:SEMEG y coordinación científica", "body": "@nvx-t:Coordinadora científica de las Jornadas de Deterioro Cognitivo y colaboradora del Grupo de Trabajo en Deterioro Cognitivo de la SEMEG." },
+                { "title": "@nvx-t:Publicaciones científicas recientes", "body": "@nvx-t:Primer autor en J. Ageing Longev. (2026) sobre suplementación nutricional en adultos mayores frágiles y en Neurama (2025) sobre biomarcadores en deterioro cognitivo. Coautora de «Síndrome de Titono» (2026)." }
             ],
             "facts": [
                 { "label": "@nvx-t:Colegiada", "val": "ICOMEM %s" },
-                { "label": "@nvx-t:Ámbito", "val": "@nvx-t:Well-aging · Geriatría preventiva · Longevidad" },
-                { "label": "@nvx-t:Asistencia", "val": "@nvx-t:La Paz · Cruz Roja" },
-                { "label": "@nvx-t:Sociedades", "val": "SEMEG · EuGMS" }
+                { "label": "@nvx-t:Especialidades", "val": "@nvx-t:Geriatría (MIR) · Med. Familiar (MIR)" },
+                { "label": "@nvx-t:Asistencia", "val": "@nvx-t:Vithas Arturo Soria · Getafe · OXON" },
+                { "label": "@nvx-t:Docencia", "val": "@nvx-t:Universidad Europea de Madrid" }
             ]
         }
     },
