@@ -72,8 +72,8 @@ provision_staging_hubspot_identity() {
   classification="$(jq -r '.classification // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   portal="$(jq -r '.hubspot.portal_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   form="$(jq -r '.hubspot.form_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
-  private_credentials="$(jq -r '.guardrails.contains_private_credentials // true' "$PUBLIC_INTEGRATION_CONFIG")"
-  production_mutation="$(jq -r '.guardrails.production_mutation // true' "$PUBLIC_INTEGRATION_CONFIG")"
+  private_credentials="$(jq -r 'if .guardrails | has("contains_private_credentials") then .guardrails.contains_private_credentials else true end' "$PUBLIC_INTEGRATION_CONFIG")"
+  production_mutation="$(jq -r 'if .guardrails | has("production_mutation") then .guardrails.production_mutation else true end' "$PUBLIC_INTEGRATION_CONFIG")"
 
   [[ "$scope" == 'staging2' ]] || fail_config "HubSpot identity manifest has unexpected scope=$scope"
   [[ "$classification" == 'public_integration_identity' ]] || fail_config "HubSpot identity manifest classification is invalid: $classification"
