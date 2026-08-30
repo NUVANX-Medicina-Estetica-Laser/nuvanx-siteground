@@ -811,15 +811,22 @@ jobs:
         run: |
           set -euo pipefail
           marker="$RUNNER_TEMP/staging-deploy-complete.json"
+          # Verify exact SHA is deployed on Staging before creating completion marker
+          deployed_sha=$(ssh nvx-staging2 "tr -d '\r\n' < '$STAGING_ROOT/wp-content/themes/nuvanx-medical/.nvx-deploy-sha'" 2>/dev/null || echo "")
+          if [[ "$deployed_sha" != "$CANDIDATE_SHA" ]]; then
+            echo "STAGING_SHA_MISMATCH expected=$CANDIDATE_SHA deployed=$deployed_sha" >&2
+            exit 1
+          fi
           jq -n \
             --arg candidate_sha "$CANDIDATE_SHA" \
             --arg run_id "$GITHUB_RUN_ID" \
             --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
             --arg runner_attempt "$RUNNER_ATTEMPT_NO" \
             --arg run_acceptance "$RUN_ACCEPTANCE" \
-            '{schema:1,candidate_sha:$candidate_sha,run_id:$run_id,run_attempt:$run_attempt,runner_attempt:$runner_attempt,run_acceptance:$run_acceptance}' \
+            --arg deployed_sha "$deployed_sha" \
+            '{schema:1,candidate_sha:$candidate_sha,run_id:$run_id,run_attempt:$run_attempt,runner_attempt:$runner_attempt,run_acceptance:$run_acceptance,deployed_sha:$deployed_sha}' \
             > "$marker"
-          jq -e --arg sha "$CANDIDATE_SHA" '.schema == 1 and .candidate_sha == $sha' "$marker" >/dev/null
+          jq -e --arg sha "$CANDIDATE_SHA" '.schema == 1 and .candidate_sha == $sha and .deployed_sha == $sha' "$marker" >/dev/null
           echo "STAGING_COMPLETION_MARKER=$marker" >> "$GITHUB_ENV"
 
       - name: Upload fresh-runner completion marker

@@ -70,11 +70,11 @@ concurrency:
 env:
   PROD_ROOT: /home/customer/www/nuvanx.com/public_html
   PROD_PARENT: /home/customer/www/nuvanx.com
-  PROD_DB_NAME: db0ecrycwv2tgb
+  PROD_DB_NAME: ${{ secrets.PROD_DB_NAME }}
   BASE_URL: https://nuvanx.com
   EXPECTED_HOST: nuvanx.com
   SEARCH_CONSOLE_PROPERTY: https://nuvanx.com/
-  INDEXNOW_KEY: 53546cf8077aa596b76aac664739bbb4
+  INDEXNOW_KEY: ${{ vars.INDEXNOW_KEY }}
   STAGING_ACCEPTANCE_BRANCH: master
   STAGING_ACCEPTANCE_WORKFLOW_PATH: .github/workflows/staging.yml
   SSH_RETRY_ATTEMPTS: 5
@@ -754,14 +754,32 @@ jobs:
             [faciales]='https://nuvanx.com/medicina-estetica/'
             [valoracion]='https://nuvanx.com/madrid/valoracion/'
           )
-          printf 'page\tmode\tperformance\tfcp_ms\tlcp_ms\ttbt_ms\tcls\tspeed_index_ms\tttfb_ms\n' > perf-results/summary.tsv
+          printf 'page\tmode\tperformance\tfcp_ms\tlcp_ms\ttbt_ms\tcls\tspeed_index_ms\tttfb_ms\tantibot_detected\n' > perf-results/summary.tsv
           printf 'page\tmode\treason\n' > perf-results/failures.tsv
           matrix_failures=0
           for page in home endolift endolaser faciales valoracion; do
             for mode in mobile desktop; do
               out="perf-results/${page}-${mode}.json"; extra=(); [[ "$mode" != desktop ]] || extra+=(--preset=desktop)
               success=0
+              antibot_detected=0
               for attempt in 1 2 3; do
+                # Check for SiteGround Anti-Bot before Lighthouse run
+                antibot_check="$RUNNER_TEMP/antibot-${page}-${mode}-${attempt}.txt"
+                set +e
+                curl -sS -D "$antibot_check.headers" -o "$antibot_check.body" "${URLS[$page]}" 2>/dev/null
+                curl_rc=$?
+                set -e
+                if (( curl_rc == 0 )); then
+                  http_code=$(awk '/^HTTP/{print $2}' "$antibot_check.headers" 2>/dev/null || echo "000")
+                  sg_captcha=$(awk 'BEGIN{IGNORECASE=1} /^sg-captcha:/{print $2; exit}' "$antibot_check.headers" 2>/dev/null | tr -d '\r')
+                  if [[ "$http_code" == '202' ]] || [[ "${sg_captcha,,}" == 'challenge' ]]; then
+                    antibot_detected=1
+                    echo "ANTIBOT_DETECTED page=$page mode=$mode attempt=$attempt http=$http_code sg-captcha=${sg_captcha:-none}" >&2
+                    sleep 30
+                    continue
+                  fi
+                fi
+                
                 if "$LH" "${URLS[$page]}" --output=json --output-path="$out" --only-categories=performance --quiet --chrome-flags='--headless --disable-dev-shm-usage' "${extra[@]}"; then success=1; break; fi
                 sleep $((attempt * 5))
               done
@@ -783,7 +801,7 @@ jobs:
                 matrix_failures=$((matrix_failures + 1))
                 continue
               fi
-              jq -r --arg p "$page" --arg m "$mode" '[$p,$m,((.categories.performance.score)*100|round),(.audits["first-contentful-paint"].numericValue|round),(.audits["largest-contentful-paint"].numericValue|round),(.audits["total-blocking-time"].numericValue|round),(.audits["cumulative-layout-shift"].numericValue),(.audits["speed-index"].numericValue|round),(.audits["server-response-time"].numericValue|round)]|@tsv' "$out" >> perf-results/summary.tsv
+              jq -r --arg p "$page" --arg m "$mode" --arg a "$antibot_detected" '[$p,$m,((.categories.performance.score)*100|round),(.audits["first-contentful-paint"].numericValue|round),(.audits["largest-contentful-paint"].numericValue|round),(.audits["total-blocking-time"].numericValue|round),(.audits["cumulative-layout-shift"].numericValue),(.audits["speed-index"].numericValue|round),(.audits["server-response-time"].numericValue|round),$a]|@tsv' "$out" >> perf-results/summary.tsv
             done
           done
           cat perf-results/summary.tsv
