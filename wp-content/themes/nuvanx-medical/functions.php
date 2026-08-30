@@ -304,6 +304,7 @@ require_once get_template_directory() . '/inc/nvx-retired-strategy-redirects.php
 require_once get_template_directory() . '/inc/nvx-integrations.php';
 require_once get_template_directory() . '/inc/nvx-gtm-integration.php';
 require_once get_template_directory() . '/inc/nvx-complianz-policy-routing.php';
+require_once get_template_directory() . '/inc/performance/nuvanx-performance.php';
 
 // 2. Data & SEO Governance
 require_once get_template_directory() . '/inc/nvx-catalog-json.php';
