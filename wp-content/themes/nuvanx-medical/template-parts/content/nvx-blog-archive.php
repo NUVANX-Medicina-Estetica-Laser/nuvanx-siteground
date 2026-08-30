@@ -8,6 +8,106 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Resolve Journal card media fail-closed.
+ *
+ * A post may use its own valid featured image or one positively matched clinical
+ * theme asset. Bridal campaign imagery is deliberately excluded from Journal
+ * fallback media. Unmatched articles render as editorial text cards rather than
+ * borrowing an unrelated photograph.
+ *
+ * @param array{priority?:bool,sizes?:string,reset_used?:bool} $args Image flags.
+ */
+function nvx_blog_archive_semantic_image( array $args = array() ): string {
+	static $used = array();
+
+	if ( ! empty( $args['reset_used'] ) ) {
+		$used = array();
+		return '';
+	}
+
+	$priority = ! empty( $args['priority'] );
+	$sizes    = isset( $args['sizes'] ) ? (string) $args['sizes'] : '(min-width: 1024px) 33vw, (min-width: 641px) 50vw, 100vw';
+
+	if ( has_post_thumbnail() ) {
+		$thumb_id = (int) get_post_thumbnail_id();
+		$alt      = trim( (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true ) );
+		$attr     = array(
+			'class'    => 'nvx-blog-card__image',
+			'loading'  => $priority ? 'eager' : 'lazy',
+			'decoding' => 'async',
+			'alt'      => $alt,
+			'sizes'    => $sizes,
+		);
+		if ( $priority ) {
+			$attr['fetchpriority'] = 'high';
+		}
+
+		$html = get_the_post_thumbnail( null, 'large', $attr );
+		if ( is_string( $html ) && '' !== $html
+			&& 1 !== preg_match( '/logo-nuvanx|nuvanx-web\.webp|\/logo[-_]|nvx-logo|site-logo|custom-logo/iu', $html )
+			&& ( ! function_exists( 'nvx_public_html_is_vendor_image' ) || ! nvx_public_html_is_vendor_image( $html ) )
+		) {
+			return $html;
+		}
+	}
+
+	if ( ! function_exists( 'nvx_blog_named_image_catalog' ) || ! function_exists( 'nvx_blog_named_image_html' ) ) {
+		return '';
+	}
+
+	$parts = array( (string) get_the_title(), (string) get_post_field( 'post_name', get_the_ID() ) );
+	foreach ( get_the_category() as $category ) {
+		if ( $category instanceof WP_Term ) {
+			$parts[] = $category->name;
+			$parts[] = $category->slug;
+		}
+	}
+
+	$lower = static function ( string $value ): string {
+		return function_exists( 'mb_strtolower' ) ? mb_strtolower( $value, 'UTF-8' ) : strtolower( $value );
+	};
+	$haystack   = strtr( $lower( implode( ' ', $parts ) ), array( '-' => ' ', '_' => ' ', '/' => ' ' ) );
+	$best       = null;
+	$best_score = 0;
+
+	foreach ( nvx_blog_named_image_catalog() as $asset ) {
+		if ( ! is_array( $asset ) ) {
+			continue;
+		}
+		$id = (string) ( $asset['id'] ?? '' );
+		if ( '' === $id || 0 === strpos( $id, 'novias-' ) || isset( $used[ $id ] ) ) {
+			continue;
+		}
+
+		$score = 0;
+		foreach ( (array) ( $asset['keys'] ?? array() ) as $key ) {
+			$key = trim( (string) $key );
+			if ( '' !== $key && false !== strpos( $haystack, $lower( $key ) ) ) {
+				++$score;
+			}
+		}
+
+		if ( $score > $best_score ) {
+			$best       = $asset;
+			$best_score = $score;
+		}
+	}
+
+	if ( ! is_array( $best ) || $best_score < 1 ) {
+		return '';
+	}
+
+	$used[ (string) $best['id'] ] = true;
+	return nvx_blog_named_image_html(
+		$best,
+		array(
+			'priority' => $priority,
+			'sizes'    => $sizes,
+		)
+	);
+}
+
 $eyebrow = __( 'NUVANX Journal', 'nuvanx-medical' );
 $title   = __( 'Medicina estética con criterio', 'nuvanx-medical' );
 $lead    = __( 'Análisis médicos sobre tecnología láser, calidad de piel, well-aging, seguridad y decisiones terapéuticas en Madrid.', 'nuvanx-medical' );
@@ -61,9 +161,7 @@ $topics = get_categories(
 			<?php if ( have_posts() ) : ?>
 				<div class="nvx-blog-grid">
 					<?php
-					if ( function_exists( 'nvx_blog_reset_used_images' ) ) {
-						nvx_blog_reset_used_images();
-					}
+					nvx_blog_archive_semantic_image( array( 'reset_used' => true ) );
 					$nvx_editorial_index = 0;
 					while ( have_posts() ) :
 						the_post();
@@ -73,8 +171,8 @@ $topics = get_categories(
 						$sizes      = 5 === $slot
 							? '(min-width: 768px) 40vw, 100vw'
 							: '(min-width: 1024px) 33vw, (min-width: 641px) 50vw, 100vw';
-						$image      = ( 4 !== $slot && function_exists( 'nvx_blog_archive_card_image' ) )
-							? nvx_blog_archive_card_image(
+						$image      = 4 !== $slot
+							? nvx_blog_archive_semantic_image(
 								array(
 									'priority' => 0 === $nvx_editorial_index,
 									'sizes'    => $sizes,
@@ -92,15 +190,15 @@ $topics = get_categories(
 						if ( ! $has_media ) {
 							$classes[] = 'nvx-blog-card--no-media';
 						}
-						$permalink  = get_permalink();
-						$title_attr = the_title_attribute( array( 'echo' => false ) );
-						$excerpt    = wp_trim_words( get_the_excerpt(), 'horizontal' === $format ? 30 : 22, '…' );
-						$reading    = function_exists( 'nvx_reading_time' ) ? nvx_reading_time() : '';
+						$permalink   = get_permalink();
+						$title_attr  = the_title_attribute( array( 'echo' => false ) );
+						$excerpt     = wp_trim_words( get_the_excerpt(), 'horizontal' === $format ? 30 : 22, '…' );
+						$reading     = function_exists( 'nvx_reading_time' ) ? nvx_reading_time() : '';
 						$index_label = str_pad( (string) ( $nvx_editorial_index + 1 ), 2, '0', STR_PAD_LEFT );
 						?>
 						<article id="post-<?php the_ID(); ?>" <?php post_class( $classes ); ?>>
 							<?php if ( in_array( $format, array( 'hero', 'horizontal' ), true ) && $has_media ) : ?>
-								<div class="nvx-blog-card__media" aria-hidden="true"><?php echo $image; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- WP thumbnail HTML. ?></div>
+								<div class="nvx-blog-card__media" aria-hidden="true"><?php echo $image; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- WP thumbnail/theme image HTML. ?></div>
 								<div class="nvx-blog-card__content">
 									<?php if ( $primary instanceof WP_Term ) : ?>
 										<span class="nvx-blog-card__category"><a href="<?php echo esc_url( get_category_link( $primary->term_id ) ); ?>"><?php echo esc_html( $primary->name ); ?></a></span>
@@ -117,7 +215,7 @@ $topics = get_categories(
 								</div>
 							<?php else : ?>
 								<?php if ( $has_media && 'vertical' === $format ) : ?>
-									<div class="nvx-blog-card__media" aria-hidden="true"><?php echo $image; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- WP thumbnail HTML. ?></div>
+									<div class="nvx-blog-card__media" aria-hidden="true"><?php echo $image; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- WP thumbnail/theme image HTML. ?></div>
 								<?php endif; ?>
 								<div class="nvx-blog-card__content">
 									<?php if ( 'text' === $format ) : ?>
