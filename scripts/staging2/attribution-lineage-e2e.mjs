@@ -150,10 +150,28 @@ try {
   assert.equal(modalState.env, 'staging2');
   assert.equal(String(modalState.qa?.test_run_id || ''), String(managedState.qa.test_run_id));
 
-  await page.evaluate(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 250));
+  await page.evaluate(() => {
     document.dispatchEvent(new Event('wp_listen_for_consent_change'));
   });
+
+  const directStateReady = await page.waitForFunction(
+    ({ expectedLeadId, expectedGclid }) => {
+      const form = document.querySelector('[data-nvx-direct-form]');
+      if (!form) return false;
+      const leadId = String(form.querySelector('[name="nvx_lead_id"]')?.value || '').toLowerCase();
+      const marketing = String(form.querySelector('[name="nvx_marketing_consent"]')?.value || '');
+      const gclidVal = String(form.querySelector('[name="gclid"]')?.value || '');
+      const utmSource = String(form.querySelector('[name="utm_source"]')?.value || '');
+      return leadId === expectedLeadId && marketing === '1' && gclidVal === expectedGclid && utmSource === 'google';
+    },
+    { expectedLeadId: managedState.leadId, expectedGclid: gclid },
+    { timeout: 10_000 }
+  ).catch(() => null);
+
+  assert.ok(
+    directStateReady,
+    'CANDIDATE_REGRESSION: First-party fallback form did not synchronize attribution fields within deadline'
+  );
 
   const directState = await page.evaluate(() => {
     const form = document.querySelector('[data-nvx-direct-form]');
