@@ -1,0 +1,126 @@
+{
+  "timestamp": "2026-08-30T22:11:50.197Z",
+  "totalUrls": 76,
+  "indexNow": [
+    {
+      "hub": "IndexNow Central",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "hub": "Microsoft Bing",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "hub": "Yandex Webmaster",
+      "status": 202,
+      "ok": true
+    },
+    {
+      "hub": "Seznam Search",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "hub": "Naver Search",
+      "error": "fetch failed",
+      "ok": false
+    }
+  ],
+  "sitemapPings": [
+    {
+      "sitemap": "https://nuvanx.com/sitemap.xml",
+      "engine": "Bing Sitemaps Ping",
+      "status": 410
+    },
+    {
+      "sitemap": "https://nuvanx.com/sitemap.xml",
+      "engine": "Google Sitemaps Ping",
+      "status": 404
+    },
+    {
+      "sitemap": "https://nuvanx.com/sitemap.xml",
+      "engine": "Yandex Sitemaps Ping",
+      "status": 200
+    },
+    {
+      "sitemap": "https://nuvanx.com/page-sitemap.xml",
+      "engine": "Bing Sitemaps Ping",
+      "status": 410
+    },
+    {
+      "sitemap": "https://nuvanx.com/page-sitemap.xml",
+      "engine": "Google Sitemaps Ping",
+      "status": 404
+    },
+    {
+      "sitemap": "https://nuvanx.com/page-sitemap.xml",
+      "engine": "Yandex Sitemaps Ping",
+      "status": 200
+    },
+    {
+      "sitemap": "https://nuvanx.com/post-sitemap.xml",
+      "engine": "Bing Sitemaps Ping",
+      "status": 410
+    },
+    {
+      "sitemap": "https://nuvanx.com/post-sitemap.xml",
+      "engine": "Google Sitemaps Ping",
+      "status": 404
+    },
+    {
+      "sitemap": "https://nuvanx.com/post-sitemap.xml",
+      "engine": "Yandex Sitemaps Ping",
+      "status": 200
+    }
+  ],
+  "botsWarmup": [
+    {
+      "bot": "Googlebot Mobile",
+      "crawled": 0,
+      "total": 76
+    },
+    {
+      "bot": "Googlebot Desktop",
+      "crawled": 76,
+      "total": 76
+    },
+    {
+      "bot": "Bingbot",
+      "crawled": 76,
+      "total": 76
+    },
+    {
+      "bot": "OpenAI SearchBot (ChatGPT)",
+      "crawled": 76,
+      "total": 76
+    },
+    {
+      "bot": "Anthropic ClaudeBot",
+      "crawled": 76,
+      "total": 76
+    },
+    {
+      "bot": "PerplexityBot (Perplexity AI)",
+      "crawled": 76,
+      "total": 76
+    },
+    {
+      "bot": "Applebot (Apple Search & Siri)",
+      "crawled": 76,
+      "total": 76
+    },
+    {
+      "bot": "Meta WhatsApp/IG (facebookexternalhit)",
+      "crawled": 19,
+      "total": 76
+    },
+    {
+      "bot": "LinkedInBot",
+      "crawled": 0,
+      "total": 76
+    }
+  ],
+  "durationSeconds": 74.1
+}
