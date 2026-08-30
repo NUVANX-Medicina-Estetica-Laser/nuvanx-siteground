@@ -12,7 +12,7 @@
     "lint:routes": "node scripts/lint/validate-routes-schema.mjs",
     "lint:contrast": "node scripts/lint/test-hero-wcag-contrast.mjs",
     "lint:complianz": "node scripts/lint/test-complianz-a11y-sanitizer.mjs && node scripts/lint/test-complianz-policy-routing.mjs && php scripts/lint/test-complianz-policy-routing.php",
-    "lint:schema": "node scripts/lint/test-schema-semantic-contract.mjs && php scripts/lint/test-robots-txt-governance.php && php scripts/lint/test-treatment-faqpage-contract.php",
+    "lint:schema": "node scripts/lint/test-schema-semantic-contract.mjs && php scripts/lint/test-robots-txt-governance.php && php scripts/lint/test-treatment-faqpage-contract.php && php scripts/lint/test-cases-publication-policy.php",
     "lint:endolaser-approval": "node scripts/lint/test-endolaser-claim-approval.mjs",
     "lint:clinical-evidence": "node scripts/lint/test-clinical-evidence-contract.mjs",
     "lint:clinics-hub-equipment": "node scripts/lint/test-clinics-hub-equipment-contract.mjs",
