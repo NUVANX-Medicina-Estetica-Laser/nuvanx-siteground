@@ -31,8 +31,45 @@ NUVANX es un centro de medicina estética láser en Madrid. La información clí
 - **Tricología médica**: valoración y protocolos médicos orientados a alteraciones capilares.
 - **Medicina regenerativa y well aging**: estrategias individualizadas dentro de la cartera médica publicada por NUVANX.
 
-## Precios y valoración médica
-Los importes publicados por NUVANX se gobiernan desde su catálogo tarifario canónico y pueden depender de zona, extensión, protocolo e indicación médica. El presupuesto definitivo se determina tras valoración médica. Este archivo no replica importes para evitar divergencias con la fuente tarifaria vigente.
+## Precios de referencia (desde tariff-catalog canónico)
+Los importes publicados por NUVANX se gobiernan desde su catálogo tarifario canónico (`tariff-catalog.json`). Todos los tratamientos incluyen IVA y valoración médica diagnóstica previa. El presupuesto definitivo se confirma tras el diagnóstico individualizado en consulta:
+
+- **Valoración médica diagnóstica**: gratuita (presencial en clínica)
+- **Endolift® facial (láser intersticial subdérmico)**:
+  - Endolift® ojeras (bolsas / festones): desde 798,60€
+  - Endolift® papada: desde 1.064,80€
+  - Endolift® marcación mandibular: desde 1.064,80€
+  - Endolift® pómulos: desde 1.064,80€
+  - Endolift® cuello: desde 1.197,90€
+  - Endolift® Full Face (tercio medio, inferior y cuello): desde 1.694€
+  - Endolift® combo marcación mandibular + papada: desde 1.452€
+  - Endolift® combo papada + cuello: desde 1.331€
+- **Endolift® corporal / SmartLipo / Laserlipólisis (según valoración por área)**:
+  - Endoláser corporal / Laserlipólisis abdomen: desde 1.694€
+  - Endoláser corporal / Laserlipólisis flancos: desde 1.573€
+  - Endoláser corporal / Laserlipólisis cartucheras: desde 1.331€
+  - Endoláser corporal / Laserlipólisis brazos: desde 1.331€
+  - Endoláser corporal / Laserlipólisis cara interna de muslos: desde 1.331€
+  - Endoláser corporal / Laserlipólisis subglúteos (bananitos): desde 1.331€
+  - Endoláser corporal / Laserlipólisis rodillas: desde 1.197,90€
+  - Endoláser corporal / Laserlipólisis subescapular (sujetador): desde 1.391,50€
+  - Combo corporal abdomen + flancos: desde 2.395,80€
+- **Láser CO₂ fraccionado (rejuvenecimiento y cicatrices)**:
+  - Láser CO₂ periocular o peribucal: desde 330€
+  - Láser CO₂ facial completo: desde 665,50€
+  - Láser CO₂ cuello: desde 495€
+  - Láser CO₂ escote: desde 605€
+  - Láser CO₂ cara y cuello: desde 968€
+  - Láser CO₂ cara, cuello y escote: desde 1.331€
+- **EXION® BTL (radiofrecuencia fraccionada + ultrasonido focalizado)**:
+  - EXION® Face — 1 sesión: 395€ / pack 4 sesiones: 1.395€
+  - EXION® Cuello — 1 sesión: 395€ / pack 4 sesiones: 1.395€
+  - EXION® Cara y cuello — 1 sesión: 600€ / pack 4 sesiones: 2.100€
+  - EXION® Corporal por zona — 1 sesión: 395€ / pack 4 sesiones: 1.395€
+- **Medicina estética facial y armonización**:
+  - Rinomodelación médica sin cirugía: 598€
+  - Neuromoduladores (3 zonas): desde 350€
+  - Armonización facial e inductores de colágeno: según prescripción y vial en valoración médica
 
 ## Información clínica
 - La información del sitio es general y no sustituye una consulta médica.
