@@ -1036,6 +1036,67 @@ function nvx_inject_clinical_authority_byline( string $content ): string {
 add_filter( 'the_content', 'nvx_inject_clinical_authority_byline', NVX_HOOK_PRIO_MEDICAL_REVIEW + 1 );
 
 /**
+ * Injects physician portrait authority card and clinical cases preview onto core treatment landing pages.
+ */
+function nvx_inject_treatment_authority_and_cases( string $content ): string {
+	if ( is_admin() || wp_doing_ajax() || is_feed() || ( ! is_singular( 'page' ) && ! is_page() ) ) {
+		return $content;
+	}
+
+	$path = function_exists( 'nvx_schema_current_path' )
+		? nvx_schema_current_path( (int) get_queried_object_id() )
+		: '';
+
+	if ( ! is_string( $path ) ) {
+		return $content;
+	}
+
+	// 1. Endoláser Corporal
+	if ( false !== strpos( $path, 'endolaser-corporal' ) ) {
+		$extra = '';
+		if ( false === strpos( $content, 'nvx-treatment-cases' ) && function_exists( 'nvx_treatment_cases_preview_markup' ) ) {
+			$extra .= nvx_treatment_cases_preview_markup(
+				array( 'caso-03-abdomen-firmeza', 'caso-04-flancos-contorno', 'caso-05-brazos-firmeza' ),
+				__( 'Evidencia Gráfica Documentada', 'nuvanx-medical' ),
+				__( 'Casos Clínicos de Endoláser Corporal', 'nuvanx-medical' )
+			);
+		}
+		if ( false === strpos( $content, 'nvx-treatment-physician' ) && function_exists( 'nvx_treatment_physician_author_markup' ) ) {
+			$extra .= nvx_treatment_physician_author_markup( 'Endoláser Corporal' );
+		}
+
+		if ( '' !== $extra ) {
+			if ( preg_match( '/(<section\b[^>]*\bnvx-endolaser-faq\b[^>]*>)/iu', $content, $matches, PREG_OFFSET_CAPTURE ) ) {
+				$offset  = (int) $matches[0][1];
+				$content = substr( $content, 0, $offset ) . $extra . substr( $content, $offset );
+			} else {
+				$content .= $extra;
+			}
+		}
+	}
+
+	// 2. Láser CO₂ Fraccionado
+	if ( false !== strpos( $path, 'laser-co2-fraccionado' ) || false !== strpos( $path, 'resurfacing-laser-co2' ) ) {
+		if ( false === strpos( $content, 'nvx-treatment-physician' ) && function_exists( 'nvx_treatment_physician_author_markup' ) ) {
+			$extra = nvx_treatment_physician_author_markup( 'Láser CO₂ Fraccionado' );
+			if ( preg_match( '/(<section\b[^>]*\bnvx-co2-faq\b[^>]*>)/iu', $content, $matches, PREG_OFFSET_CAPTURE ) ) {
+				$offset  = (int) $matches[0][1];
+				$content = substr( $content, 0, $offset ) . $extra . substr( $content, $offset );
+			} elseif ( preg_match( '/(<div\b[^>]*\bnvx-faq\b[^>]*>)/iu', $content, $matches, PREG_OFFSET_CAPTURE ) ) {
+				$offset  = (int) $matches[0][1];
+				$content = substr( $content, 0, $offset ) . $extra . substr( $content, $offset );
+			} else {
+				$content .= $extra;
+			}
+		}
+	}
+
+	return $content;
+}
+add_filter( 'the_content', 'nvx_inject_treatment_authority_and_cases', NVX_HOOK_PRIO_MEDICAL_REVIEW + 2 );
+
+
+/**
  * Recovery table: moment / what to expect / return to activity.
  *
  * @param array<int,array{when?:string,expect?:string,activity?:string}> $rows
@@ -1138,6 +1199,137 @@ function nvx_faq_direct_answer_markup( array $faqs, string $list_class = '' ): s
 		$html .= '</div></details>';
 	}
 	$html .= '</div>';
+	return $html;
+}
+
+/**
+ * Renders the visible E-E-A-T Medical Director / Treating Physician authority card for treatment landing pages.
+ *
+ * @param string $treatment_context Optional treatment context name.
+ */
+function nvx_treatment_physician_author_markup( string $treatment_context = '' ): string {
+	$director_photo = get_template_directory_uri() . '/assets/images/team/nvx-dr-javier-rivera-director-medico.webp';
+	$colegiado      = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
+	$doctoralia     = function_exists( 'nvx_medical_staff_doctoralia_url' ) ? nvx_medical_staff_doctoralia_url( 'director' ) : '';
+	$equipo_url     = home_url( '/equipo-medico/#physician-rivera-tejeda' );
+
+	$html  = '<section class="nvx-brand-section nvx-treatment-physician" aria-labelledby="nvx-physician-title">';
+	$html .= '<div class="nvx-shell nvx-brand-section__inner">';
+	$html .= '<div class="nvx-treatment-physician__card" itemscope itemtype="https://schema.org/Physician">';
+	$html .= '<meta itemprop="url" content="' . esc_url( $equipo_url ) . '" />';
+	$html .= '<div class="nvx-treatment-physician__portrait">';
+	$html .= '<img src="' . esc_url( $director_photo ) . '" alt="' . esc_attr__( 'Dr. José Javier Rivera Tejeda — Director Médico NUVANX', 'nuvanx-medical' ) . '" class="nvx-treatment-physician__img" width="140" height="140" loading="lazy" decoding="async" itemprop="image" />';
+	$html .= '</div>';
+	$html .= '<div class="nvx-treatment-physician__info">';
+	$html .= '<div class="nvx-treatment-physician__kicker">' . esc_html__( 'Dirección Médica & Responsable Clínico', 'nuvanx-medical' ) . '</div>';
+	$html .= '<h3 id="nvx-physician-title" class="nvx-treatment-physician__name" itemprop="name">' . esc_html__( 'Dr. José Javier Rivera Tejeda', 'nuvanx-medical' ) . '</h3>';
+	$html .= '<div class="nvx-treatment-physician__role" itemprop="jobTitle">' . esc_html__( 'Director Médico · Especialista en Medicina Estética Láser Avanzada', 'nuvanx-medical' ) . '</div>';
+	$html .= '<div class="nvx-treatment-physician__meta">';
+	$html .= '<span class="nvx-treatment-physician__badge nvx-treatment-physician__badge--accent">' . esc_html__( 'Colegiado ICOMEM Nº ', 'nuvanx-medical' ) . esc_html( $colegiado ) . '</span>';
+	$html .= '<span class="nvx-treatment-physician__badge">' . esc_html__( 'Máster Medicina Estética UCM', 'nuvanx-medical' ) . '</span>';
+	$html .= '<span class="nvx-treatment-physician__badge">' . esc_html__( 'Máster Tricología AMIR', 'nuvanx-medical' ) . '</span>';
+	$html .= '<span class="nvx-treatment-physician__badge">' . esc_html__( '+17 años de práctica clínica', 'nuvanx-medical' ) . '</span>';
+	if ( '' !== $doctoralia ) {
+		$html .= '<a href="' . esc_url( $doctoralia ) . '" target="_blank" rel="noopener noreferrer" class="nvx-treatment-physician__badge nvx-text-link" itemprop="sameAs">' . esc_html__( 'Doctoralia (166 opiniones)', 'nuvanx-medical' ) . '</a>';
+	}
+	$html .= '</div>';
+	$html .= '<p class="nvx-treatment-physician__quote">«' . esc_html__( 'El diagnóstico tisular y la indicación anatómica mandan sobre la tecnología. Cada procedimiento en NUVANX es evaluado, planificado y ejecutado por médicos especialistas con tecnología médica certificada.', 'nuvanx-medical' ) . '»</p>';
+	$html .= '</div>';
+	$html .= '</div>';
+	$html .= '</div></section>';
+
+	return $html;
+}
+
+/**
+ * Renders a curated clinical cases preview gallery for treatment landing pages.
+ *
+ * @param array<int,string> $case_ids Array of case IDs to display.
+ * @param string            $kicker   Optional section kicker.
+ * @param string            $title    Optional section title.
+ */
+function nvx_treatment_cases_preview_markup( array $case_ids, string $kicker = '', string $title = '' ): string {
+	$cases_file = __DIR__ . '/data/patient-cases.json';
+	if ( ! file_exists( $cases_file ) ) {
+		return '';
+	}
+
+	$cases_data = json_decode( (string) file_get_contents( $cases_file ), true );
+	if ( ! is_array( $cases_data ) || empty( $cases_data['cases'] ) || ! is_array( $cases_data['cases'] ) ) {
+		return '';
+	}
+
+	$indexed_cases = array();
+	foreach ( $cases_data['cases'] as $c ) {
+		if ( ! empty( $c['id'] ) ) {
+			$indexed_cases[ $c['id'] ] = $c;
+		}
+	}
+
+	$matched_cases = array();
+	foreach ( $case_ids as $id ) {
+		if ( isset( $indexed_cases[ $id ] ) ) {
+			$matched_cases[] = $indexed_cases[ $id ];
+		}
+	}
+
+	if ( empty( $matched_cases ) ) {
+		return '';
+	}
+
+	$kicker = '' !== $kicker ? $kicker : __( 'Evidencia Gráfica Documentada', 'nuvanx-medical' );
+	$title  = '' !== $title ? $title : __( 'Resultados y Evolución Clínica en Consulta', 'nuvanx-medical' );
+	$hub_url = home_url( '/casos-de-pacientes/' );
+
+	$html  = '<section class="nvx-brand-section nvx-treatment-cases" aria-labelledby="nvx-cases-preview-title">';
+	$html .= '<div class="nvx-shell nvx-brand-section__inner">';
+	$html .= nvx_page_brand_section_heading_markup( esc_html( $kicker ), 'nvx-cases-preview-title', esc_html( $title ) );
+	$html .= '<p class="nvx-body nvx-body--measure">' . esc_html__( 'Registros fotográficos clínicos protocolizados bajo las mismas condiciones de luz y plano anatómico. Casos reales tratados por nuestro equipo médico con consentimiento informado documentado.', 'nuvanx-medical' ) . '</p>';
+
+	$html .= '<ul class="nvx-cases-grid" role="list">';
+	foreach ( $matched_cases as $case ) {
+		$before_src = ! empty( $case['image_before'] ) ? get_template_directory_uri() . '/' . ltrim( (string) $case['image_before'], '/' ) : '';
+		$after_src  = ! empty( $case['image_after'] ) ? get_template_directory_uri() . '/' . ltrim( (string) $case['image_after'], '/' ) : '';
+		$case_title = $case['title'] ?? __( 'Caso clínico documentado', 'nuvanx-medical' );
+
+		$html .= '<li class="nvx-case-card">';
+		$html .= '<div class="nvx-case-card__header">';
+		$html .= '<span class="nvx-case-card__badge">' . esc_html( $case['category_label'] ?? '' ) . '</span>';
+		$html .= '<h3 class="nvx-case-card__title">' . esc_html( $case_title ) . '</h3>';
+		$html .= '</div>';
+
+		if ( '' !== $before_src && '' !== $after_src ) {
+			$html .= '<div class="nvx-case-card__visual">';
+			$html .= '<div class="nvx-case-card__gallery">';
+			$html .= '<figure class="nvx-case-card__gallery-item">';
+			$html .= '<span class="nvx-case-card__gallery-label">' . esc_html__( 'Antes', 'nuvanx-medical' ) . '</span>';
+			$html .= '<img src="' . esc_url( $before_src ) . '" alt="' . esc_attr( $case_title . ' — Antes' ) . '" class="nvx-case-card__img" width="900" height="600" loading="lazy" decoding="async" />';
+			$html .= '</figure>';
+			$html .= '<figure class="nvx-case-card__gallery-item">';
+			$html .= '<span class="nvx-case-card__gallery-label">' . esc_html__( 'Después', 'nuvanx-medical' ) . '</span>';
+			$html .= '<img src="' . esc_url( $after_src ) . '" alt="' . esc_attr( $case_title . ' — Después' ) . '" class="nvx-case-card__img" width="900" height="600" loading="lazy" decoding="async" />';
+			$html .= '</figure>';
+			$html .= '</div>';
+			$html .= '<div class="nvx-case-card__visual-caption">';
+			$html .= '<span class="nvx-case-card__visual-badge">' . esc_html__( 'Seguimiento: ', 'nuvanx-medical' ) . esc_html( $case['followup'] ?? '' ) . '</span>';
+			$html .= '<span class="nvx-case-card__visual-consent">' . esc_html( $case['technique'] ?? '' ) . '</span>';
+			$html .= '</div>';
+			$html .= '</div>';
+		}
+
+		$html .= '<div class="nvx-case-card__notes-box">';
+		$html .= '<p class="nvx-case-card__notes-body">' . esc_html( $case['clinical_notes'] ?? '' ) . '</p>';
+		$html .= '</div>';
+		$html .= '</li>';
+	}
+	$html .= '</ul>';
+
+	$html .= '<div class="nvx-treatment-cases__cta">';
+	$html .= '<a href="' . esc_url( $hub_url ) . '" class="nvx-brand-btn nvx-btn--secondary">' . esc_html__( 'Ver galería completa de casos clínicos', 'nuvanx-medical' ) . '</a>';
+	$html .= '</div>';
+
+	$html .= '</div></section>';
+
 	return $html;
 }
 
