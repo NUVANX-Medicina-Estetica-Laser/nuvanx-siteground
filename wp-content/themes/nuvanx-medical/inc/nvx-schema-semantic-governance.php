@@ -276,10 +276,46 @@ function nvx_schema_semantic_normalize_graph( $graph ) {
 		return $graph;
 	}
 
-	$result = array();
+	$result             = array();
+	$valid_breadcrumbs = array();
+
 	foreach ( $graph as $node ) {
-		$result[] = is_array( $node ) ? nvx_schema_semantic_sanitize_value( $node ) : $node;
+		if ( ! is_array( $node ) ) {
+			continue;
+		}
+		$types = isset( $node['@type'] ) ? (array) $node['@type'] : array();
+		if ( in_array( 'BreadcrumbList', $types, true ) ) {
+			$id       = isset( $node['@id'] ) ? (string) $node['@id'] : '';
+			$elements = isset( $node['itemListElement'] ) && is_array( $node['itemListElement'] ) ? $node['itemListElement'] : array();
+			if ( '' !== $id && ! empty( $elements ) ) {
+				$valid_breadcrumbs[ $id ] = true;
+			}
+		}
 	}
+
+	foreach ( $graph as $node ) {
+		if ( ! is_array( $node ) ) {
+			$result[] = $node;
+			continue;
+		}
+
+		$types = isset( $node['@type'] ) ? (array) $node['@type'] : array();
+		if ( in_array( 'WebPage', $types, true ) || in_array( 'ItemPage', $types, true ) ) {
+			if ( isset( $node['breadcrumb'] ) ) {
+				$ref = is_array( $node['breadcrumb'] ) && isset( $node['breadcrumb']['@id'] )
+					? (string) $node['breadcrumb']['@id']
+					: ( is_string( $node['breadcrumb'] ) ? $node['breadcrumb'] : '' );
+
+				// Prune orphan or empty breadcrumb pointer so Google never flags missing itemListElement.
+				if ( '' === $ref || empty( $valid_breadcrumbs[ $ref ] ) ) {
+					unset( $node['breadcrumb'] );
+				}
+			}
+		}
+
+		$result[] = nvx_schema_semantic_sanitize_value( $node );
+	}
+
 	return array_values( $result );
 }
 add_filter( 'wpseo_schema_graph', 'nvx_schema_semantic_normalize_graph', PHP_INT_MAX - 2, 1 );

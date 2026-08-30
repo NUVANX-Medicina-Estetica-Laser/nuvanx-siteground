@@ -110,6 +110,28 @@ $graph = array(
 			'name'  => 'Any organization outside governed treatment nodes',
 		),
 	),
+	array(
+		'@type'      => 'WebPage',
+		'@id'        => 'https://example.test/orphan/#webpage',
+		'breadcrumb' => array( '@id' => 'https://example.test/orphan/#breadcrumb' ),
+	),
+	array(
+		'@type'      => 'WebPage',
+		'@id'        => 'https://example.test/valid/#webpage',
+		'breadcrumb' => array( '@id' => 'https://example.test/valid/#breadcrumb' ),
+	),
+	array(
+		'@type'           => 'BreadcrumbList',
+		'@id'             => 'https://example.test/valid/#breadcrumb',
+		'itemListElement' => array(
+			array(
+				'@type'    => 'ListItem',
+				'position' => 1,
+				'name'     => 'Inicio',
+				'item'     => 'https://example.test/',
+			),
+		),
+	),
 );
 
 $result = nvx_schema_semantic_normalize_graph( $graph );
@@ -129,6 +151,9 @@ nvx_test_assert( 'https://schema.org/NoninvasiveProcedure' === $result[5]['proce
 nvx_test_assert( ! isset( $result[6]['recognizingAuthority'] ), 'any recognizingAuthority value must be removed from Service' );
 nvx_test_assert( ! isset( $result[7]['recognizingAuthority'] ), 'AEMPS recognizingAuthority must be removed from MedicalProcedure' );
 nvx_test_assert( isset( $result[8]['recognizingAuthority'] ), 'recognizingAuthority outside governed MedicalProcedure and Service nodes must remain untouched' );
+nvx_test_assert( ! isset( $result[9]['breadcrumb'] ), 'orphan breadcrumb reference on WebPage must be pruned' );
+nvx_test_assert( isset( $result[10]['breadcrumb'] ), 'valid breadcrumb reference on WebPage with matching BreadcrumbList must survive' );
+nvx_test_assert( isset( $result[11]['itemListElement'] ), 'valid BreadcrumbList with items must survive' );
 
 $endolift_source_file = $repo_root . '/wp-content/themes/nuvanx-medical/inc/nvx-endolift-page.php';
 $endolift_source      = is_file( $endolift_source_file ) ? (string) file_get_contents( $endolift_source_file ) : '';
