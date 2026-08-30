@@ -134,17 +134,18 @@ for (const route of routes) {
       redirect: 'follow',
       signal: AbortSignal.timeout(requestTimeoutMs),
       headers: {
-        'user-agent': 'NUVANX-Meta-No-Consent-Contract/1.0',
+        'user-agent': 'NUVANX-Meta-No-Consent-Contract/1.1',
         accept: 'text/html,application/xhtml+xml',
         'cache-control': 'no-cache',
         pragma: 'no-cache',
+        cookie: 'wpSGCacheBypass=1',
       },
     });
 
     if (isSiteGroundTransientResponse(response.status, Object.fromEntries(response.headers.entries()))) {
       transient = true;
       row.issues.push(`siteground_transient status=${response.status} sg-captcha=${response.headers.get('sg-captcha') || ''}`);
-      
+
       if (originFallbackAllowed) {
         try {
           const fallback = await fetchOriginAfterChallenge(url);
