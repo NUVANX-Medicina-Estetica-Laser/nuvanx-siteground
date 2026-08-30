@@ -165,31 +165,13 @@ function nvx_schema_faq_catalog() {
 		$catalog = array_merge( $catalog, $signature_faqs );
 	}
 
-	// Replace hardcoded Endolift® prices with dynamic tariff constants in FAQ answers
-	if ( ! empty( $catalog['endolift_facial'] ) && function_exists( 'nvx_endolift_price_from_eur' ) && function_exists( 'nvx_endolift_price_papada_eur' ) ) {
-		$from   = function_exists( 'nvx_format_price_eur' ) ? nvx_format_price_eur( nvx_endolift_price_from_eur() ) : number_format_i18n( nvx_endolift_price_from_eur(), 2 );
-		$papada = function_exists( 'nvx_format_price_eur' ) ? nvx_format_price_eur( nvx_endolift_price_papada_eur() ) : number_format_i18n( nvx_endolift_price_papada_eur(), 2 );
-		foreach ( $catalog['endolift_facial'] as &$faq ) {
-			// Three format guards: comma-decimal (es_ES locale), dot-decimal (neutral/en),
-			// and short form without cents — all silently fail if the FAQ text uses a different format.
-			// Deuda conocida: el mecanismo es frágil ante edición manual. Issue SCHEMA-001.
-			$faq['a'] = str_replace( '798 €', $from . ' €', $faq['a'] );
-			$faq['a'] = str_replace( '798,60 €', $from . ' €', $faq['a'] );
-			$faq['a'] = str_replace( '798.60 €', $from . ' €', $faq['a'] );
-			$faq['a'] = str_replace( '1.064,80 €', $papada . ' €', $faq['a'] );
-			$faq['a'] = str_replace( '1064.80 €', $papada . ' €', $faq['a'] );
-		}
-		unset( $faq );
-	}
-
-
 	if ( empty( $catalog['endolift_facial'] ) ) {
-		$from                       = nvx_format_price_eur( nvx_endolift_price_from_eur() );
-		$papada                     = nvx_format_price_eur( nvx_endolift_price_papada_eur() );
+		$from                       = function_exists( 'nvx_format_price_eur' ) && function_exists( 'nvx_endolift_price_from_eur' ) ? nvx_format_price_eur( nvx_endolift_price_from_eur() ) : '798,60';
+		$papada                     = function_exists( 'nvx_format_price_eur' ) && function_exists( 'nvx_endolift_price_papada_eur' ) ? nvx_format_price_eur( nvx_endolift_price_papada_eur() ) : '1.064,80';
 		$catalog['endolift_facial'] = array(
 			array(
 				'q' => '¿Cuánto cuesta el Endolift® facial en NUVANX Madrid?',
-				'a' => 'PVP con IVA incluido desde ' . $from . ' € (ojeras). Papada y marcación mandibular: ' . $papada . ' € cada una. Full Face y combos en la tabla de tarifas de la página. El presupuesto se cierra tras valoración anatómica presencial.',
+				'a' => 'La tarifa de referencia parte desde ' . $from . ' € (ojeras). Papada y marcación mandibular: ' . $papada . ' € cada una. El presupuesto definitivo se documenta tras valoración anatómica presencial.',
 			),
 			array(
 				'q' => '¿Endolift® es para cualquier papada o flacidez?',

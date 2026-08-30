@@ -27,13 +27,8 @@ function is_front_page(): bool {
 function get_queried_object_id(): int {
 	return 2017; // mock
 }
-function nvx_catalog_json_resolved( string $file ): array {
-	$path = dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/data/' . $file;
-	if ( ! file_exists( $path ) ) {
-		return array();
-	}
-	$decoded = json_decode( (string) file_get_contents( $path ), true );
-	return is_array( $decoded ) ? $decoded : array();
+function __( string $text, string $domain = 'default' ): string {
+	return $text;
 }
 function nvx_format_price_eur( float $price ): string {
 	return number_format( $price, 2, ',', '.' );
@@ -41,10 +36,13 @@ function nvx_format_price_eur( float $price ): string {
 function nvx_endolift_price_from_eur(): float {
 	return 798.60;
 }
-function nvx_endolift_price_papada_eur(): float {
-	return 1064.80;
-}
+function add_action( ...$args ): bool { unset( $args ); return true; }
+function add_filter( ...$args ): bool { unset( $args ); return true; }
+function esc_html( string $text = '' ): string { return $text; }
+function esc_attr( string $text = '' ): string { return $text; }
+function esc_url( string $url = '' ): string { return $url; }
 
+require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php';
 require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-schema-faq.php';
 
 $catalog = nvx_schema_faq_catalog();
@@ -77,6 +75,11 @@ foreach ( $required_keys as $key ) {
 $endolift_faqs = json_encode( $catalog['endolift_facial'], JSON_UNESCAPED_UNICODE );
 if ( ! str_contains( $endolift_faqs, 'cuánto cuesta' ) && ! str_contains( $endolift_faqs, 'Cuánto cuesta' ) ) {
 	fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL Endolift missing pricing question\n" );
+	exit( 1 );
+}
+
+if ( ! str_contains( $endolift_faqs, '798,60 €' ) || ! str_contains( $endolift_faqs, '1.064,80 €' ) ) {
+	fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL Endolift pricing FAQ not synchronized with tariff catalog\n" );
 	exit( 1 );
 }
 

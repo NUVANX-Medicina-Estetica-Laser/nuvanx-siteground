@@ -126,6 +126,10 @@ function nvx_catalog_governance_config(): array {
 	}
 
 	$config = array(
+		'endolift' => array(
+			'price_faq_index' => 0,
+			'investment_key'  => 'investment',
+		),
 		'exion' => array(
 			'price_faq_index' => 0,
 			'investment_key'  => 'investment',
@@ -178,6 +182,44 @@ function nvx_catalog_tariff_display_price( array $tariffs, string $group, string
  */
 function nvx_catalog_apply_tariff_truth( array $catalog, string $safe_name, ?array $config = null ): array {
 	$config = $config ?? nvx_catalog_governance_config();
+
+	if ( 'endolift-page.json' === $safe_name ) {
+		$tariffs = nvx_catalog_json_load( 'tariff-catalog.json' );
+		if ( ! empty( $tariffs['_error'] ) ) {
+			nvx_catalog_log_error( 'Unable to hydrate Endolift® prices: tariff-catalog.json is unavailable.' );
+			return $catalog;
+		}
+
+		$ojeras    = nvx_catalog_tariff_display_price( $tariffs, 'Endolift®', 'ojeras' );
+		$papada    = nvx_catalog_tariff_display_price( $tariffs, 'Endolift®', 'papada' );
+		$cuello    = nvx_catalog_tariff_display_price( $tariffs, 'Endolift®', 'cuello' );
+		$combo     = nvx_catalog_tariff_display_price( $tariffs, 'endolift_combo', 'papada_cuello' );
+		$full_face = nvx_catalog_tariff_display_price( $tariffs, 'endolift_combo', 'full_face' );
+
+		$inv_key = $config['endolift']['investment_key'] ?? 'investment';
+		if ( isset( $catalog[ $inv_key ]['body'] ) && '' !== $ojeras && '' !== $papada ) {
+			$catalog[ $inv_key ]['body'] = sprintf(
+				/* translators: 1: ojeras price, 2: papada price, 3: cuello price, 4: combo price, 5: full face price */
+				__( 'El plan y presupuesto de Endolift® se determinan tras la valoración médica presencial en Chamberí o Salamanca–Goya. Tarifas de referencia: desde %1$s (ojeras), %2$s (papada o marcación mandibular cada una), %3$s (cuello). Combos frecuentes como papada+cuello (%4$s) o full face (%5$s) se valoran según indicación. El presupuesto definitivo se documenta tras valoración anatómica presencial. El procedimiento se realiza en 1 sola sesión en la mayoría de indicaciones, con control evolutivo a los 3 y 6 meses. Cada tratamiento incluye:', 'nuvanx-medical' ),
+				$ojeras,
+				$papada,
+				$cuello,
+				$combo,
+				$full_face
+			);
+		}
+
+		// The Endolift® catalog schema reserves FAQ item 0 for the pricing question.
+		$faq_idx = $config['endolift']['price_faq_index'] ?? 0;
+		if ( isset( $catalog['faq']['items'][ $faq_idx ] ) && is_array( $catalog['faq']['items'][ $faq_idx ] ) && '' !== $ojeras && '' !== $papada ) {
+			$catalog['faq']['items'][ $faq_idx ]['a'] = sprintf(
+				/* translators: 1: ojeras price, 2: papada price */
+				__( 'La tarifa de referencia parte desde %1$s (ojeras). Papada y marcación mandibular: %2$s cada una. El presupuesto definitivo se documenta tras valoración anatómica presencial.', 'nuvanx-medical' ),
+				$ojeras,
+				$papada
+			);
+		}
+	}
 
 	if ( 'exion-page.json' === $safe_name ) {
 		$tariffs = nvx_catalog_json_load( 'tariff-catalog.json' );
