@@ -66,13 +66,19 @@ function embedResponseMatchesForm(entry, formId) {
 async function waitForHubSpotEmbedDefinition(entries, formId, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   let entry = null;
+  let lastMatchingEntry = null;
+
   while (Date.now() < deadline) {
-    entry = entries.find((candidate) => embedResponseMatchesForm(candidate, formId)) || null;
-    if (entry) break;
+    const matches = entries.filter((candidate) => embedResponseMatchesForm(candidate, formId));
+    if (matches.length > 0) {
+      lastMatchingEntry = matches.at(-1) || lastMatchingEntry;
+      entry = [...matches].reverse().find((candidate) => candidate.response.status() === 200) || null;
+      if (entry) break;
+    }
     await delay(100);
   }
 
-  if (!entry) {
+  if (!entry && !lastMatchingEntry) {
     const error = new Error(
       `HubSpot embed definition response for form ${formId} was not captured before timeout`
     );
@@ -80,6 +86,7 @@ async function waitForHubSpotEmbedDefinition(entries, formId, timeoutMs = 15_000
     throw error;
   }
 
+  entry = entry || lastMatchingEntry;
   const status = entry.response.status();
   if (status === 429 || status >= 500) {
     throw new Error(`HubSpot embed definition temporarily unavailable status=${status}`);
