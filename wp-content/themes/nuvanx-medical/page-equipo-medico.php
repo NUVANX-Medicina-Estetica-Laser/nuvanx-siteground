@@ -146,16 +146,16 @@ get_header();
 	  <div class="doc" itemscope itemtype="https://schema.org/Person">
 	    <div class="doc-hero doc-hero--with-portrait">
 	      <div class="doc-portrait">
-	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/nvx-dra-paola-rivera-deras.webp' ); ?>" alt="<?php esc_attr_e( 'Dra. Ivon Yamileth Rivera Deras — Well-Aging y Geriatría Preventiva NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
+	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/nvx-dra-paola-rivera-deras.webp' ); ?>" alt="<?php esc_attr_e( 'Dra. Ivon Yamileth Rivera Deras — Geriatría y Medicina Familiar NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
 	      </div>
 	      <div class="doc-hero__info">
 	        <div class="doc-name" itemprop="name">Dra. Ivon Yamileth Rivera Deras</div>
-	        <div class="doc-title" itemprop="jobTitle">Well-aging &middot; Geriatría preventiva &middot; Longevidad &middot; Medicina funcional</div>
+	        <div class="doc-title" itemprop="jobTitle">Geriatría &middot; Medicina Familiar y Comunitaria &middot; Nutrición clínica &middot; Well-aging</div>
 	        <div class="doc-meta">
 	          <span class="doc-pill accent">ICOMEM <?php echo esc_html( nvx_medical_colegiado( 'ivon' ) ); ?></span>
-	          <span class="doc-pill">FEA Hospital Universitario La Paz</span>
-	          <span class="doc-pill">SEMEG &middot; EuGMS</span>
-	          <span class="doc-pill">OXON Epidemiology</span>
+	          <span class="doc-pill">Especialista MIR en Geriatría</span>
+	          <span class="doc-pill">Especialista MIR en Medicina Familiar y Comunitaria</span>
+	          <span class="doc-pill">Máster UCAM 2026&ndash;2027 en curso</span>
 	        </div>
 	      </div>
 	    </div>
@@ -163,19 +163,23 @@ get_header();
 	    <div class="doc-body">
 
 	      <div>
-	        <div class="section-label">Actividad asistencial hospitalaria</div>
+	        <div class="section-label">Actividad asistencial actual</div>
 	        <div class="timeline">
 	          <div class="tl-item">
-	            <div class="tl-year">Actual</div>
-	            <div class="tl-content">Médico adjunto (FEA), Hospital Universitario La Paz&ndash;Cantoblanco, Madrid<em>Unidad de Recuperación Funcional y Hospital de Día Geriátrico &middot; Concurso selectivo SERMAS</em></div>
+	            <div class="tl-year">10/2022 &rarr; act.</div>
+	            <div class="tl-content">Hospital Universitario Vithas Arturo Soria, Madrid<em>Servicio de Geriatría &middot; Urgencias y consulta de alta resolución</em></div>
 	          </div>
 	          <div class="tl-item">
-	            <div class="tl-year">Actual</div>
-	            <div class="tl-content">Cuadro médico, Hospital Central de la Cruz Roja San José y Santa Adela<em>Centro de referencia en neurorrehabilitación y atención al adulto mayor</em></div>
+	            <div class="tl-year">09/2025 &rarr; act.</div>
+	            <div class="tl-content">OXON Epidemiology<em>Medical Advisor y Medical Monitor &middot; asesoramiento científico-clínico, seguridad del paciente y supervisión médica de estudios</em></div>
 	          </div>
 	          <div class="tl-item">
-	            <div class="tl-year">Actual</div>
-	            <div class="tl-content">Profesora e investigadora, Universidad Europea de Madrid<em>Vinculada al Hospital Vithas Madrid Arturo Soria &middot; Formación de médicos, enfermería y TCAE del SERMAS</em></div>
+	            <div class="tl-year">11/2025 &rarr; act.</div>
+	            <div class="tl-content">Hospital Universitario de Getafe, Madrid<em>Servicio de Geriatría &middot; interconsulta hospitalaria y valoración integral de pacientes complejos</em></div>
+	          </div>
+	          <div class="tl-item">
+	            <div class="tl-year">2022 &rarr; 09/2025</div>
+	            <div class="tl-content">Hospital Universitario La Paz&ndash;Cantoblanco, Madrid<em>Responsable de la Unidad de Memoria y de Seguridad del Paciente en el Servicio de Geriatría</em></div>
 	          </div>
 	        </div>
 	      </div>
@@ -183,23 +187,36 @@ get_header();
 	      <hr class="divider">
 
 	      <div>
-	        <div class="section-label">Investigación y sociedades científicas</div>
+	        <div class="section-label">Formación médica y académica</div>
+	        <div class="timeline">
+	          <div class="tl-item"><div class="tl-year">MIR</div><div class="tl-content">Especialista en Geriatría<em>Hospital Central de la Cruz Roja San José y Santa Adela, Madrid &middot; 2016&ndash;2021</em></div></div>
+	          <div class="tl-item"><div class="tl-year">MIR</div><div class="tl-content">Especialista en Medicina Familiar y Comunitaria<em>Hospital Universitario de Guadalajara &middot; 2010&ndash;2014</em></div></div>
+	          <div class="tl-item"><div class="tl-year">UCAM &middot; 2026&ndash;2027</div><div class="tl-content">Máster de Formación Permanente Internacional en Medicina Estética, Antienvejecimiento y Nutrición &mdash; en curso<em>90 ECTS &middot; procedimientos mínimamente invasivos, medicina antienvejecimiento, nutrición aplicada y gestión de clínicas médico-estéticas</em></div></div>
+	          <div class="tl-item"><div class="tl-year">2024</div><div class="tl-content">Máster de Formación Permanente en Enfermedades Neurodegenerativas<em>TECH Universidad Tecnológica &middot; biomarcadores y terapias emergentes</em></div></div>
+	          <div class="tl-item"><div class="tl-year">2025</div><div class="tl-content">Experta en Psicogeriatría y en Enfermedad de Alzheimer<em>Universidad Católica de Murcia y Universidad Francisco de Vitoria</em></div></div>
+	        </div>
+	      </div>
+
+	      <hr class="divider">
+
+	      <div>
+	        <div class="section-label">Investigación, docencia y responsabilidad clínica</div>
 	        <div class="timeline">
 	          <div class="tl-item">
-	            <div class="tl-year">SEMEG</div>
-	            <div class="tl-content">Coordinadora científica de la Jornada de Deterioro Cognitivo<em>Ponente verificada en la IV edición (Geriatricarea, feb. 2025): «Entre fragilidad y memoria. Desnutrición y caídas en el contexto cognitivo» &middot; Hospital La Paz&ndash;Cantoblanco</em></div>
-	          </div>
-	          <div class="tl-item">
-	            <div class="tl-year">EuGMS</div>
-	            <div class="tl-content">Colaboración activa con la European Geriatric Medicine Society<em>Red europea de geriatría clínica e investigación</em></div>
-	          </div>
-	          <div class="tl-item">
-	            <div class="tl-year">OXON</div>
-	            <div class="tl-content">Investigadora clínica externa y consultora, OXON Epidemiology<em>Real-World Evidence &middot; estudios observacionales y farmacoepidemiología</em></div>
+	            <div class="tl-year">UEM</div>
+	            <div class="tl-content">Profesora Asociada de Medicina en la Universidad Europea de Madrid<em>Responsable de la asignatura de Geriatría en el Grado en Medicina</em></div>
 	          </div>
 	          <div class="tl-item">
 	            <div class="tl-year">SEMEG</div>
-	            <div class="tl-content">Publicación SEMEG: «Piuria no significa necesariamente infección»<em>Diagnóstico diferencial en el anciano &middot; Difusión científica verificada (@semeg_es)</em></div>
+	            <div class="tl-content">Coordinadora científica de las Jornadas de Deterioro Cognitivo<em>Colaboradora del Grupo de Trabajo en Deterioro Cognitivo de la Sociedad Española de Medicina Geriátrica</em></div>
+	          </div>
+	          <div class="tl-item">
+	            <div class="tl-year">Investigación</div>
+	            <div class="tl-content">Investigadora principal y colaboradora en estudios de fragilidad, nutrición y deterioro cognitivo<em>Incluye NUTRIFRAIL, ASPECT, AB21004-ALZ, DEMPAZ, PROBIOMIND y ESTRAGENIAL</em></div>
+	          </div>
+	          <div class="tl-item">
+	            <div class="tl-year">Calidad</div>
+	            <div class="tl-content">Experiencia en seguridad del paciente y mejora asistencial<em>Responsable de Seguridad del Paciente en Geriatría de Cantoblanco &middot; certificaciones AENOR 2022&ndash;2026</em></div>
 	          </div>
 	        </div>
 	      </div>
@@ -207,10 +224,10 @@ get_header();
 	      <hr class="divider">
 
 	      <div>
-	        <div class="section-label">Obra escrita</div>
-	        <div class="pub">«El tormento de la inmortalidad sin juventud» &mdash; coautora</div>
-	        <div class="pub">«Manual de manejo de personas mayores que sufren caídas» (SEMEG) &mdash; coautora</div>
-	        <div class="pub">Trabajos sobre cribado cognitivo temprano y deterioro cognitivo</div>
+	        <div class="section-label">Publicaciones y obra reciente</div>
+	        <div class="pub"><strong>J. Ageing Longev. (2026) &mdash; primer autor</strong> «Oral Nutritional Supplementation in Routine Clinical Practice to Improve Physical Performance and Nutrition in Frail Adults at Risk of Falls: Preliminary Evidence».</div>
+	        <div class="pub"><strong>Neurama (2025) &mdash; primer autor</strong> «Integración de biomarcadores y valoración geriátrica integral en el diagnóstico de deterioro cognitivo en adultos mayores».</div>
+	        <div class="pub"><strong>2026</strong> Coautora de «Síndrome de Titono» y «Síndrome del Tántalo»; coordinadora científica del protocolo SEMEG «Consulta de deterioro cognitivo».</div>
 	      </div>
 
 	      <hr class="divider">
