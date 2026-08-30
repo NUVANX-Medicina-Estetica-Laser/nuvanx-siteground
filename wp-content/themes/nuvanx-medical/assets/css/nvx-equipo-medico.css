@@ -68,8 +68,8 @@
 .nvx-equipo-shell .doc-portrait {
   position: relative;
   flex-shrink: 0;
-  width: 130px;
-  height: 130px;
+  width: calc(var(--nvx-space-8) * 2);
+  height: calc(var(--nvx-space-8) * 2);
   overflow: hidden;
   border: var(--nvx-border-hairline) solid var(--nvx-color-line);
   border-radius: var(--nvx-radius-pill);
@@ -317,8 +317,8 @@
 
 .nvx-equipo-shell .nvx-staff-portrait {
   flex-shrink: 0;
-  width: 72px;
-  height: 72px;
+  width: var(--nvx-space-9);
+  height: var(--nvx-space-9);
   overflow: hidden;
   border: var(--nvx-border-hairline) solid var(--nvx-color-line);
   border-radius: var(--nvx-radius-pill);
@@ -365,8 +365,8 @@
   }
 
   .nvx-equipo-shell .doc-portrait {
-    width: 110px;
-    height: 110px;
+    width: calc(var(--nvx-space-7) * 2);
+    height: calc(var(--nvx-space-7) * 2);
     margin: 0 auto;
   }
 

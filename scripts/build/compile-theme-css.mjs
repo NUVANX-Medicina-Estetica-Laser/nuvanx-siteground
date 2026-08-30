@@ -30,6 +30,7 @@ const BUNDLE_DEFINITIONS = {
     'assets/css/nvx-site-layout.css',
     'assets/css/nvx-components.css',
     'assets/css/nvx-patterns-editorial.css',
+    'assets/css/nvx-treatment-authority.css',
     'assets/css/nvx-header.css',
     'assets/css/nvx-footer.css',
     'assets/css/nvx-accessibility-governance.css',

@@ -157,7 +157,7 @@
   display: block;
   width: 100%;
   height: auto;
-  max-height: 520px;
+  max-height: calc(var(--nvx-space-8) * 8);
   object-fit: contain;
   object-position: center;
   background: var(--nvx-charcoal);
