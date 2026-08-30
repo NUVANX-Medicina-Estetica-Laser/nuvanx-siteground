@@ -140,7 +140,7 @@ async function resolveHubSpotFrame(page, formId) {
 
 async function readVisibleFieldNames(frame) {
   return frame.locator(
-    'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([disabled]), textarea:not([disabled]), select:not([disabled])'
+    'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]), textarea, select'
   ).evaluateAll((nodes) => {
     const isVisible = (node) => {
       const style = getComputedStyle(node);
