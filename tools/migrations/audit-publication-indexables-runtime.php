@@ -5,6 +5,12 @@
  * This script intentionally runs before the controlled WP-CLI staging bypass.
  * It never writes database state and distinguishes a normal Staging2 runtime
  * selection from the later, temporary production-mode reconciliation.
+ *
+ * A route whose canonical Yoast robots post-meta has just been reconciled from
+ * noindex to index may still have a stale derived Yoast indexable row until the
+ * guarded rebuild runs. That state is accepted only when the remaining drift is
+ * exclusively derived noindex/not-public state and the canonical robots meta is
+ * already index,follow. All other drift remains blocking.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -54,9 +60,11 @@ $normalize_path = static function ( string $value ): string {
 	return '' === trim( $path, '/' ) ? '/' : '/' . trim( $path, '/' ) . '/';
 };
 
-$indexable = 0;
-$matching  = 0;
-$drift     = array();
+$indexable          = 0;
+$matching           = 0;
+$transition_pending = 0;
+$transition_routes  = array();
+$drift              = array();
 
 foreach ( $manifest['routes'] as $route => $config ) {
 	if ( ! is_array( $config ) || true !== ( $config['robots']['index'] ?? null ) ) {
@@ -108,6 +116,17 @@ foreach ( $manifest['routes'] as $route => $config ) {
 		continue;
 	}
 
+	$derived_only = empty( array_diff( $reasons, array( 'noindex', 'not_public' ) ) );
+	if ( $derived_only ) {
+		$robots_noindex  = (string) get_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex', true );
+		$robots_nofollow = (string) get_post_meta( $post_id, '_yoast_wpseo_meta-robots-nofollow', true );
+		if ( '' === $robots_noindex && '' === $robots_nofollow ) {
+			++$transition_pending;
+			$transition_routes[] = "{$route}:" . implode( ',', $reasons );
+			continue;
+		}
+	}
+
 	$drift[] = "{$route}:" . implode( ',', $reasons );
 }
 
@@ -115,21 +134,30 @@ $environment = function_exists( 'nvx_seo_is_nonproduction_environment' ) && nvx_
 
 if ( ! empty( $drift ) ) {
 	printf(
-		"PUBLICATION_INDEXABLE_RUNTIME_AUDIT=FAIL routes=%d indexable=%d matching=%d drift=%d environment=%s\n",
+		"PUBLICATION_INDEXABLE_RUNTIME_AUDIT=FAIL routes=%d indexable=%d matching=%d transition_pending=%d drift=%d environment=%s\n",
 		count( $manifest['routes'] ),
 		$indexable,
 		$matching,
+		$transition_pending,
 		count( $drift ),
 		$environment
 	);
+	if ( ! empty( $transition_routes ) ) {
+		printf( "PUBLICATION_INDEXABLE_RUNTIME_TRANSITION=%s\n", implode( '|', $transition_routes ) );
+	}
 	printf( "PUBLICATION_INDEXABLE_RUNTIME_DRIFT=%s\n", implode( '|', $drift ) );
 	exit( 1 );
 }
 
 printf(
-	"PUBLICATION_INDEXABLE_RUNTIME_AUDIT=PASS routes=%d indexable=%d matching=%d drift=0 environment=%s\n",
+	"PUBLICATION_INDEXABLE_RUNTIME_AUDIT=PASS routes=%d indexable=%d matching=%d transition_pending=%d reconciled=%d drift=0 environment=%s\n",
 	count( $manifest['routes'] ),
 	$indexable,
 	$matching,
+	$transition_pending,
+	$matching + $transition_pending,
 	$environment
 );
+if ( ! empty( $transition_routes ) ) {
+	printf( "PUBLICATION_INDEXABLE_RUNTIME_TRANSITION=%s rebuild_required=1\n", implode( '|', $transition_routes ) );
+}
