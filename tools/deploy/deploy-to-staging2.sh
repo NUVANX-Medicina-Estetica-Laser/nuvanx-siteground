@@ -78,9 +78,9 @@ provision_staging_hubspot_identity() {
   classification="$(jq -r '.classification // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   portal="$(jq -r '.hubspot.portal_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   form="$(jq -r '.hubspot.form_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
-  theme_runtime_fallback="$(jq -r 'if .guardrails | has("theme_runtime_fallback") then .guardrails.theme_runtime_fallback else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
-  private_credentials="$(jq -r 'if .guardrails | has("contains_private_credentials") then .guardrails.contains_private_credentials else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
-  production_mutation="$(jq -r 'if .guardrails | has("production_mutation") then .guardrails.production_mutation else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
+  theme_runtime_fallback="$(jq -r 'if (.guardrails // {}) | has("theme_runtime_fallback") then .guardrails.theme_runtime_fallback else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
+  private_credentials="$(jq -r 'if (.guardrails // {}) | has("contains_private_credentials") then .guardrails.contains_private_credentials else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
+  production_mutation="$(jq -r 'if (.guardrails // {}) | has("production_mutation") then .guardrails.production_mutation else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
 
   [[ "$schema" == '1' ]] || fail_config "HubSpot identity manifest has unexpected schema=$schema"
   [[ "$scope" == 'staging2' ]] || fail_config "HubSpot identity manifest has unexpected scope=$scope"
