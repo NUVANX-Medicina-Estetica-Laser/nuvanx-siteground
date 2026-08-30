@@ -267,8 +267,7 @@ for (const route of routes) {
     result.robots = robotsContract(robotsMeta, xRobotsTag);
     result.robotsSource = 'edge';
 
-    if (isTransientSiteGroundChallenge(response) && getOriginFallbackAvailable()) {
-      result.externalInconclusive = true;
+    if (getOriginFallbackAvailable()) {
       result.originFallback = verifyViaSiteGroundOrigin(route);
       if (result.originFallback.pass) {
         const statusMatch = result.originFallback.stdout.match(/\bstatus=(\d{3})\b/);
@@ -277,22 +276,26 @@ for (const route of routes) {
         result.originVerified = true;
         result.originStatus = statusMatch ? Number.parseInt(statusMatch[1], 10) : null;
         result.originDeploySha = shaMatch ? shaMatch[1] : '';
-        result.robots = robotsMatch ? Buffer.from(robotsMatch[1], 'base64').toString('utf8').trim() : '';
-        result.robotsSource = 'origin';
-        result.issues.push(...robotsIssues(result.robots));
-        result.pass = result.issues.length === 0;
-        if (!result.pass) report.failures.push({ route, issues: result.issues });
-        report.routes.push(result);
-        continue;
+        result.originRobots = robotsMatch ? Buffer.from(robotsMatch[1], 'base64').toString('utf8').trim() : '';
+        result.issues.push(...robotsIssues(result.originRobots));
+      } else {
+        const diagnostic = result.originFallback.stderr || result.originFallback.error || `exit ${result.originFallback.status}`;
+        result.issues.push(`SiteGround origin verification failed: ${diagnostic}`);
       }
-      const diagnostic = result.originFallback.stderr || result.originFallback.error || `exit ${result.originFallback.status}`;
-      result.issues.push(`SiteGround origin fallback failed: ${diagnostic}`);
     }
 
-    if (response.status !== 200) result.issues.push(`Expected HTTP 200, got ${response.status}`);
-    if (finalUrl.hostname !== expectedHost) result.issues.push(`Final hostname ${finalUrl.hostname} != ${expectedHost}`);
-    result.issues.push(...robotsIssues(result.robots));
-    if (deploySha !== expectedSha) result.issues.push(`Deployment SHA mismatch: meta=${deploySha || '(missing)'} expected=${expectedSha}`);
+    if (isTransientSiteGroundChallenge(response)) {
+      result.externalInconclusive = true;
+      if (!result.originVerified) {
+        result.issues.push('Transient challenge encountered on edge and origin verification unavailable.');
+      }
+    } else {
+      if (response.status !== 200) result.issues.push(`Expected HTTP 200 on edge, got ${response.status}`);
+      if (finalUrl.hostname !== expectedHost) result.issues.push(`Final hostname ${finalUrl.hostname} != ${expectedHost}`);
+      result.issues.push(...robotsIssues(result.robots));
+      if (deploySha !== expectedSha) result.issues.push(`Deployment SHA mismatch on edge: meta=${deploySha || '(missing)'} expected=${expectedSha}`);
+    }
+
     result.pass = result.issues.length === 0;
   } catch (error) {
     result.issues = [error instanceof Error ? error.message : String(error)];
