@@ -1173,7 +1173,7 @@ body.nvx-valoracion-modal-open{
    ═══════════════════════════════════════════════════════════ */
 .nvx-ba-teaser{padding-block:var(--nvx-pad-section-tight);background:var(--nvx-ink);color:var(--nvx-light)}
 .nvx-ba-teaser__copy{max-width:52ch}
-.nvx-ba-teaser__kicker{font-family:var(--nvx-sans);font-size:var(--nvx-type-small);font-weight:var(--nvx-fw-medium);letter-spacing:var(--nvx-track-button);text-transform:uppercase;color:var(--nvx-accent-muted);margin:0 0 var(--nvx-space-1)}
+.nvx-ba-teaser__kicker{font-family:var(--nvx-sans);font-size:var(--nvx-type-small);font-weight:var(--nvx-fw-medium);letter-spacing:var(--nvx-track-button);text-transform:uppercase;color:var(--nvx-text-on-dark-90);margin:0 0 var(--nvx-space-1)}
 .nvx-ba-teaser__title{font-family:var(--nvx-serif);font-size:var(--nvx-type-h2);font-weight:var(--nvx-fw-regular);line-height:var(--nvx-lh-h2);color:var(--nvx-light);margin:0 0 var(--nvx-space-2);max-width:22ch}
 .nvx-ba-teaser__body{font-family:var(--nvx-sans);font-size:var(--nvx-type-body);line-height:var(--nvx-lh-body);color:var(--nvx-text-on-dark-82);margin:0}
 
