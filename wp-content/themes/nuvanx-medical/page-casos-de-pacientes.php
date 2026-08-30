@@ -14,7 +14,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $cases_data = function_exists( 'nvx_catalog_json_load' ) ? nvx_catalog_json_load( 'patient-cases.json' ) : array();
+$consent_states = $cases_data['consent_states'] ?? array();
 $cases_list = $cases_data['cases'] ?? array();
+
+// Filter to only show cases with affirmative consent (approved state)
+$cases_list = array_filter( $cases_list, function( $case ) {
+	return ( $case['consent_status'] ?? '' ) === 'approved';
+} );
+
 $disclaimer = $cases_data['disclaimer'] ?? __( 'Los resultados y evoluciones mostrados corresponden a casos individuales documentados en consulta médica con consentimiento expreso del paciente. La respuesta biológica, calidad tisular y tiempos de recuperación varían según cada persona. La documentación gráfica no constituye una garantía de resultado idéntico. Todo tratamiento médico requiere valoración anatómica presencial previa.', 'nuvanx-medical' );
 
 $css_relative = '/assets/css/nvx-cases-holding.css';
@@ -105,7 +112,7 @@ get_header();
 									</div>
 									<div class="nvx-case-card__visual-caption">
 										<span class="nvx-case-card__visual-badge"><?php esc_html_e( 'Registro clínico estandarizado', 'nuvanx-medical' ); ?></span>
-										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $case['consent_status'] ?? '' ); ?></span>
+										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $consent_states[ $case['consent_status'] ] ?? $case['consent_status'] ?? '' ); ?></span>
 									</div>
 								</div>
 							<?php elseif ( ! empty( $case['image'] ) ) : ?>
@@ -120,7 +127,7 @@ get_header();
 									</figure>
 									<div class="nvx-case-card__visual-caption">
 										<span class="nvx-case-card__visual-badge"><?php esc_html_e( 'Registro clínico estandarizado', 'nuvanx-medical' ); ?></span>
-										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $case['consent_status'] ?? '' ); ?></span>
+										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $consent_states[ $case['consent_status'] ] ?? $case['consent_status'] ?? '' ); ?></span>
 									</div>
 								</div>
 							<?php endif; ?>

@@ -34,6 +34,28 @@ if ( false !== ( $route['robots']['index'] ?? null ) || true !== ( $route['robot
 	exit( 1 );
 }
 
+$cases_data = json_decode( (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/data/patient-cases.json' ), true );
+if ( ! is_array( $cases_data ) ) {
+	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=invalid_cases_data\n" );
+	exit( 1 );
+}
+
+$consent_states = $cases_data['consent_states'] ?? array();
+$valid_states = array_keys( $consent_states );
+if ( ! in_array( 'approved', $valid_states, true ) || ! in_array( 'withdrawn', $valid_states, true ) || ! in_array( 'pending', $valid_states, true ) ) {
+	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=missing_canonical_consent_states\n" );
+	exit( 1 );
+}
+
+$cases = $cases_data['cases'] ?? array();
+foreach ( $cases as $case ) {
+	$consent = $case['consent_status'] ?? '';
+	if ( ! in_array( $consent, $valid_states, true ) ) {
+		fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=invalid_consent_status case={$case['id']} consent={$consent}\n" );
+		exit( 1 );
+	}
+}
+
 $hygiene  = (string) file_get_contents( $hygiene_path );
 $template = (string) file_get_contents( $template_path );
 
