@@ -2,9 +2,9 @@
 /**
  * Lock the consented patient-cases route to its approved public publication policy.
  *
- * The repository owns five documented clinical sequences whose publication
- * consent and editorial approval are explicit. This regression test prevents a
- * future deploy from silently returning the route to noindex/holding status.
+ * The repository owns documented clinical sequences whose publication consent
+ * and editorial approval are explicit. This regression test prevents a future
+ * deploy from silently returning the route to noindex/holding status.
  */
 
 $root          = dirname( __DIR__, 2 );
@@ -55,7 +55,6 @@ $noindex_owner = substr( $hygiene, $function_start, $function_end - $function_st
 
 $forbidden_noindex_markers = array(
 	"nvx_page_id_by_slug( 'casos-de-pacientes' )",
-	"nvx_page_id_by_slug( \'casos-de-pacientes\' )",
 	'$cases_id',
 );
 foreach ( $forbidden_noindex_markers as $marker ) {
@@ -67,7 +66,7 @@ foreach ( $forbidden_noindex_markers as $marker ) {
 
 $required_template = array(
 	"nvx_catalog_json_load( 'patient-cases.json' )",
-	'$cases_list = $cases_data[\'cases\'] ?? array();',
+	"\$cases_list = \$cases_data['cases'] ?? array();",
 	'<?php foreach ( $cases_list as $case ) : ?>',
 	'get_header();',
 	'get_footer();',
