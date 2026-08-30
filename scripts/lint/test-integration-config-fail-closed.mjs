@@ -57,6 +57,21 @@ assert.doesNotMatch(
   /grep -Fq ["']NVX_VALORACION_HS_FRAME_(?:PORTAL|FORM)_ID["'] \"\$modal_file\"/,
   'Staging deploy must not require legacy identity constants to be embedded in modal source',
 );
+assert.doesNotMatch(
+  stagingDeploy,
+  /\.guardrails\.(?:contains_private_credentials|production_mutation)\s*\/\/\s*true/,
+  'Boolean security guardrails must not use jq // true because false is a fallback operand in jq',
+);
+assert.match(
+  stagingDeploy,
+  /has\("contains_private_credentials"\).*\.guardrails\.contains_private_credentials else true end/,
+  'Staging deploy must preserve an explicit false contains_private_credentials value',
+);
+assert.match(
+  stagingDeploy,
+  /has\("production_mutation"\).*\.guardrails\.production_mutation else true end/,
+  'Staging deploy must preserve an explicit false production_mutation value',
+);
 
 assert.equal(stagingIdentity.schema, 1, 'Staging public integration manifest must use schema 1');
 assert.equal(stagingIdentity.scope, 'staging2', 'Public integration manifest must be scoped only to Staging2');
@@ -89,4 +104,4 @@ run_case("putenv('NVX_HUBSPOT_PORTAL_ID=invalid'); putenv('NVX_VALORACION_HS_FRA
 
 execSync('php', { input: phpRunner, cwd: repoRoot, stdio: ['pipe', 'inherit', 'inherit'] });
 
-console.log('INTEGRATION_CONFIG_FAIL_CLOSED=PASS hubspot_runtime_fallbacks=0 validated_pairs=6 staging_config_gate=1 public_manifest=1');
+console.log('INTEGRATION_CONFIG_FAIL_CLOSED=PASS hubspot_runtime_fallbacks=0 validated_pairs=6 staging_config_gate=1 public_manifest=1 boolean_guardrails=1');
