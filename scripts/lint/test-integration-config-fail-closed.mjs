@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 
 const repoRoot = new URL('../../', import.meta.url);
@@ -36,4 +37,24 @@ assert.match(direct, /nvx_hubspot_secure_original_url/, 'Direct form transport m
 assert.match(diagnostic, /HUBSPOT_FORM_ID:\?Missing HUBSPOT_FORM_ID/, 'Diagnostic must require explicit form identity');
 assert.match(diagnostic, /HUBSPOT_PORTAL:\?Missing HUBSPOT_PORTAL/, 'Diagnostic must require explicit portal identity');
 
-console.log('INTEGRATION_CONFIG_FAIL_CLOSED=PASS hubspot_runtime_fallbacks=0');
+// Verify runtime fail-closed behavior across priority layers via PHP subprocesses
+const phpRunner = `<?php
+function run_case($setup, $expected_portal, $expected_form) {
+  $code = "define('ABSPATH', __DIR__ . '/'); function add_filter(\\$t, \\$c, \\$p=10, \\$a=1){} " . $setup . " require_once 'wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-attribution.php'; \\$res = nvx_hubspot_secure_identity(); if (\\$res['portal_id'] !== '$expected_portal' || \\$res['form_id'] !== '$expected_form') { exit(1); }";
+  $cmd = 'php -r ' . escapeshellarg($code);
+  exec($cmd, $out, $ret);
+  if ($ret !== 0) {
+    exit(1);
+  }
+}
+run_case("define('NVX_HUBSPOT_PORTAL_ID', '147416356'); define('NVX_HUBSPOT_VALORACION_FORM_ID', '5042522a-0bc5-4381-ac3e-5aee8649b69c');", "147416356", "5042522a-0bc5-4381-ac3e-5aee8649b69c");
+run_case("define('NVX_HUBSPOT_PORTAL_ID', 'invalid'); define('NVX_VALORACION_HS_FRAME_PORTAL_ID', '147416356'); define('NVX_VALORACION_HS_FRAME_FORM_ID', '5042522a-0bc5-4381-ac3e-5aee8649b69c');", "", "");
+run_case("define('NVX_HUBSPOT_PORTAL_ID', '147416356'); define('NVX_VALORACION_HS_FRAME_PORTAL_ID', '147416356'); define('NVX_VALORACION_HS_FRAME_FORM_ID', '5042522a-0bc5-4381-ac3e-5aee8649b69c');", "", "");
+run_case("define('NVX_VALORACION_HS_FRAME_PORTAL_ID', '147416356'); define('NVX_VALORACION_HS_FRAME_FORM_ID', '5042522a-0bc5-4381-ac3e-5aee8649b69c');", "147416356", "5042522a-0bc5-4381-ac3e-5aee8649b69c");
+run_case("putenv('NVX_HUBSPOT_PORTAL_ID=147416356'); putenv('NVX_HUBSPOT_VALORACION_FORM_ID=5042522a-0bc5-4381-ac3e-5aee8649b69c');", "147416356", "5042522a-0bc5-4381-ac3e-5aee8649b69c");
+run_case("putenv('NVX_HUBSPOT_PORTAL_ID=invalid'); putenv('NVX_VALORACION_HS_FRAME_PORTAL_ID=147416356'); putenv('NVX_VALORACION_HS_FRAME_FORM_ID=5042522a-0bc5-4381-ac3e-5aee8649b69c');", "", "");
+`;
+
+execSync('php', { input: phpRunner, cwd: repoRoot, stdio: ['pipe', 'inherit', 'inherit'] });
+
+console.log('INTEGRATION_CONFIG_FAIL_CLOSED=PASS hubspot_runtime_fallbacks=0 validated_pairs=6');

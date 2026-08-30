@@ -19,24 +19,82 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Resolve the canonical HubSpot identity (portal ID and form ID) as a validated pair.
+ *
+ * Fails closed if a higher-priority identity source is configured but malformed,
+ * preventing silent fallback to a different account or legacy identity.
+ *
+ * @return array{portal_id:string,form_id:string}
+ */
+function nvx_hubspot_secure_identity(): array {
+	$sources = array(
+		// 1. Canonical constants
+		array(
+			'portal' => defined( 'NVX_HUBSPOT_PORTAL_ID' ) ? (string) NVX_HUBSPOT_PORTAL_ID : null,
+			'form'   => defined( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) ? (string) NVX_HUBSPOT_VALORACION_FORM_ID : null,
+		),
+		// 2. Legacy constants
+		array(
+			'portal' => defined( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ? (string) NVX_VALORACION_HS_FRAME_PORTAL_ID : null,
+			'form'   => defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) NVX_VALORACION_HS_FRAME_FORM_ID : null,
+		),
+		// 3. Canonical environment variables
+		array(
+			'portal' => false !== getenv( 'NVX_HUBSPOT_PORTAL_ID' ) ? (string) getenv( 'NVX_HUBSPOT_PORTAL_ID' ) : null,
+			'form'   => false !== getenv( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) ? (string) getenv( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) : null,
+		),
+		// 4. Legacy environment variables
+		array(
+			'portal' => false !== getenv( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ? (string) getenv( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) : null,
+			'form'   => false !== getenv( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) getenv( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) : null,
+		),
+	);
+
+	foreach ( $sources as $source ) {
+		$raw_portal = $source['portal'];
+		$raw_form   = $source['form'];
+
+		if ( null === $raw_portal && null === $raw_form ) {
+			continue;
+		}
+
+		$portal = null !== $raw_portal ? trim( $raw_portal ) : '';
+		$form   = null !== $raw_form ? strtolower( trim( $raw_form ) ) : '';
+
+		$valid_portal = 1 === preg_match( '/^\d{1,20}$/', $portal );
+		$valid_form   = 1 === preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $form );
+
+		if ( $valid_portal && $valid_form ) {
+			return array(
+				'portal_id' => $portal,
+				'form_id'   => $form,
+			);
+		}
+
+		// Present but invalid/partial in this layer: fail closed immediately.
+		return array(
+			'portal_id' => '',
+			'form_id'   => '',
+		);
+	}
+
+	return array(
+		'portal_id' => '',
+		'form_id'   => '',
+	);
+}
+
+/**
  * Resolve the canonical HubSpot portal id used by the first-party form.
  *
  * Account identity must be provisioned by the environment. Never fall back to
  * a production portal when configuration is missing or malformed.
  */
 function nvx_hubspot_secure_portal_id(): string {
-	$candidates = array(
-		defined( 'NVX_HUBSPOT_PORTAL_ID' ) ? (string) NVX_HUBSPOT_PORTAL_ID : '',
-		defined( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ? (string) NVX_VALORACION_HS_FRAME_PORTAL_ID : '',
-		(string) ( getenv( 'NVX_HUBSPOT_PORTAL_ID' ) ?: '' ),
-		(string) ( getenv( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ?: '' ),
-	);
-
-	foreach ( $candidates as $candidate ) {
-		$candidate = trim( $candidate );
-		if ( 1 === preg_match( '/^\d{1,20}$/', $candidate ) ) {
-			return $candidate;
-		}
+	$identity = nvx_hubspot_secure_identity();
+	$portal   = $identity['portal_id'];
+	if ( '' !== $portal ) {
+		return $portal;
 	}
 
 	return '';
@@ -49,18 +107,10 @@ function nvx_hubspot_secure_portal_id(): string {
  * production form when configuration is missing or malformed.
  */
 function nvx_hubspot_secure_form_id(): string {
-	$candidates = array(
-		defined( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) ? (string) NVX_HUBSPOT_VALORACION_FORM_ID : '',
-		defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) NVX_VALORACION_HS_FRAME_FORM_ID : '',
-		(string) ( getenv( 'NVX_HUBSPOT_VALORACION_FORM_ID' ) ?: '' ),
-		(string) ( getenv( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ?: '' ),
-	);
-
-	foreach ( $candidates as $candidate ) {
-		$candidate = strtolower( trim( $candidate ) );
-		if ( 1 === preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $candidate ) ) {
-			return $candidate;
-		}
+	$identity = nvx_hubspot_secure_identity();
+	$form     = $identity['form_id'];
+	if ( '' !== $form ) {
+		return $form;
 	}
 
 	return '';
