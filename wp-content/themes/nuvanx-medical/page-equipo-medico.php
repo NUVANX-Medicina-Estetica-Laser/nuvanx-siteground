@@ -49,7 +49,7 @@ get_header();
 	    <meta itemprop="sameAs" content="<?php echo esc_url( $director_doctoralia ); ?>" />
 	    <div class="doc-hero doc-hero--with-portrait">
 	      <div class="doc-portrait">
-	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/dr-jose-javier-rivera-tejeda.webp' ); ?>" alt="<?php esc_attr_e( 'Dr. José Javier Rivera Tejeda — Director Médico NUVANX Madrid', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="eager" decoding="async" />
+	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/nvx-dr-javier-rivera-director-medico.webp' ); ?>" alt="<?php esc_attr_e( 'Dr. José Javier Rivera Tejeda — Director Médico NUVANX Madrid', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="eager" decoding="async" />
 	      </div>
 	      <div class="doc-hero__info">
 	        <div class="doc-name" itemprop="name">Dr. José Javier Rivera Tejeda</div>
@@ -218,10 +218,6 @@ get_header();
 	      <div>
 	        <div class="section-label">Protocolos que realiza en NUVANX</div>
 	        <div class="tags">
-	          <a href="<?php echo esc_url( home_url( '/resurfacing-laser-co2-fraccionado/' ) ); ?>" class="tag blue">Láser CO&sub2; fraccionado</a>
-	          <a href="<?php echo esc_url( home_url( '/exion-rf-fraccionada-microneedling-madrid/' ) ); ?>" class="tag blue">EXION&reg; Fractional RF</a>
-	          <a href="<?php echo esc_url( home_url( '/exion-face/' ) ); ?>" class="tag blue">EXION Face</a>
-          <a href="<?php echo esc_url( home_url( '/exion-body/' ) ); ?>" class="tag blue">EXION Body</a>
 	          <a href="<?php echo esc_url( home_url( '/btl-exilite-ipl-madrid/' ) ); ?>" class="tag blue">BTL EXILITE&trade; IPL</a>
 	          <a href="<?php echo esc_url( home_url( '/medicina-estetica/' ) ); ?>" class="tag blue">Medicina inyectable</a>
 	          <a href="<?php echo esc_url( home_url( '/armonizacion-facial-radiesse-madrid/' ) ); ?>" class="tag blue">Bioestimuladores de colágeno</a>
@@ -239,7 +235,7 @@ get_header();
 	    </div>
 	    <div class="doc-hero doc-hero--with-portrait">
 	      <div class="doc-portrait">
-	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/dr-fabio-quinonez-bareiro.webp' ); ?>" alt="<?php esc_attr_e( 'Dr. Fabio Augusto Quiñónez Bareiro — Geriatría y Paciente Complejo NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
+	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/nvx-dr-quinonez.webp' ); ?>" alt="<?php esc_attr_e( 'Dr. Fabio Augusto Quiñónez Bareiro — Geriatría y Paciente Complejo NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
 	      </div>
 	      <div class="doc-hero__info">
 	        <div class="doc-name" itemprop="name">Dr. Fabio Augusto Quiñónez Bareiro</div>
@@ -361,7 +357,7 @@ get_header();
 	    <?php endif; ?>
 	    <div class="doc-hero doc-hero--with-portrait">
 	      <div class="doc-portrait">
-	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/dra-cristina-marquez-gonzalez.webp' ); ?>" alt="<?php esc_attr_e( 'Dra. Cristina Márquez González — Senología y Medicina Estética NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
+	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/nvx-dra-cristina-marquez.webp' ); ?>" alt="<?php esc_attr_e( 'Dra. Cristina Márquez González — Senología y Medicina Estética NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
 	      </div>
 	      <div class="doc-hero__info">
 	        <div class="doc-name" itemprop="name">Dra. Cristina Márquez González</div>
@@ -412,25 +408,25 @@ get_header();
 
 	  <!-- EQUIPO CLÍNICO Y COORDINACIÓN -->
 	  <div class="nvx-staff-section">
-	    <div class="section-label">Equipo de coordinación asistencial y enfermería</div>
+	    <div class="section-label">Equipo de coordinación asistencial y experiencia de paciente</div>
 	    <div class="nvx-staff-grid">
 	      <div class="nvx-staff-card">
 	        <div class="nvx-staff-portrait">
-	          <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/francisco-geraldo-lorenzo.webp' ); ?>" alt="Francisco Geraldo Lorenzo" class="nvx-staff-img" width="72" height="72" loading="lazy" decoding="async" />
+	          <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/nvx-francisco-geraldo-ceo.webp' ); ?>" alt="Francisco Geraldo Lorenzo" class="nvx-staff-img" width="72" height="72" loading="lazy" decoding="async" />
 	        </div>
 	        <div class="nvx-staff-info">
 	          <div class="nvx-staff-name">Francisco Geraldo Lorenzo</div>
-	          <div class="nvx-staff-role">Coordinación clínica · Enfermería · Dermocosmética</div>
+	          <div class="nvx-staff-role">Coordinación clínica · Dirección asistencial · Enfermería</div>
 	        </div>
 	      </div>
 
 	      <div class="nvx-staff-card">
 	        <div class="nvx-staff-portrait">
-	          <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/eva-lazaro.webp' ); ?>" alt="Eva Lázaro" class="nvx-staff-img" width="72" height="72" loading="lazy" decoding="async" />
+	          <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/nvx-yolanda-pinero-goya.webp' ); ?>" alt="Yolanda Piñero" class="nvx-staff-img" width="72" height="72" loading="lazy" decoding="async" />
 	        </div>
 	        <div class="nvx-staff-info">
-	          <div class="nvx-staff-name">Eva Lázaro</div>
-	          <div class="nvx-staff-role">Auxiliar de enfermería · Técnico especialista láser</div>
+	          <div class="nvx-staff-name">Yolanda Piñero</div>
+	          <div class="nvx-staff-role">Coordinación asistencial · Sede Salamanca–Goya</div>
 	        </div>
 	      </div>
 

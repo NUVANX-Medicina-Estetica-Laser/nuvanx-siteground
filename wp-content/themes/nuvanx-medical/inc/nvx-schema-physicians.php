@@ -30,6 +30,7 @@ function nvx_schema_physician_director( $organization_id ) {
 		'jobTitle'         => 'Director médico e investigador clínico aplicado · NUVANX Madrid',
 		'description'      => 'Dirección médica de NUVANX. Láser intersticial (Endolift®, laserlipólisis), CO₂ fraccionado, geometría facial con inductores y tricología. ' . NVX_SD_LABEL_COLEGIADO_PREFIX . $colegiado . '. Perfil público en Doctoralia.',
 		'url'              => $equipo . '#physician-rivera-tejeda',
+		'image'            => get_template_directory_uri() . '/assets/images/team/nvx-dr-javier-rivera-director-medico.webp',
 		'knowsAbout'       => array(
 			'Medicina estética',
 			'Medicina estética láser',
@@ -97,6 +98,7 @@ function nvx_schema_physician_ivon( $organization_id ) {
 		'jobTitle'         => 'Especialista en geriatría, longevidad y well-aging · NUVANX',
 		'description'      => NVX_SD_LABEL_COLEGIADO_PREFIX . $colegiado . '. Médico especialista (FEA) en Hospital Universitario La Paz (Recuperación Funcional / Hospital de Día Geriátrico) y Hospital Central de la Cruz Roja. Investigadora y consultora para OXON Epidemiology; coordinación científica SEMEG; colaboración EuGMS; profesora UEM. Coautora de obras de bioética y geriatría clínica. Integra well-aging basado en evidencia en NUVANX.',
 		'url'              => $equipo . '#physician-rivera-deras',
+		'image'            => get_template_directory_uri() . '/assets/images/team/nvx-dra-paola-rivera-deras.webp',
 		'medicalSpecialty' => 'https://schema.org/Geriatric',
 		'worksFor'         => array(
 			array( '@id' => $organization_id ),
@@ -168,6 +170,7 @@ function nvx_schema_physician_fabio( $organization_id ) {
 		'jobTitle'         => 'Especialista en geriatría, gerontología y paciente complejo · NUVANX',
 		'description'      => NVX_SD_LABEL_COLEGIADO_PREFIX . $colegiado . '. Doctor por la UAM e investigador en el CIBERFES. FEA en Geriatría (Hospital Virgen del Valle, Toledo). Experto en fisiología del envejecimiento y paciente complejo. Integra longevidad y medicina regenerativa en NUVANX.',
 		'url'              => $equipo . '#physician-quinonez-bareiro',
+		'image'            => get_template_directory_uri() . '/assets/images/team/nvx-dr-quinonez.webp',
 		'medicalSpecialty' => 'https://schema.org/Geriatric',
 		'worksFor'         => array(
 			array( '@id' => $organization_id ),
