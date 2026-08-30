@@ -124,7 +124,9 @@
 
 	function hiddenFieldFallback(value) {
 		if (Array.isArray(value)) return value;
-		if (typeof value === 'boolean') return [value ? 'true' : 'false'];
+		// A genuine visible Single checkbox must remain a native boolean even on
+		// retry. Hidden boolean-backed fields already arrive here as string[].
+		if (typeof value === 'boolean') return value;
 		var scalar = value === undefined || value === null ? '' : String(value);
 		return scalar === '' ? [] : [scalar];
 	}
@@ -147,8 +149,9 @@
 		if (primarySucceeded && await verifyFieldValue(form, actualName, expected)) return true;
 
 		// HubSpot Forms V4 requires string[] for Hidden fields. Retry with the
-		// Hidden-field representation only when the primary write did not survive
-		// read-back. Never accept a write without verifying it.
+		// same type selected by the primary representation; visible Single
+		// checkboxes therefore remain boolean while Hidden fields remain string[].
+		// Never accept a write without verifying it.
 		var fallback = hiddenFieldFallback(expected);
 		try {
 			await Promise.resolve(form.setFieldValue(actualName, fallback));
