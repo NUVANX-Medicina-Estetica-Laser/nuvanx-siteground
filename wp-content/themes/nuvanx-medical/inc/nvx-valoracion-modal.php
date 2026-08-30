@@ -42,6 +42,11 @@ function nvx_valoracion_modal_enabled(): bool {
 		return false;
 	}
 
+	// The modal must never render an unconfigured account/form identity.
+	if ( ! function_exists( 'nvx_hubspot_secure_identity_configured' ) || ! nvx_hubspot_secure_identity_configured() ) {
+		return false;
+	}
+
 	return (bool) apply_filters( 'nvx_valoracion_modal_enabled', true );
 }
 
@@ -51,15 +56,18 @@ function nvx_valoracion_modal_enabled(): bool {
  * @return array{portal_id:string,form_id:string,region:string,script_url:string}
  */
 function nvx_valoracion_modal_hubspot_config(): array {
-	$portal = defined( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ? (string) NVX_VALORACION_HS_FRAME_PORTAL_ID : '147416356';
-	$form   = defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) NVX_VALORACION_HS_FRAME_FORM_ID : '5042522a-0bc5-4381-ac3e-5aee8649b69c';
-	$region = defined( 'NVX_VALORACION_HS_FRAME_REGION' ) ? (string) NVX_VALORACION_HS_FRAME_REGION : 'eu1';
+	$portal = function_exists( 'nvx_hubspot_secure_portal_id' ) ? nvx_hubspot_secure_portal_id() : '';
+	$form   = function_exists( 'nvx_hubspot_secure_form_id' ) ? nvx_hubspot_secure_form_id() : '';
+	$region = defined( 'NVX_VALORACION_HS_FRAME_REGION' ) ? strtolower( trim( (string) NVX_VALORACION_HS_FRAME_REGION ) ) : 'eu1';
+	if ( 1 !== preg_match( '/^[a-z]{2,4}\d{1,2}$/', $region ) ) {
+		$region = 'eu1';
+	}
 
 	return array(
 		'portal_id'  => $portal,
 		'form_id'    => $form,
 		'region'     => $region,
-		'script_url' => 'https://js-eu1.hsforms.net/forms/embed/' . $portal . '.js',
+		'script_url' => '' !== $portal ? 'https://js-' . $region . '.hsforms.net/forms/embed/' . rawurlencode( $portal ) . '.js' : '',
 	);
 }
 
@@ -68,6 +76,9 @@ function nvx_valoracion_modal_hubspot_config(): array {
  */
 function nvx_valoracion_modal_markup(): string {
 	$cfg = nvx_valoracion_modal_hubspot_config();
+	if ( '' === $cfg['portal_id'] || '' === $cfg['form_id'] ) {
+		return '';
+	}
 
 	$privacy = esc_url( home_url( '/politica-privacidad/' ) );
 	$page    = function_exists( 'nvx_cta_valoracion_url' )
@@ -122,12 +133,12 @@ function nvx_valoracion_modal_enqueue_boot_config(): void {
 	$cfg = nvx_valoracion_modal_hubspot_config();
 
 	$config = array(
-		'enabled' => nvx_valoracion_modal_enabled(),
-		'pageUrl' => $page_url,
-		'modalId' => 'nvx-valoracion-modal',
+		'enabled'         => nvx_valoracion_modal_enabled(),
+		'pageUrl'         => $page_url,
+		'modalId'         => 'nvx-valoracion-modal',
 		'hubspotPortalId' => $cfg['portal_id'],
-		'hubspotFormId' => $cfg['form_id'],
-		'hubspotRegion' => $cfg['region'],
+		'hubspotFormId'   => $cfg['form_id'],
+		'hubspotRegion'   => $cfg['region'],
 	);
 
 	$encoded = wp_json_encode( $config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
