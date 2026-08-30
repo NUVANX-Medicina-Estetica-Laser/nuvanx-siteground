@@ -37,6 +37,68 @@ function nvx_seo_nonproduction_x_robots_headers( $headers ): array {
 add_filter( 'wp_headers', 'nvx_seo_nonproduction_x_robots_headers', 100 );
 
 /**
+ * Canonical robots.txt governance for NUVANX.
+ *
+ * Ensures AI search and answer crawlers (OAI-SearchBot, ChatGPT-User, GPTBot,
+ * PerplexityBot, ClaudeBot, anthropic-ai, Google-Extended, GoogleOther) have
+ * explicit Allow access in production, while Staging and non-production hosts
+ * remain fail-closed with Disallow: /.
+ *
+ * @param string $output The default robots.txt content.
+ * @param bool   $public Whether the site is public (from get_option('blog_public')).
+ * @return string The governed robots.txt content.
+ */
+function nvx_robots_txt_governance( string $output, bool $public = true ): string {
+	$is_nonprod = function_exists( 'nvx_seo_is_nonproduction_environment' ) && nvx_seo_is_nonproduction_environment();
+
+	if ( ! $public || $is_nonprod ) {
+		return "User-agent: *\nDisallow: /\n";
+	}
+
+	$sitemap_url       = home_url( '/sitemap.xml' );
+	$sitemap_index_url = home_url( '/sitemap_index.xml' );
+
+	$lines = array(
+		'User-agent: *',
+		'Disallow: /wp-admin/',
+		'Allow: /wp-admin/admin-ajax.php',
+		'',
+		'# AI Search & Retrieval Crawlers (SearchGPT, Perplexity, Gemini, Claude)',
+		'User-agent: OAI-SearchBot',
+		'Allow: /',
+		'',
+		'User-agent: ChatGPT-User',
+		'Allow: /',
+		'',
+		'User-agent: GPTBot',
+		'Allow: /',
+		'',
+		'User-agent: PerplexityBot',
+		'Allow: /',
+		'',
+		'User-agent: ClaudeBot',
+		'Allow: /',
+		'',
+		'User-agent: anthropic-ai',
+		'Allow: /',
+		'',
+		'User-agent: Google-Extended',
+		'Allow: /',
+		'',
+		'User-agent: GoogleOther',
+		'Allow: /',
+		'',
+		'# Sitemaps',
+		'Sitemap: ' . $sitemap_url,
+		'Sitemap: ' . $sitemap_index_url,
+		'',
+	);
+
+	return implode( "\n", $lines );
+}
+add_filter( 'robots_txt', 'nvx_robots_txt_governance', 100, 2 );
+
+/**
  * Adds a Schema.org type while preserving existing types.
  *
  * @param mixed  $types Existing Schema.org type or types.
