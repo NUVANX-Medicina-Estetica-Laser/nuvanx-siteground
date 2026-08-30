@@ -4,10 +4,15 @@
 # If this becomes a CI gate, wire it explicitly into one of the two canonical workflows.
 set -Eeuo pipefail
 
-FORM_ID="${HUBSPOT_FORM_ID:-5042522a-0bc5-4381-ac3e-5aee8649b69c}"
-EXPECTED_PORTAL="${HUBSPOT_PORTAL:-147416356}"
-
+: "${HUBSPOT_FORM_ID:?Missing HUBSPOT_FORM_ID}"
+: "${HUBSPOT_PORTAL:?Missing HUBSPOT_PORTAL}"
 : "${HUBSPOT_ACCESS_TOKEN:?Missing HUBSPOT_ACCESS_TOKEN}"
+
+FORM_ID="$HUBSPOT_FORM_ID"
+EXPECTED_PORTAL="$HUBSPOT_PORTAL"
+
+[[ "$FORM_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo 'HUBSPOT_FORM_GATE=FAIL reason=invalid_form_id' >&2; exit 1; }
+[[ "$EXPECTED_PORTAL" =~ ^[0-9]{1,20}$ ]] || { echo 'HUBSPOT_FORM_GATE=FAIL reason=invalid_portal_id' >&2; exit 1; }
 
 response="${RUNNER_TEMP:-/tmp}/hubspot-form-${FORM_ID}.json"
 status="$(
@@ -40,9 +45,9 @@ if [[ -z "$portal" ]]; then
   echo "HUBSPOT_FORM_GATE=FAIL reason=portal_not_returned_by_api" >&2
   exit 1
 fi
-if [[ -n "$EXPECTED_PORTAL" && "$portal" != "$EXPECTED_PORTAL" ]]; then
+if [[ "$portal" != "$EXPECTED_PORTAL" ]]; then
   echo "HUBSPOT_FORM_GATE=FAIL portal=$portal expected=$EXPECTED_PORTAL" >&2
   exit 1
 fi
 
-echo "HUBSPOT_FORM_GATE=PASS form_id=$FORM_ID form_name=$name portal=${portal:-not-returned}"
+echo "HUBSPOT_FORM_GATE=PASS form_id=$FORM_ID form_name=$name portal=$portal"
