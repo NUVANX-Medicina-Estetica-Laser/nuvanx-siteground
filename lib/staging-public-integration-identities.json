@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "scope": "staging2",
+  "classification": "public_integration_identity",
+  "hubspot": {
+    "portal_id": "147416356",
+    "form_id": "5042522a-0bc5-4381-ac3e-5aee8649b69c"
+  },
+  "provenance": {
+    "authority": "HubSpot",
+    "verified_at": "2026-08-30",
+    "purpose": "Provision canonical Staging2 wp-config identity for exact-SHA acceptance"
+  },
+  "guardrails": {
+    "theme_runtime_fallback": false,
+    "contains_private_credentials": false,
+    "production_mutation": false
+  }
+}
