@@ -53,16 +53,16 @@ provision_staging_hubspot_identity() {
   local form=''
   local source=''
 
-  portal="$(cd "$PROD_ROOT" && wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
-  form="$(cd "$PROD_ROOT" && wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
-  if [[ -n "$portal" || -n "$form" ]]; then
+  if (cd "$PROD_ROOT" && wp config has NVX_HUBSPOT_PORTAL_ID 2>/dev/null) || \
+     (cd "$PROD_ROOT" && wp config has NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null); then
     source='canonical_production_wp_config'
-  else
+    portal="$(cd "$PROD_ROOT" && wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
+    form="$(cd "$PROD_ROOT" && wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
+  elif (cd "$PROD_ROOT" && wp config has NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null) || \
+       (cd "$PROD_ROOT" && wp config has NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null); then
+    source='legacy_production_wp_config'
     portal="$(cd "$PROD_ROOT" && wp config get NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || true)"
     form="$(cd "$PROD_ROOT" && wp config get NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null || true)"
-    if [[ -n "$portal" || -n "$form" ]]; then
-      source='legacy_production_wp_config'
-    fi
   fi
 
   [[ -n "$source" ]] || fail_config 'Production HubSpot public portal/form identity is not provisioned'
@@ -102,16 +102,16 @@ verify_staging_hubspot_embed_contract() {
   # rather than loading the active theme, so a theme fallback cannot satisfy it.
   (
     cd "$WP_ROOT"
-    portal="$(wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
-    form="$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
-    if [[ -n "$portal" || -n "$form" ]]; then
+    if wp config has NVX_HUBSPOT_PORTAL_ID 2>/dev/null || \
+       wp config has NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null; then
       source='canonical_wp_config'
-    else
+      portal="$(wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
+      form="$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
+    elif wp config has NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || \
+         wp config has NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null; then
+      source='legacy_wp_config'
       portal="$(wp config get NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || true)"
       form="$(wp config get NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null || true)"
-      if [[ -n "$portal" || -n "$form" ]]; then
-        source='legacy_wp_config'
-      fi
     fi
 
     [[ -n "$source" ]] || fail_config 'Staging2 HubSpot portal/form identity is not provisioned in wp-config.php'
