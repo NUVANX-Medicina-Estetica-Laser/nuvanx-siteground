@@ -364,6 +364,10 @@ function nvx_navigable_noindex_page_ids(): array {
 /**
  * Collects page and post IDs that should be excluded from public indexing.
  *
+ * Patient cases are no longer part of this collection: the five repository-
+ * governed clinical sequences have documented publication consent and explicit
+ * editorial approval for public indexing as of the 2026-08-30 release.
+ *
  * @return int[] Unique IDs excluded from sitemaps and other public index listings.
  */
 function nvx_noindex_page_ids() {
@@ -378,17 +382,6 @@ function nvx_noindex_page_ids() {
 	// Retired strategy pages: exclude from sitemaps since they only redirect.
 	if ( function_exists( 'nvx_retired_strategy_page_ids' ) ) {
 		$ids = array_merge( $ids, nvx_retired_strategy_page_ids() );
-	}
-
-	// Casos de pacientes remains reachable only as an editorial holding route.
-	// A mutable WordPress meta flag cannot authorize its indexation: each procedure
-	// needs five validated clinical sequences and explicit consent before a
-	// repository-reviewed release may remove this safeguard.
-	$cases_id = function_exists( 'nvx_page_id_by_slug' )
-		? nvx_page_id_by_slug( 'casos-de-pacientes' )
-		: 0;
-	if ( $cases_id > 0 ) {
-		$ids[] = $cases_id;
 	}
 
 	/**
@@ -515,10 +508,11 @@ function nvx_normalize_staging2_internal_links( $content ) {
 add_filter( 'the_content', 'nvx_normalize_staging2_internal_links', NVX_HOOK_PRIO_INTERNAL_LINKS );
 
 /**
- * Remove sensitive pages (e.g., Casos de pacientes ID 2645) from navigation menus automatically.
+ * Remove sensitive pages from navigation menus automatically.
  *
  * Public legal pages may be noindex for search governance while still needing
  * direct navigation access, so they are explicitly excluded from this hide-list.
+ * Public patient cases remain visible because they are no longer in the noindex set.
  *
  * @param array $items Array of menu items.
  * @return array
