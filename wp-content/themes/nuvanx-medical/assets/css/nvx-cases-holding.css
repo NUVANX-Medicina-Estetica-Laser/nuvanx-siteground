@@ -86,8 +86,8 @@
 .nvx-case-card__badge {
   display: inline-block;
   align-self: flex-start;
-  padding: 4px 12px;
-  border-radius: 9999px;
+  padding: calc(var(--nvx-space-1) / 2) calc(var(--nvx-space-1) * 1.5);
+  border-radius: var(--nvx-radius-pill);
   background: var(--nvx-surface-soft);
   color: var(--nvx-charcoal);
   font-family: var(--nvx-font-family-sans, sans-serif);
@@ -109,14 +109,14 @@
   gap: var(--nvx-space-2) var(--nvx-space-4);
   margin: 0;
   padding: var(--nvx-space-3);
-  border-radius: 4px;
+  border-radius: calc(var(--nvx-radius-lg) / 2);
   background: var(--nvx-surface-base);
 }
 
 .nvx-case-card__meta-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--nvx-space-1) / 4);
 }
 
 .nvx-case-card__meta-label {
