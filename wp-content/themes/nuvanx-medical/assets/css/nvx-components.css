@@ -1475,7 +1475,7 @@ body.nvx-valoracion-modal-open{
 
 /* Bridal studio — route-owned editorial layout restored after component cleanup. */
 .nvx-bridal-studio {
-  overflow: hidden;
+  /* overflow: hidden removed to preserve canonical shell alignment */
 }
 
 .nvx-bridal-studio__intro {
