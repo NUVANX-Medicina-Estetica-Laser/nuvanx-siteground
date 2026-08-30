@@ -42,7 +42,7 @@ if ( false === $function_start ) {
 	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=noindex_owner_missing\n" );
 	exit( 1 );
 }
-$function_end = strpos( $hygiene, 'function nvx_noindex_but_navigable_page_ids()', $function_start );
+$function_end = strpos( $hygiene, 'function nvx_exclude_sensitive_pages_from_sitemap_ids', $function_start );
 if ( false === $function_end ) {
 	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=noindex_owner_boundary_missing\n" );
 	exit( 1 );
@@ -50,7 +50,8 @@ if ( false === $function_end ) {
 $noindex_owner = substr( $hygiene, $function_start, $function_end - $function_start );
 
 $required_executable = array(
-	'$cases_id = nvx_page_id_by_slug( \'casos-de-pacientes\' );',
+	'$cases_id = function_exists( \'nvx_page_id_by_slug\' )',
+	'? nvx_page_id_by_slug( \'casos-de-pacientes\' )',
 	'if ( $cases_id > 0 ) {',
 	'$ids[] = $cases_id;',
 );
