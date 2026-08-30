@@ -15,6 +15,7 @@ DEPLOY_SHA=''
 CONFIRM=0
 BACKUP_DIR=''
 MUTATION_STARTED=0
+CONFIG_BACKUP=''
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR=''
 
@@ -45,6 +46,39 @@ fail() {
 fail_config() {
   echo "FAIL_CONFIG: $*" >&2
   exit 78
+}
+
+provision_staging_hubspot_identity() {
+  local portal=''
+  local form=''
+  local source=''
+
+  portal="$(cd "$PROD_ROOT" && wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
+  form="$(cd "$PROD_ROOT" && wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
+  if [[ -n "$portal" || -n "$form" ]]; then
+    source='canonical_production_wp_config'
+  else
+    portal="$(cd "$PROD_ROOT" && wp config get NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || true)"
+    form="$(cd "$PROD_ROOT" && wp config get NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null || true)"
+    if [[ -n "$portal" || -n "$form" ]]; then
+      source='legacy_production_wp_config'
+    fi
+  fi
+
+  [[ -n "$source" ]] || fail_config 'Production HubSpot public portal/form identity is not provisioned'
+  [[ "$portal" =~ ^[0-9]{1,20}$ ]] || fail_config "Production HubSpot portal identity is malformed source=$source"
+  [[ "$form" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$ ]] || fail_config "Production HubSpot form identity is malformed source=$source"
+
+  (
+    cd "$WP_ROOT"
+    wp config set NVX_HUBSPOT_PORTAL_ID "$portal"
+    wp config set NVX_HUBSPOT_VALORACION_FORM_ID "$form"
+    php -l wp-config.php >/dev/null
+    [[ "$(wp config get NVX_HUBSPOT_PORTAL_ID)" == "$portal" ]]
+    [[ "$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID)" == "$form" ]]
+  )
+
+  echo "STAGING_HUBSPOT_PROVISION=PASS source=$source target=canonical_wp_config private_credentials=none"
 }
 
 verify_staging_hubspot_embed_contract() {
@@ -252,6 +286,11 @@ rollback() {
     )
     echo "SAFETY_RESTORE_COMPLETE backup=$BACKUP_DIR" >&2
   fi
+  if [[ -n "$CONFIG_BACKUP" && -f "$CONFIG_BACKUP" ]]; then
+    cp -p "$CONFIG_BACKUP" "$WP_ROOT/wp-config.php"
+    php -l "$WP_ROOT/wp-config.php" >/dev/null
+    echo 'SAFETY_RESTORE_CONFIG=PASS' >&2
+  fi
   exit "$exit_code"
 }
 trap rollback ERR
@@ -285,6 +324,11 @@ echo '== Guard production read-only source identity =='
   [[ "$(wp option get blog_public)" == '1' ]] || fail 'production source must remain public'
   [[ "$(wp theme list --status=active --field=name)" == 'nuvanx-medical' ]] || fail 'unexpected production active theme'
 )
+
+CONFIG_BACKUP="$(mktemp)"
+cp -p "$WP_ROOT/wp-config.php" "$CONFIG_BACKUP"
+echo '== Provision Staging2 HubSpot public identity from Production read-only config =='
+provision_staging_hubspot_identity
 
 echo '== Verify Staging2 HubSpot fail-closed identity contract =='
 verify_staging_hubspot_embed_contract
@@ -367,6 +411,8 @@ echo '== Purge staging2 caches =='
   wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); echo "opcache=ok\n"; }'
 )
 
+rm -f "$CONFIG_BACKUP"
+CONFIG_BACKUP=''
 trap - ERR
 MUTATION_STARTED=0
 
