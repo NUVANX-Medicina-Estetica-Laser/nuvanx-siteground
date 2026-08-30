@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
 import {
   assertHubSpotFormDefinitionContract,
-  fetchHubSpotFormDefinition,
   inspectHubSpotFormDefinition,
 } from './hubspot-form-definition-contract.mjs';
 import { EX_TEMPFAIL, getGitHubEventPath, EXECUTION_PATHS } from './siteground-transient-classifier.mjs';
@@ -37,11 +36,65 @@ function delay(ms) {
 }
 
 function isTransient(error) {
-  if (error?.exitCode === EX_TEMPFAIL) return true;
   if (error instanceof assert.AssertionError) return false;
   const message = error instanceof Error ? error.message : String(error);
   if (/CANDIDATE_REGRESSION|AssertionError/i.test(message)) return false;
-  return /ERR_(?:CONNECTION|NAME|TIMED_OUT)|navigation.*timeout|net::|502|503|504|temporar/i.test(message);
+  return /ERR_(?:CONNECTION|NAME|TIMED_OUT)|navigation.*timeout|net::|429|502|503|504|temporar/i.test(message);
+}
+
+function isHubSpotEmbedDefinitionUrl(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const trustedHost = host === 'forms.hsforms.com' || host.endsWith('.hsforms.com');
+    return trustedHost && /\/embed\/v3\/form\/[^/]+\/[^/]+\/json$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function embedResponseMatchesForm(entry, formId) {
+  try {
+    const pathname = new URL(entry.url).pathname.toLowerCase();
+    return pathname.endsWith(`/${String(formId || '').toLowerCase()}/json`);
+  } catch {
+    return false;
+  }
+}
+
+async function waitForHubSpotEmbedDefinition(entries, formId, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  let entry = null;
+  while (Date.now() < deadline) {
+    entry = entries.find((candidate) => embedResponseMatchesForm(candidate, formId)) || null;
+    if (entry) break;
+    await delay(100);
+  }
+
+  assert.ok(
+    entry,
+    `CANDIDATE_REGRESSION: HubSpot embed definition response for form ${formId} was not captured`
+  );
+
+  const status = entry.response.status();
+  if (status === 429 || status >= 500) {
+    throw new Error(`HubSpot embed definition temporarily unavailable status=${status}`);
+  }
+  assert.equal(status, 200, `CANDIDATE_REGRESSION: HubSpot embed definition status=${status}`);
+
+  let payload;
+  try {
+    payload = await entry.response.json();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`CANDIDATE_REGRESSION: HubSpot embed definition is not valid JSON: ${message}`);
+  }
+
+  const parsedUrl = new URL(entry.url);
+  return {
+    payload,
+    source: `${parsedUrl.origin}${parsedUrl.pathname}`,
+  };
 }
 
 async function assertHealthyNavigation(page, target) {
@@ -104,6 +157,12 @@ await fs.rm(ARTIFACT_PATH, { force: true });
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 const page = await context.newPage();
+const hubspotEmbedResponses = [];
+page.on('response', (response) => {
+  const url = response.url();
+  if (!isHubSpotEmbedDefinitionUrl(url)) return;
+  hubspotEmbedResponses.push({ url, response });
+});
 
 try {
   // Surface 1: canonical valoración landing. It intentionally owns only the native HubSpot form.
@@ -133,17 +192,18 @@ try {
     'Attribution contract must provide one session UUID v4'
   );
 
-  // Fail early against the actual published HubSpot form definition. The legacy
-  // read endpoint is intentionally unauthenticated and returns only public form
-  // metadata, so this check cannot mutate HubSpot or expose private credentials.
-  const hubspotDefinition = await fetchHubSpotFormDefinition(managedState.formId);
-  const hubspotContract = inspectHubSpotFormDefinition(hubspotDefinition, managedState.formId);
+  // Inspect the exact public embed definition consumed by HubSpot Forms V4.
+  // Capturing the browser response avoids the authenticated Forms API entirely,
+  // introduces no new credential path, and cannot mutate HubSpot.
+  const capturedDefinition = await waitForHubSpotEmbedDefinition(hubspotEmbedResponses, managedState.formId);
+  const hubspotContract = inspectHubSpotFormDefinition(capturedDefinition.payload, managedState.formId);
   await fs.writeFile(
     ARTIFACT_PATH,
     `${JSON.stringify({
-      schema: 3,
+      schema: 4,
       environment: 'staging2',
-      mode: 'zero_submit_preflight',
+      mode: 'zero_submit_embed_contract',
+      embed_definition_source: capturedDefinition.source,
       form_contract: hubspotContract,
       submission_performed: false,
       verified_at: new Date().toISOString(),
@@ -152,7 +212,7 @@ try {
   );
   assertHubSpotFormDefinitionContract(hubspotContract);
   console.log(
-    `HUBSPOT_NATIVE_FORM_CONTRACT=PASS form_id=${managedState.formId} required=${hubspotContract.required_fields.length}`
+    `HUBSPOT_NATIVE_FORM_CONTRACT=PASS source=embed_v3 form_id=${managedState.formId} required=${hubspotContract.required_fields.length}`
   );
 
   const hubspotFormDiscovered = await page.waitForFunction((formId) => {
@@ -176,14 +236,21 @@ try {
     await delay(250);
   }
 
+  const nativeFieldNames = Object.keys(nativeFields || {}).sort();
+  const missingNativeReadbackFields = hubspotContract.required_fields.filter(
+    (name) => !Object.hasOwn(nativeFields || {}, name)
+  );
+
   await fs.writeFile(
     ARTIFACT_PATH,
     `${JSON.stringify({
-      schema: 3,
+      schema: 4,
       environment: 'staging2',
       mode: 'zero_submit_native_readback',
+      embed_definition_source: capturedDefinition.source,
       form_contract: hubspotContract,
-      native_field_names: Object.keys(nativeFields || {}).sort(),
+      native_field_names: nativeFieldNames,
+      missing_native_readback_fields: missingNativeReadbackFields,
       native_lineage_presence: {
         nvx_lead_id: Object.hasOwn(nativeFields || {}, 'nvx_lead_id'),
         nvx_is_test_lead: Object.hasOwn(nativeFields || {}, 'nvx_is_test_lead'),
@@ -197,6 +264,12 @@ try {
     }, null, 2)}\n`,
     'utf8'
   );
+
+  if (missingNativeReadbackFields.length > 0) {
+    console.error(`HUBSPOT_NATIVE_READBACK=FAIL missing=${missingNativeReadbackFields.join(',')}`);
+  } else if (!isQaTrue(nativeFields?.nvx_is_test_lead)) {
+    console.error(`HUBSPOT_NATIVE_READBACK=FAIL qa_value=${JSON.stringify(nativeFields?.nvx_is_test_lead ?? null)}`);
+  }
 
   assert.ok(nativeFields, 'Canonical HubSpot V4 form must be discoverable after marketing consent');
   assert.equal(String(nativeFields.nvx_lead_id || '').toLowerCase(), managedState.leadId);
@@ -261,7 +334,7 @@ try {
   // Deliberately zero-submit: acceptance must not create QA contacts in the commercial HubSpot portal
   // or production attribution rows. Server relay behavior is covered by deterministic contract tests.
   const evidence = {
-    schema: 3,
+    schema: 4,
     environment: 'staging2',
     source: EVENT_NAME,
     mode: 'zero_submit',
@@ -271,6 +344,7 @@ try {
     test_run_id: String(managedState.qa.test_run_id),
     managed_surface: '/madrid/valoracion/',
     fallback_surface: '/',
+    embed_definition_source: capturedDefinition.source,
     hubspot_form_contract: hubspotContract,
     native_form_lineage: true,
     direct_form_lineage: true,
