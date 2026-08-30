@@ -136,9 +136,6 @@ for (const route of routes) {
       headers: {
         'user-agent': 'NUVANX-Meta-No-Consent-Contract/1.1',
         accept: 'text/html,application/xhtml+xml',
-        'cache-control': 'no-cache',
-        pragma: 'no-cache',
-        cookie: 'wpSGCacheBypass=1',
       },
     });
 
