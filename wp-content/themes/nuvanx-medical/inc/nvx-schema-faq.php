@@ -137,6 +137,10 @@ function nvx_schema_faq_catalog() {
 	if ( function_exists( 'nvx_catalog_json_resolved' ) ) {
 		$catalog['endolift_facial']    = nvx_schema_faq_load_single_page( 'endolift-page.json' );
 		$catalog['endolaser_corporal'] = nvx_schema_faq_load_single_page( 'endolaser-page.json' );
+		$catalog['laser_co2']          = nvx_schema_faq_load_single_page( 'laser-co2-page.json' );
+		$catalog['co2']                = $catalog['laser_co2'];
+		$catalog['exion_btl']          = nvx_schema_faq_load_single_page( 'exion-page.json' );
+		$catalog['profhilo']           = nvx_schema_faq_load_single_page( 'profhilo-page.json' );
 		// Use claim resolver for BTL detail pages to ensure claim keys are resolved
 		if ( function_exists( 'nvx_btl_claim' ) ) {
 			$catalog = array_merge( $catalog, nvx_schema_faq_load_map_catalog_with_resolver( 'btl-detail-pages.json', 'nvx_btl_claim' ) );
