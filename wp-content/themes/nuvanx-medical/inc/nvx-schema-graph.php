@@ -291,8 +291,20 @@ function nvx_schema_breadcrumb_node( $page_id ) {
 	// Dynamic breadcrumbs for single blog posts: Inicio > Blog > Título
 	$target_id = $page_id > 0 ? (int) $page_id : (int) get_queried_object_id();
 	if ( $target_id > 0 && ( is_single( $target_id ) || 'post' === get_post_type( $target_id ) ) ) {
-		$title = get_the_title( $target_id );
-		if ( is_string( $title ) && '' !== trim( $title ) ) {
+		$raw_title   = get_the_title( $target_id );
+		$clean_title = is_string( $raw_title ) ? trim( wp_strip_all_tags( $raw_title ) ) : '';
+		if ( '' !== $clean_title ) {
+			$routes    = function_exists( 'nvx_catalog_json_resolved' ) ? nvx_catalog_json_resolved( 'routes.json' ) : array();
+			$blog_name = 'Blog';
+			$blog_url  = '/blog/';
+			if ( ! empty( $routes['/blog/']['breadcrumb'] ) && is_array( $routes['/blog/']['breadcrumb'] ) ) {
+				$last_crumb = end( $routes['/blog/']['breadcrumb'] );
+				if ( is_array( $last_crumb ) && ! empty( $last_crumb['name'] ) && ! empty( $last_crumb['url'] ) ) {
+					$blog_name = (string) $last_crumb['name'];
+					$blog_url  = (string) $last_crumb['url'];
+				}
+			}
+
 			return array(
 				'@type'           => 'BreadcrumbList',
 				'@id'             => home_url( $path . '#breadcrumb' ),
@@ -306,13 +318,13 @@ function nvx_schema_breadcrumb_node( $page_id ) {
 					array(
 						'@type'    => 'ListItem',
 						'position' => 2,
-						'name'     => 'Blog',
-						'item'     => home_url( '/blog/' ),
+						'name'     => $blog_name,
+						'item'     => home_url( $blog_url ),
 					),
 					array(
 						'@type'    => 'ListItem',
 						'position' => 3,
-						'name'     => trim( wp_strip_all_tags( $title ) ),
+						'name'     => $clean_title,
 						'item'     => home_url( $path ),
 					),
 				),
@@ -441,8 +453,18 @@ function nvx_extend_yoast_schema_graph( $graph ) {
 	nvx_schema_attach_treatment_and_faq( $graph, $page_id, $organization['id'], $physician );
 
 	$breadcrumb = nvx_schema_breadcrumb_node( $page_id );
-	if ( $breadcrumb ) {
-		$graph[] = $breadcrumb;
+	if ( is_array( $breadcrumb ) && ! empty( $breadcrumb['@id'] ) ) {
+		$replaced = false;
+		foreach ( $graph as $idx => $node ) {
+			if ( is_array( $node ) && isset( $node['@id'] ) && $node['@id'] === $breadcrumb['@id'] ) {
+				$graph[ $idx ] = $breadcrumb;
+				$replaced      = true;
+				break;
+			}
+		}
+		if ( ! $replaced ) {
+			$graph[] = $breadcrumb;
+		}
 	}
 
 	$video = nvx_schema_video_object_node();
