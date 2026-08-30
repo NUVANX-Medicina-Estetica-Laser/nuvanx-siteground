@@ -7,6 +7,8 @@ const files = [
   'wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-attribution.php',
   'wp-content/themes/nuvanx-medical/inc/nvx-valoracion-managed-page.php',
   'wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php',
+  'wp-content/themes/nuvanx-medical/inc/nvx-valoracion-modal.php',
+  'wp-content/themes/nuvanx-medical/inc/nvx-hero-and-forms.php',
   'scripts/ci/validate-hubspot-form.sh',
 ];
 
@@ -23,10 +25,10 @@ for (const relative of files) {
   }
 }
 
-const secure = fs.readFileSync(new URL(files[0], repoRoot), 'utf8');
-const managed = fs.readFileSync(new URL(files[1], repoRoot), 'utf8');
-const direct = fs.readFileSync(new URL(files[2], repoRoot), 'utf8');
-const diagnostic = fs.readFileSync(new URL(files[3], repoRoot), 'utf8');
+const secure = fs.readFileSync(new URL('wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-attribution.php', repoRoot), 'utf8');
+const managed = fs.readFileSync(new URL('wp-content/themes/nuvanx-medical/inc/nvx-valoracion-managed-page.php', repoRoot), 'utf8');
+const direct = fs.readFileSync(new URL('wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php', repoRoot), 'utf8');
+const diagnostic = fs.readFileSync(new URL('scripts/ci/validate-hubspot-form.sh', repoRoot), 'utf8');
 
 assert.match(secure, /return '';\s*\n}/, 'HubSpot identity resolver must be able to return empty');
 assert.match(secure, /nvx_missing_hubspot_identity/, 'Missing HubSpot identity must fail explicitly');
@@ -38,6 +40,8 @@ assert.match(diagnostic, /HUBSPOT_FORM_ID:\?Missing HUBSPOT_FORM_ID/, 'Diagnosti
 assert.match(diagnostic, /HUBSPOT_PORTAL:\?Missing HUBSPOT_PORTAL/, 'Diagnostic must require explicit portal identity');
 
 // Verify runtime fail-closed behavior across priority layers via PHP subprocesses
+const TEST_PORTAL = '88888888';
+const TEST_FORM = '11111111-2222-4333-8444-555555555555';
 const phpRunner = `<?php
 function run_case($setup, $expected_portal, $expected_form) {
   $code = "define('ABSPATH', __DIR__ . '/'); function add_filter(\\$t, \\$c, \\$p=10, \\$a=1){} " . $setup . " require_once 'wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-attribution.php'; \\$res = nvx_hubspot_secure_identity(); if (\\$res['portal_id'] !== '$expected_portal' || \\$res['form_id'] !== '$expected_form') { exit(1); }";
@@ -47,12 +51,12 @@ function run_case($setup, $expected_portal, $expected_form) {
     exit(1);
   }
 }
-run_case("define('NVX_HUBSPOT_PORTAL_ID', '147416356'); define('NVX_HUBSPOT_VALORACION_FORM_ID', '5042522a-0bc5-4381-ac3e-5aee8649b69c');", "147416356", "5042522a-0bc5-4381-ac3e-5aee8649b69c");
-run_case("define('NVX_HUBSPOT_PORTAL_ID', 'invalid'); define('NVX_VALORACION_HS_FRAME_PORTAL_ID', '147416356'); define('NVX_VALORACION_HS_FRAME_FORM_ID', '5042522a-0bc5-4381-ac3e-5aee8649b69c');", "", "");
-run_case("define('NVX_HUBSPOT_PORTAL_ID', '147416356'); define('NVX_VALORACION_HS_FRAME_PORTAL_ID', '147416356'); define('NVX_VALORACION_HS_FRAME_FORM_ID', '5042522a-0bc5-4381-ac3e-5aee8649b69c');", "", "");
-run_case("define('NVX_VALORACION_HS_FRAME_PORTAL_ID', '147416356'); define('NVX_VALORACION_HS_FRAME_FORM_ID', '5042522a-0bc5-4381-ac3e-5aee8649b69c');", "147416356", "5042522a-0bc5-4381-ac3e-5aee8649b69c");
-run_case("putenv('NVX_HUBSPOT_PORTAL_ID=147416356'); putenv('NVX_HUBSPOT_VALORACION_FORM_ID=5042522a-0bc5-4381-ac3e-5aee8649b69c');", "147416356", "5042522a-0bc5-4381-ac3e-5aee8649b69c");
-run_case("putenv('NVX_HUBSPOT_PORTAL_ID=invalid'); putenv('NVX_VALORACION_HS_FRAME_PORTAL_ID=147416356'); putenv('NVX_VALORACION_HS_FRAME_FORM_ID=5042522a-0bc5-4381-ac3e-5aee8649b69c');", "", "");
+run_case("define('NVX_HUBSPOT_PORTAL_ID', '${TEST_PORTAL}'); define('NVX_HUBSPOT_VALORACION_FORM_ID', '${TEST_FORM}');", "${TEST_PORTAL}", "${TEST_FORM}");
+run_case("define('NVX_HUBSPOT_PORTAL_ID', 'invalid'); define('NVX_VALORACION_HS_FRAME_PORTAL_ID', '${TEST_PORTAL}'); define('NVX_VALORACION_HS_FRAME_FORM_ID', '${TEST_FORM}');", "", "");
+run_case("define('NVX_HUBSPOT_PORTAL_ID', '${TEST_PORTAL}'); define('NVX_VALORACION_HS_FRAME_PORTAL_ID', '${TEST_PORTAL}'); define('NVX_VALORACION_HS_FRAME_FORM_ID', '${TEST_FORM}');", "", "");
+run_case("define('NVX_VALORACION_HS_FRAME_PORTAL_ID', '${TEST_PORTAL}'); define('NVX_VALORACION_HS_FRAME_FORM_ID', '${TEST_FORM}');", "${TEST_PORTAL}", "${TEST_FORM}");
+run_case("putenv('NVX_HUBSPOT_PORTAL_ID=${TEST_PORTAL}'); putenv('NVX_HUBSPOT_VALORACION_FORM_ID=${TEST_FORM}');", "${TEST_PORTAL}", "${TEST_FORM}");
+run_case("putenv('NVX_HUBSPOT_PORTAL_ID=invalid'); putenv('NVX_VALORACION_HS_FRAME_PORTAL_ID=${TEST_PORTAL}'); putenv('NVX_VALORACION_HS_FRAME_FORM_ID=${TEST_FORM}');", "", "");
 `;
 
 execSync('php', { input: phpRunner, cwd: repoRoot, stdio: ['pipe', 'inherit', 'inherit'] });
