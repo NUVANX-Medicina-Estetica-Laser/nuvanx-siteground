@@ -1,0 +1,6 @@
+# Integration identity and measurement configuration requires explicit owner review.
+/wp-content/themes/nuvanx-medical/inc/data/ads-conversion-catalog.json @Arisofia
+/wp-content/themes/nuvanx-medical/inc/nvx-ads-conversion-catalog.php @Arisofia
+/wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-attribution.php @Arisofia
+/wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php @Arisofia
+/wp-content/themes/nuvanx-medical/inc/nvx-valoracion-managed-page.php @Arisofia
