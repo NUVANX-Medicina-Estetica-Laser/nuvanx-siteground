@@ -36,6 +36,7 @@ function delay(ms) {
 }
 
 function isTransient(error) {
+  if (error?.exitCode === EX_TEMPFAIL) return true;
   if (error instanceof assert.AssertionError) return false;
   const message = error instanceof Error ? error.message : String(error);
   if (/CANDIDATE_REGRESSION|AssertionError/i.test(message)) return false;
@@ -71,10 +72,13 @@ async function waitForHubSpotEmbedDefinition(entries, formId, timeoutMs = 15_000
     await delay(100);
   }
 
-  assert.ok(
-    entry,
-    `CANDIDATE_REGRESSION: HubSpot embed definition response for form ${formId} was not captured`
-  );
+  if (!entry) {
+    const error = new Error(
+      `HubSpot embed definition response for form ${formId} was not captured before timeout`
+    );
+    error.exitCode = EX_TEMPFAIL;
+    throw error;
+  }
 
   const status = entry.response.status();
   if (status === 429 || status >= 500) {
