@@ -326,7 +326,9 @@ rollback() {
 
   exit "$exit_code"
 }
-trap rollback EXIT ERR INT TERM
+trap rollback EXIT ERR
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo '== Guard staging2 identity =='
 (
