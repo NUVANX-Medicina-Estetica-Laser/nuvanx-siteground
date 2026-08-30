@@ -1,11 +1,10 @@
-/* ==========================================================================
-   E-E-A-T Medical Authority & Treatment Cases Preview
-   ========================================================================== */
+/* NUVANX treatment authority and clinical-evidence components. */
 
 .nvx-treatment-physician {
   margin-top: var(--nvx-space-6);
   margin-bottom: var(--nvx-space-6);
 }
+
 .nvx-treatment-physician__card {
   display: flex;
   flex-direction: row;
@@ -17,33 +16,38 @@
   background: var(--nvx-surface-soft);
   box-shadow: var(--nvx-shadow-min);
 }
+
 .nvx-treatment-physician__portrait {
   flex-shrink: 0;
-  width: 140px;
-  height: 140px;
-  border-radius: var(--nvx-radius-pill);
+  width: calc(var(--nvx-space-9) * 2);
+  height: calc(var(--nvx-space-9) * 2);
   overflow: hidden;
   border: var(--nvx-border-hairline) solid var(--nvx-color-line);
+  border-radius: var(--nvx-radius-pill);
   background: var(--nvx-surface-base);
 }
+
 .nvx-treatment-physician__img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
+
 .nvx-treatment-physician__info {
   flex: 1;
 }
+
 .nvx-treatment-physician__kicker {
+  margin-bottom: var(--nvx-space-1);
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-micro);
   font-weight: var(--nvx-fw-heading);
   letter-spacing: var(--nvx-track-kicker);
   text-transform: uppercase;
   color: var(--nvx-accent-muted);
-  margin-bottom: var(--nvx-space-1);
 }
+
 .nvx-treatment-physician__name {
   margin: 0 0 var(--nvx-space-1);
   font-family: var(--nvx-serif);
@@ -51,62 +55,69 @@
   font-weight: var(--nvx-fw-regular);
   color: var(--nvx-ink);
 }
+
 .nvx-treatment-physician__role {
   margin: 0 0 var(--nvx-space-2);
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-caption);
-  color: var(--nvx-accent-info);
   font-weight: var(--nvx-fw-medium);
+  color: var(--nvx-accent-info);
 }
+
 .nvx-treatment-physician__meta {
   display: flex;
   flex-wrap: wrap;
   gap: var(--nvx-space-2);
   margin-bottom: var(--nvx-space-3);
 }
+
 .nvx-treatment-physician__badge {
   display: inline-flex;
   align-items: center;
   padding: calc(var(--nvx-space-1) / 3) var(--nvx-space-2);
+  border: var(--nvx-border-hairline) solid var(--nvx-color-line);
   border-radius: var(--nvx-radius-pill);
   background: var(--nvx-surface-base);
-  border: var(--nvx-border-hairline) solid var(--nvx-color-line);
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-micro);
   color: var(--nvx-text-body);
   text-decoration: none;
 }
+
 .nvx-treatment-physician__badge--accent {
-  background: rgba(184, 150, 110, 0.12);
   border-color: var(--nvx-accent-muted);
+  background: var(--nvx-surface-base);
   color: var(--nvx-ink);
   font-weight: var(--nvx-fw-medium);
 }
+
 .nvx-treatment-physician__quote {
   margin: 0;
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-caption);
+  font-style: italic;
   line-height: var(--nvx-lh-prose);
   color: var(--nvx-text-muted);
-  font-style: italic;
-}
-@media (max-width: 640px) {
-  .nvx-treatment-physician__card {
-    flex-direction: column;
-    text-align: center;
-    gap: var(--nvx-space-4);
-  }
-  .nvx-treatment-physician__meta {
-    justify-content: center;
-  }
 }
 
-/* Treatment Cases Preview */
 .nvx-treatment-cases {
   margin-top: var(--nvx-space-6);
   margin-bottom: var(--nvx-space-6);
 }
+
 .nvx-treatment-cases__cta {
-  text-align: center;
   margin-top: var(--nvx-space-4);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .nvx-treatment-physician__card {
+    flex-direction: column;
+    gap: var(--nvx-space-4);
+    text-align: center;
+  }
+
+  .nvx-treatment-physician__meta {
+    justify-content: center;
+  }
 }
