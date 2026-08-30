@@ -99,6 +99,59 @@ async function readNativeFields(page, formId) {
   }, formId);
 }
 
+async function waitForStableHubSpotControls(page, formId, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const status = await page.evaluate((expectedFormId) => {
+      const allDocuments = [document];
+      for (const iframe of document.querySelectorAll('iframe')) {
+        try {
+          if (iframe.contentDocument) allDocuments.push(iframe.contentDocument);
+        } catch {}
+      }
+
+      let foundControls = 0;
+      const visibleFieldNames = [];
+
+      for (const doc of allDocuments) {
+        const form = doc.querySelector('form');
+        if (!form) continue;
+
+        const inputs = Array.from(doc.querySelectorAll('input, select, textarea'));
+        for (const input of inputs) {
+          const style = window.getComputedStyle(input);
+          const rect = input.getBoundingClientRect();
+          const isVisible = style.display !== 'none' &&
+                            style.visibility !== 'hidden' &&
+                            Number.parseFloat(style.opacity || '1') > 0.01 &&
+                            rect.width > 1 &&
+                            rect.height > 1 &&
+                            input.type !== 'hidden';
+
+          if (isVisible) {
+            foundControls += 1;
+            const rawName = input.getAttribute('name') || input.id || '';
+            const canonical = rawName.replace(/^\d+-\d+\//, '').trim();
+            if (canonical) visibleFieldNames.push(canonical);
+          }
+        }
+      }
+
+      return {
+        ready: foundControls >= 1,
+        controlCount: foundControls,
+        visibleFieldNames,
+      };
+    }, formId).catch(() => ({ ready: false, controlCount: 0, visibleFieldNames: [] }));
+
+    if (status.ready) {
+      return status;
+    }
+    await delay(250);
+  }
+  return { ready: false, controlCount: 0, visibleFieldNames: [] };
+}
+
 await fs.mkdir(new URL('./valoracion-artifacts/', import.meta.url), { recursive: true });
 await fs.rm(ARTIFACT_PATH, { force: true });
 
@@ -205,6 +258,11 @@ try {
     await delay(250);
   }
 
+  const stableControls = await waitForStableHubSpotControls(page, managedState.formId);
+  const improperlyVisibleLineage = REQUIRED_NATIVE_LINEAGE_FIELDS.filter((name) =>
+    stableControls.visibleFieldNames.includes(name)
+  );
+
   const nativeFieldNames = Object.keys(nativeFields || {}).sort();
   const missingNativeReadbackFields = hubspotContract.required_fields.filter(
     (name) => !Object.hasOwn(nativeFields || {}, name)
@@ -219,7 +277,9 @@ try {
       embed_definition_source: capturedDefinition.source,
       form_contract: hubspotContract,
       native_field_names: nativeFieldNames,
+      visible_field_names: stableControls.visibleFieldNames,
       missing_native_readback_fields: missingNativeReadbackFields,
+      improperly_visible_lineage_fields: improperlyVisibleLineage,
       native_lineage_presence: {
         nvx_lead_id: Object.hasOwn(nativeFields || {}, 'nvx_lead_id'),
         nvx_is_test_lead: Object.hasOwn(nativeFields || {}, 'nvx_is_test_lead'),
@@ -239,6 +299,12 @@ try {
   } else if (!isQaTrue(nativeFields?.nvx_is_test_lead)) {
     console.error(`HUBSPOT_NATIVE_READBACK=FAIL qa_value=${JSON.stringify(nativeFields?.nvx_is_test_lead ?? null)}`);
   }
+
+  assert.deepEqual(
+    improperlyVisibleLineage,
+    [],
+    `CANDIDATE_REGRESSION: HubSpot lineage fields must not be rendered visibly in DOM: ${improperlyVisibleLineage.join(',')}`
+  );
 
   assert.ok(nativeFields, 'Canonical HubSpot V4 form must be discoverable after marketing consent');
   assert.equal(String(nativeFields.nvx_lead_id || '').toLowerCase(), managedState.leadId);
