@@ -44,13 +44,36 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function waitForHubSpotEmbedDefinition(entries, formId, timeoutMs = 15_000, pollIntervalMs = 50) {
+function normalizeTracker(target) {
+  if (Array.isArray(target)) {
+    return {
+      requests: target,
+      failedRequests: [],
+      responses: target,
+    };
+  }
+  return {
+    requests: Array.isArray(target?.requests) ? target.requests : [],
+    failedRequests: Array.isArray(target?.failedRequests) ? target.failedRequests : [],
+    responses: Array.isArray(target?.responses) ? target.responses : [],
+  };
+}
+
+export async function waitForHubSpotEmbedDefinition(
+  entriesOrTracker,
+  formId,
+  timeoutMs = 15_000,
+  pollIntervalMs = 50
+) {
   const deadline = Date.now() + timeoutMs;
 
   while (true) {
-    const matching = entries.filter((candidate) => embedResponseMatchesForm(candidate, formId));
+    const tracker = normalizeTracker(entriesOrTracker);
+    const matchingResponses = tracker.responses.filter((candidate) =>
+      embedResponseMatchesForm(candidate, formId)
+    );
 
-    const successfulEntry = matching.find((candidate) => {
+    const successfulEntry = matchingResponses.find((candidate) => {
       try {
         const status = typeof candidate.response?.status === 'function'
           ? candidate.response.status()
@@ -64,9 +87,9 @@ export async function waitForHubSpotEmbedDefinition(entries, formId, timeoutMs =
     if (successfulEntry) {
       let payload;
       try {
-        payload = typeof successfulEntry.response.json === 'function'
+        payload = typeof successfulEntry.response?.json === 'function'
           ? await successfulEntry.response.json()
-          : successfulEntry.response.json;
+          : successfulEntry.response?.json;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`CANDIDATE_REGRESSION: HubSpot embed definition is not valid JSON: ${message}`);
@@ -80,42 +103,68 @@ export async function waitForHubSpotEmbedDefinition(entries, formId, timeoutMs =
     }
 
     if (Date.now() >= deadline) {
-      if (matching.length === 0) {
+      const matchingRequests = tracker.requests.filter((candidate) =>
+        embedResponseMatchesForm(candidate, formId)
+      );
+      const matchingFailed = tracker.failedRequests.filter((candidate) =>
+        embedResponseMatchesForm(candidate, formId)
+      );
+
+      // If the page never attempted to request the form embed, classify as candidate code regression.
+      if (matchingRequests.length === 0 && matchingFailed.length === 0 && matchingResponses.length === 0) {
+        assert.fail(
+          `CANDIDATE_REGRESSION: HubSpot embed definition request for form ${formId} was not emitted by the page before timeout`
+        );
+      }
+
+      // If a transport/network layer failure was captured, classify as transient infrastructure error.
+      if (matchingFailed.length > 0) {
+        const failReason = matchingFailed[0].errorText || 'network_failure';
         const error = new Error(
-          `HubSpot embed definition response for form ${formId} was not captured before timeout`
+          `HubSpot embed definition transport failed for form ${formId}: ${failReason}`
         );
         error.exitCode = EX_TEMPFAIL;
         throw error;
       }
 
-      const lastEntry = matching[matching.length - 1];
-      const status = typeof lastEntry.response?.status === 'function'
-        ? lastEntry.response.status()
-        : lastEntry.response?.status;
+      // If matching responses were captured, inspect the last observed status.
+      if (matchingResponses.length > 0) {
+        const lastEntry = matchingResponses[matchingResponses.length - 1];
+        const status = typeof lastEntry.response?.status === 'function'
+          ? lastEntry.response.status()
+          : lastEntry.response?.status;
 
-      if (status === 429 || status >= 500) {
-        const error = new Error(`HubSpot embed definition temporarily unavailable status=${status}`);
-        error.exitCode = EX_TEMPFAIL;
-        throw error;
+        if (status === 429 || status >= 500) {
+          const error = new Error(`HubSpot embed definition temporarily unavailable status=${status}`);
+          error.exitCode = EX_TEMPFAIL;
+          throw error;
+        }
+
+        assert.equal(status, 200, `CANDIDATE_REGRESSION: HubSpot embed definition status=${status}`);
+
+        let payload;
+        try {
+          payload = typeof lastEntry.response?.json === 'function'
+            ? await lastEntry.response.json()
+            : lastEntry.response?.json;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(`CANDIDATE_REGRESSION: HubSpot embed definition is not valid JSON: ${message}`);
+        }
+
+        const parsedUrl = new URL(lastEntry.url);
+        return {
+          payload,
+          source: `${parsedUrl.origin}${parsedUrl.pathname}`,
+        };
       }
 
-      assert.equal(status, 200, `CANDIDATE_REGRESSION: HubSpot embed definition status=${status}`);
-
-      let payload;
-      try {
-        payload = typeof lastEntry.response.json === 'function'
-          ? await lastEntry.response.json()
-          : lastEntry.response.json;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`CANDIDATE_REGRESSION: HubSpot embed definition is not valid JSON: ${message}`);
-      }
-
-      const parsedUrl = new URL(lastEntry.url);
-      return {
-        payload,
-        source: `${parsedUrl.origin}${parsedUrl.pathname}`,
-      };
+      // A request was emitted but timed out in-flight before response or failure was received.
+      const error = new Error(
+        `HubSpot embed definition request for form ${formId} timed out in flight`
+      );
+      error.exitCode = EX_TEMPFAIL;
+      throw error;
     }
 
     await delay(pollIntervalMs);

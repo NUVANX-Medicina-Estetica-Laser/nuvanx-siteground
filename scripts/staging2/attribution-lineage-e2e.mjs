@@ -105,11 +105,32 @@ await fs.rm(ARTIFACT_PATH, { force: true });
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 const page = await context.newPage();
-const hubspotEmbedResponses = [];
+const hubspotEmbedTracker = {
+  requests: [],
+  failedRequests: [],
+  responses: [],
+};
+
+page.on('request', (request) => {
+  const url = request.url();
+  if (isHubSpotEmbedDefinitionUrl(url)) {
+    hubspotEmbedTracker.requests.push({ url, request, timestamp: Date.now() });
+  }
+});
+
+page.on('requestfailed', (request) => {
+  const url = request.url();
+  if (isHubSpotEmbedDefinitionUrl(url)) {
+    const errorText = request.failure()?.errorText || 'network_failure';
+    hubspotEmbedTracker.failedRequests.push({ url, errorText, timestamp: Date.now() });
+  }
+});
+
 page.on('response', (response) => {
   const url = response.url();
-  if (!isHubSpotEmbedDefinitionUrl(url)) return;
-  hubspotEmbedResponses.push({ url, response });
+  if (isHubSpotEmbedDefinitionUrl(url)) {
+    hubspotEmbedTracker.responses.push({ url, response, timestamp: Date.now() });
+  }
 });
 
 try {
@@ -143,7 +164,7 @@ try {
   // Inspect the exact public embed definition consumed by HubSpot Forms V4.
   // Capturing the browser response avoids the authenticated Forms API entirely,
   // introduces no new credential path, and cannot mutate HubSpot.
-  const capturedDefinition = await waitForHubSpotEmbedDefinition(hubspotEmbedResponses, managedState.formId);
+  const capturedDefinition = await waitForHubSpotEmbedDefinition(hubspotEmbedTracker, managedState.formId);
   const hubspotContract = inspectHubSpotFormDefinition(capturedDefinition.payload, managedState.formId);
   await fs.writeFile(
     ARTIFACT_PATH,

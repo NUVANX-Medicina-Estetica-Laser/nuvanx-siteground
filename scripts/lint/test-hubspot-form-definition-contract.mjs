@@ -145,16 +145,48 @@ assert.ok(capturedError429, 'Persistent 429 must throw');
 assert.equal(capturedError429.exitCode, 75);
 assert.match(capturedError429.message, /temporarily unavailable status=429/);
 
-// Test transient failure on missing response
-let capturedTimeoutError = null;
+// Test candidate regression when no request was emitted by the page
+let capturedNoRequestError = null;
 try {
-  await waitForHubSpotEmbedDefinition([], FORM_ID, 50, 10);
+  await waitForHubSpotEmbedDefinition({ requests: [], failedRequests: [], responses: [] }, FORM_ID, 50, 10);
 } catch (error) {
-  capturedTimeoutError = error;
+  capturedNoRequestError = error;
 }
-assert.ok(capturedTimeoutError, 'Timeout without response must throw');
-assert.equal(capturedTimeoutError.exitCode, 75);
-assert.match(capturedTimeoutError.message, /response for form .* was not captured before timeout/);
+assert.ok(capturedNoRequestError, 'Missing request must throw regression');
+assert.match(capturedNoRequestError.message, /CANDIDATE_REGRESSION: HubSpot embed definition request for form .* was not emitted/);
+
+// Test transient failure when request failed at network transport layer
+let capturedTransportError = null;
+try {
+  await waitForHubSpotEmbedDefinition({
+    requests: [{ url: `https://forms.hsforms.com/embed/v3/form/12345/${FORM_ID}/json` }],
+    failedRequests: [{
+      url: `https://forms.hsforms.com/embed/v3/form/12345/${FORM_ID}/json`,
+      errorText: 'net::ERR_CONNECTION_REFUSED',
+    }],
+    responses: [],
+  }, FORM_ID, 50, 10);
+} catch (error) {
+  capturedTransportError = error;
+}
+assert.ok(capturedTransportError, 'Transport failure must throw transient error');
+assert.equal(capturedTransportError.exitCode, 75);
+assert.match(capturedTransportError.message, /transport failed for form .*: net::ERR_CONNECTION_REFUSED/);
+
+// Test transient failure when request timed out in-flight
+let capturedInFlightTimeout = null;
+try {
+  await waitForHubSpotEmbedDefinition({
+    requests: [{ url: `https://forms.hsforms.com/embed/v3/form/12345/${FORM_ID}/json` }],
+    failedRequests: [],
+    responses: [],
+  }, FORM_ID, 50, 10);
+} catch (error) {
+  capturedInFlightTimeout = error;
+}
+assert.ok(capturedInFlightTimeout, 'In-flight timeout must throw transient error');
+assert.equal(capturedInFlightTimeout.exitCode, 75);
+assert.match(capturedInFlightTimeout.message, /request for form .* timed out in flight/);
 
 // Test candidate regression on 404
 let captured404Error = null;
@@ -174,4 +206,4 @@ try {
 assert.ok(captured404Error, '404 must throw regression');
 assert.match(captured404Error.message, /CANDIDATE_REGRESSION: HubSpot embed definition status=404/);
 
-console.log('HUBSPOT_FORM_DEFINITION_CONTRACT=PASS embed_v3=1 top_level_compat=1 missing_field_detection=1 hidden_field_detection=1 retry_429=1 retry_503=1 dynamic_retry=1 transient_persistence=1');
+console.log('HUBSPOT_FORM_DEFINITION_CONTRACT=PASS embed_v3=1 top_level_compat=1 missing_field_detection=1 hidden_field_detection=1 retry_429=1 retry_503=1 dynamic_retry=1 transient_persistence=1 missing_request_regression=1 transport_failure_transient=1 in_flight_timeout_transient=1');
