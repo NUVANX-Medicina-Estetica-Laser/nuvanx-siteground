@@ -1421,9 +1421,7 @@ body.nvx-valoracion-modal-open{
   }
 }
 
-.nvx-valoracion-direct-form__submit {
-  width: 100%;
-}
+/* .nvx-valoracion-direct-form__submit width:100% — defined above near form context; duplicate removed 2026-08-30 */
 
 .nvx-brand-btn, .nvx-btn, .nvx-button { will-change: transform; }
 
