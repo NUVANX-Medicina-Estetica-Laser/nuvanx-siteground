@@ -12,7 +12,7 @@
     "/precio-neuromoduladores-madrid/": {"post_id":3510,"post_type":"post","slug":"precio-neuromoduladores-madrid","status":"publish","robots":{"index":true,"follow":true},"schema":{"group":"blog","type":"none","context":"https://schema.org"}},
     "/btl-exilite-ipl-madrid/": {"post_id":3055,"post_type":"page","slug":"btl-exilite-ipl-madrid","status":"publish","robots":{"index":true,"follow":true}},
     "/calidad-piel-firmeza-luminosidad-madrid/": {"post_id":3373,"post_type":"page","slug":"calidad-piel-firmeza-luminosidad-madrid","status":"publish","robots":{"index":true,"follow":true}},
-    "/casos-de-pacientes/": {"post_id":2645,"post_type":"page","slug":"casos-de-pacientes","status":"publish","robots":{"index":false,"follow":true}},
+    "/casos-de-pacientes/": {"post_id":2645,"post_type":"page","slug":"casos-de-pacientes","status":"publish","robots":{"index":true,"follow":true}},
     "/cicatrices-acne-poros-textura-madrid/": {"post_id":3374,"post_type":"page","slug":"cicatrices-acne-poros-textura-madrid","status":"publish","robots":{"index":true,"follow":true}},
     "/clinicas-de-medicina-estetica-nuvanx/": {"post_id":1399,"post_type":"page","slug":"clinicas-de-medicina-estetica-nuvanx","status":"publish","robots":{"index":true,"follow":true}},
     "/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/": {"post_id":1537,"post_type":"page","slug":"medicina-estetica-goya-barrio-salamanca","status":"publish","robots":{"index":true,"follow":true}},

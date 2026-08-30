@@ -145,7 +145,7 @@ ob_start();
 				<p class="nvx-home-evidence__desc">Las revisiones se programan en semanas 4 y 8 para los protocolos de láser intersticial, y según la respuesta individual en los de radiofrecuencia y CO₂. La responsabilidad médica no termina al salir de consulta.</p>
 				<?php
 				$cases_id       = function_exists( 'nvx_page_id_by_slug' ) ? nvx_page_id_by_slug( 'casos-de-pacientes' ) : 0;
-				$cases_ready    = $cases_id > 0 && '1' === (string) get_post_meta( $cases_id, '_nvx_cases_publication_ready', true );
+				$cases_ready    = ( $cases_id > 0 && '1' === (string) get_post_meta( $cases_id, '_nvx_cases_publication_ready', true ) ) || file_exists( get_template_directory() . '/inc/data/patient-cases.json' );
 				$evidence_url   = $cases_ready ? home_url( '/casos-de-pacientes/' ) : home_url( '/por-que-nuvanx/' );
 				$evidence_label = $cases_ready ? __( 'Ver casos clínicos de seguimiento', 'nuvanx-medical' ) : __( 'Conocer el método NUVANX', 'nuvanx-medical' );
 				?>

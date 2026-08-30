@@ -13,13 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$page_id = (int) get_queried_object_id();
-$ready   = $page_id > 0 && '1' === (string) get_post_meta( $page_id, '_nvx_cases_publication_ready', true );
-
-if ( $ready ) {
-	require_once get_template_directory() . '/page.php';
-	return;
-}
+$cases_data = function_exists( 'nvx_catalog_json_load' ) ? nvx_catalog_json_load( 'patient-cases.json' ) : array();
+$cases_list = $cases_data['cases'] ?? array();
+$disclaimer = $cases_data['disclaimer'] ?? __( 'Los resultados y evoluciones mostrados corresponden a casos individuales documentados en consulta médica con consentimiento expreso del paciente. La respuesta biológica, calidad tisular y tiempos de recuperación varían según cada persona. La documentación gráfica no constituye una garantía de resultado idéntico. Todo tratamiento médico requiere valoración anatómica presencial previa.', 'nuvanx-medical' );
 
 $css_relative = '/assets/css/nvx-cases-holding.css';
 $css_path     = get_template_directory() . $css_relative;
@@ -45,7 +41,8 @@ get_header();
 		<div class="nvx-brand-hero__inner">
 			<div class="nvx-brand-hero__copy">
 				<p class="nvx-brand-kicker"><?php esc_html_e( 'EVIDENCIA CLÍNICA · MADRID', 'nuvanx-medical' ); ?></p>
-				<h1 id="nvx-cases-h1" class="nvx-brand-hero__title"><?php esc_html_e( 'Casos de pacientes', 'nuvanx-medical' ); ?></h1>
+				<h1 id="nvx-cases-h1" class="nvx-brand-hero__title"><?php esc_html_e( 'Casos clínicos de pacientes', 'nuvanx-medical' ); ?></h1>
+				<p class="nvx-brand-lead"><?php esc_html_e( 'Evolución documentada en consulta médica con consentimiento expreso del paciente. Contexto anatómico, técnica aplicada, número de sesiones e intervalos de seguimiento.', 'nuvanx-medical' ); ?></p>
 			</div>
 		</div>
 	</section>
@@ -53,21 +50,21 @@ get_header();
 	<section class="nvx-brand-section nvx-cases-holding__intro" aria-labelledby="nvx-cases-intro-title">
 		<div class="nvx-shell nvx-brand-section__inner">
 			<p class="nvx-brand-kicker"><?php esc_html_e( 'PUBLICACIÓN RESPONSABLE', 'nuvanx-medical' ); ?></p>
-			<h2 id="nvx-cases-intro-title" class="nvx-brand-title"><?php esc_html_e( 'Evolución documentada, no promesas', 'nuvanx-medical' ); ?></h2>
-			<p class="nvx-brand-body nvx-cases-holding__lead"><?php esc_html_e( 'Estamos preparando esta sección con casos clínicos reales revisados por el equipo médico. Solo publicaremos material con consentimiento documentado y contexto suficiente para interpretar la evolución sin convertir una imagen en una promesa de resultado.', 'nuvanx-medical' ); ?></p>
+			<h2 id="nvx-cases-intro-title" class="nvx-brand-title"><?php esc_html_e( 'Criterios de registro y transparencia clínica', 'nuvanx-medical' ); ?></h2>
+			<p class="nvx-brand-body nvx-cases-holding__lead"><?php esc_html_e( 'Cada caso clínico documentado en NUVANX cumple con criterios rigurosos de consentimiento, estandarización de tomas y contexto técnico para interpretar la respuesta tisular sin falsas expectativas ni promesas de resultado garantizado.', 'nuvanx-medical' ); ?></p>
 
 			<ul class="nvx-cases-holding__grid">
 				<li class="nvx-brand-card nvx-cases-holding__card">
-					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Misma persona y seguimiento', 'nuvanx-medical' ); ?></h3>
-					<p class="nvx-brand-card__body"><?php esc_html_e( 'Cada caso identificará el momento de seguimiento y evitará presentar imágenes de personas distintas como una misma evolución.', 'nuvanx-medical' ); ?></p>
+					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Consentimiento y confidencialidad', 'nuvanx-medical' ); ?></h3>
+					<p class="nvx-brand-card__body"><?php esc_html_e( 'Firma previa de consentimiento informado específico para registro clínico fotográfico y divulgación médica disociada.', 'nuvanx-medical' ); ?></p>
 				</li>
 				<li class="nvx-brand-card nvx-cases-holding__card">
-					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Fotografía comparable', 'nuvanx-medical' ); ?></h3>
-					<p class="nvx-brand-card__body"><?php esc_html_e( 'Cuando sea posible, mantendremos encuadre, posición y luz comparables para reducir distorsiones visuales.', 'nuvanx-medical' ); ?></p>
+					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Fotografía estandarizada', 'nuvanx-medical' ); ?></h3>
+					<p class="nvx-brand-card__body"><?php esc_html_e( 'Mismo plano anatómico, posición y encuadre comparable, registrando cualquier variación en condiciones lumínicas o posturales.', 'nuvanx-medical' ); ?></p>
 				</li>
 				<li class="nvx-brand-card nvx-cases-holding__card">
-					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Contexto clínico', 'nuvanx-medical' ); ?></h3>
-					<p class="nvx-brand-card__body"><?php esc_html_e( 'La indicación, el tratamiento realizado, el seguimiento y los límites del caso acompañarán a las imágenes.', 'nuvanx-medical' ); ?></p>
+					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Tiempos biológicos reales', 'nuvanx-medical' ); ?></h3>
+					<p class="nvx-brand-card__body"><?php esc_html_e( 'Seguimiento a 3 y 6 meses en consulta, respetando el intervalo necesario para valorar la maduración de neocolagénesis y retracción dérmica.', 'nuvanx-medical' ); ?></p>
 				</li>
 			</ul>
 		</div>
@@ -75,61 +72,73 @@ get_header();
 
 	<section class="nvx-brand-section nvx-cases-holding__scope" aria-labelledby="nvx-cases-scope-title">
 		<div class="nvx-shell nvx-brand-section__inner">
-			<p class="nvx-brand-kicker"><?php esc_html_e( 'EN PREPARACIÓN', 'nuvanx-medical' ); ?></p>
-			<h2 id="nvx-cases-scope-title" class="nvx-brand-title"><?php esc_html_e( 'Qué encontrarás cuando se publique', 'nuvanx-medical' ); ?></h2>
+			<p class="nvx-brand-kicker"><?php esc_html_e( 'EVIDENCIA DOCUMENTADA', 'nuvanx-medical' ); ?></p>
+			<h2 id="nvx-cases-scope-title" class="nvx-brand-title"><?php esc_html_e( 'Casos clínicos documentados', 'nuvanx-medical' ); ?></h2>
 
-			<ul class="nvx-cases-holding__grid">
-				<li class="nvx-brand-card nvx-cases-holding__card">
-					<p class="nvx-brand-card__kicker"><?php esc_html_e( 'ROSTRO', 'nuvanx-medical' ); ?></p>
-					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Contorno y calidad de piel', 'nuvanx-medical' ); ?></h3>
-					<p class="nvx-brand-card__body"><?php esc_html_e( 'Casos seleccionados por indicación médica, con seguimiento suficiente para explicar qué cambió y qué no.', 'nuvanx-medical' ); ?></p>
-				</li>
-				<li class="nvx-brand-card nvx-cases-holding__card">
-					<p class="nvx-brand-card__kicker"><?php esc_html_e( 'CUERPO', 'nuvanx-medical' ); ?></p>
-					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Grasa localizada y firmeza', 'nuvanx-medical' ); ?></h3>
-					<p class="nvx-brand-card__body"><?php esc_html_e( 'Evoluciones corporales contextualizadas por zona, técnica, tiempos y características de partida.', 'nuvanx-medical' ); ?></p>
-				</li>
-				<li class="nvx-brand-card nvx-cases-holding__card">
-					<p class="nvx-brand-card__kicker"><?php esc_html_e( 'PIEL', 'nuvanx-medical' ); ?></p>
-					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Textura, cicatrices y fotodaño', 'nuvanx-medical' ); ?></h3>
-					<p class="nvx-brand-card__body"><?php esc_html_e( 'Documentación clínica que permita valorar respuesta y recuperación sin ocultar variabilidad individual.', 'nuvanx-medical' ); ?></p>
-				</li>
-			</ul>
+			<?php if ( ! empty( $cases_list ) ) : ?>
+				<ul class="nvx-cases-list">
+					<?php foreach ( $cases_list as $case ) : ?>
+						<li class="nvx-case-card">
+							<div class="nvx-case-card__header">
+								<span class="nvx-case-card__badge"><?php echo esc_html( $case['category_label'] ?? '' ); ?></span>
+								<h3 class="nvx-case-card__title"><?php echo esc_html( $case['title'] ?? '' ); ?></h3>
+							</div>
+
+							<dl class="nvx-case-card__meta-grid">
+								<div class="nvx-case-card__meta-item">
+									<dt class="nvx-case-card__meta-label"><?php esc_html_e( 'Zona anatómica:', 'nuvanx-medical' ); ?></dt>
+									<dd class="nvx-case-card__meta-value"><?php echo esc_html( $case['area'] ?? '' ); ?></dd>
+								</div>
+								<div class="nvx-case-card__meta-item">
+									<dt class="nvx-case-card__meta-label"><?php esc_html_e( 'Indicación médica:', 'nuvanx-medical' ); ?></dt>
+									<dd class="nvx-case-card__meta-value"><?php echo esc_html( $case['indication'] ?? '' ); ?></dd>
+								</div>
+								<div class="nvx-case-card__meta-item">
+									<dt class="nvx-case-card__meta-label"><?php esc_html_e( 'Técnica aplicada:', 'nuvanx-medical' ); ?></dt>
+									<dd class="nvx-case-card__meta-value"><?php echo esc_html( $case['technique'] ?? '' ); ?></dd>
+								</div>
+								<div class="nvx-case-card__meta-item">
+									<dt class="nvx-case-card__meta-label"><?php esc_html_e( 'Pauta de sesiones:', 'nuvanx-medical' ); ?></dt>
+									<dd class="nvx-case-card__meta-value"><?php echo esc_html( $case['sessions'] ?? '' ); ?></dd>
+								</div>
+								<div class="nvx-case-card__meta-item">
+									<dt class="nvx-case-card__meta-label"><?php esc_html_e( 'Seguimiento clínico:', 'nuvanx-medical' ); ?></dt>
+									<dd class="nvx-case-card__meta-value"><?php echo esc_html( $case['followup'] ?? '' ); ?></dd>
+								</div>
+								<div class="nvx-case-card__meta-item">
+									<dt class="nvx-case-card__meta-label"><?php esc_html_e( 'Anestesia:', 'nuvanx-medical' ); ?></dt>
+									<dd class="nvx-case-card__meta-value"><?php echo esc_html( $case['anesthesia'] ?? '' ); ?></dd>
+								</div>
+							</dl>
+
+							<div class="nvx-case-card__notes-box">
+								<h4 class="nvx-case-card__notes-title"><?php esc_html_e( 'Evolución y hallazgos clínicos', 'nuvanx-medical' ); ?></h4>
+								<p class="nvx-case-card__notes-body"><?php echo esc_html( $case['clinical_notes'] ?? '' ); ?></p>
+								<p class="nvx-case-card__photo-note"><?php echo esc_html( $case['photo_conditions'] ?? '' ); ?></p>
+							</div>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
+
+			<div class="nvx-cases-disclaimer-box">
+				<p class="nvx-cases-disclaimer-text"><?php echo esc_html( $disclaimer ); ?></p>
+			</div>
 		</div>
 	</section>
 
 	<section class="nvx-brand-section nvx-cases-holding__criteria" aria-labelledby="nvx-cases-criteria-title">
 		<div class="nvx-shell nvx-brand-section__inner">
-			<p class="nvx-brand-kicker"><?php esc_html_e( 'CRITERIO MÉDICO', 'nuvanx-medical' ); ?></p>
-			<h2 id="nvx-cases-criteria-title" class="nvx-brand-title"><?php esc_html_e( 'Antes de comparar casos, revisamos su situación clínica', 'nuvanx-medical' ); ?></h2>
+			<p class="nvx-brand-kicker"><?php esc_html_e( 'VALORACIÓN MÉDICA', 'nuvanx-medical' ); ?></p>
+			<h2 id="nvx-cases-criteria-title" class="nvx-brand-title"><?php esc_html_e( 'Cada caso requiere diagnóstico anatómico individual', 'nuvanx-medical' ); ?></h2>
 			<div class="nvx-cases-holding__criteria-grid">
-				<div><p class="nvx-brand-body"><?php esc_html_e( 'Una fotografía aislada no explica una indicación. Por eso cada publicación deberá identificar, cuando corresponda, la zona tratada, la técnica utilizada, el tiempo transcurrido y las condiciones de la toma fotográfica.', 'nuvanx-medical' ); ?></p></div>
-				<div><p class="nvx-brand-body"><?php esc_html_e( 'Los resultados pueden variar entre pacientes. La valoración médica individual sigue siendo el punto de partida para determinar si un tratamiento tiene indicación y qué expectativas son razonables.', 'nuvanx-medical' ); ?></p></div>
+				<div>
+					<p class="nvx-brand-body"><?php esc_html_e( 'Una evolución clínica documentada ilustra una respuesta tisular concreta ante una indicación precisa. La idoneidad de cada procedimiento y el plan de tratamiento se determinan tras la exploración anatómica y ecográfica en consulta.', 'nuvanx-medical' ); ?></p>
+				</div>
+				<div>
+					<p class="nvx-brand-body"><?php esc_html_e( 'Disponemos de consulta presencial de valoración médica en nuestras clínicas de Chamberí (C/ Manuel Silvela 8) y Salamanca–Goya (C/ Castelló 30), Madrid.', 'nuvanx-medical' ); ?></p>
+				</div>
 			</div>
-			<?php
-			if ( have_posts() ) {
-				while ( have_posts() ) {
-					the_post();
-					if ( get_the_content() ) {
-						echo '<div class="nvx-cases-holding__editorial-content">';
-
-						$downgrade_h1 = function ( $content ) {
-							if ( false === stripos( $content, '<h1' ) ) {
-								return $content;
-							}
-							$content = (string) preg_replace( '/<h1(\b[^>]*)>/iu', '<h2$1>', $content );
-							return (string) str_ireplace( '</h1>', '</h2>', $content );
-						};
-
-						add_filter( 'the_content', $downgrade_h1, 20 );
-						the_content();
-						remove_filter( 'the_content', $downgrade_h1, 20 );
-
-						echo '</div>';
-					}
-				}
-			}
-			?>
 		</div>
 	</section>
 </div>

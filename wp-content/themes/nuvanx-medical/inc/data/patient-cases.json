@@ -1,0 +1,67 @@
+{
+  "schema": "nuvanx-patient-cases",
+  "version": "1.0.0",
+  "disclaimer": "Los resultados y evoluciones mostrados corresponden a casos individuales documentados en consulta médica con consentimiento expreso del paciente. La respuesta biológica, calidad tisular y tiempos de recuperación varían según cada persona. La documentación gráfica no constituye una garantía de resultado idéntico. Todo tratamiento médico requiere valoración anatómica presencial previa.",
+  "cases": [
+    {
+      "id": "caso-01-papada-submenton",
+      "category": "facial",
+      "category_label": "Facial · Tercio inferior",
+      "title": "Caso 01: Adiposidad submentoniana y flacidez en papada",
+      "area": "Submentón y ángulo cérvico-mandibular",
+      "indication": "Adiposidad submentoniana localizada y pérdida de definición del ángulo mandibular",
+      "technique": "Endolift® láser de fibra óptica 200–300 µm con anestesia local tumescente",
+      "sessions": "1 sesión única",
+      "followup": "3 meses post-procedimiento",
+      "anesthesia": "Anestesia local tumescente ambulatoria",
+      "clinical_notes": "Reducción del panículo adiposo submentoniano y retracción tisular progresiva mediante fotocoagulación subdérmica y neocolagénesis profunda. Mejora del ángulo cérvico-mandibular sin cicatrices.",
+      "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
+      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado."
+    },
+    {
+      "id": "caso-02-marcacion-mandibular",
+      "category": "facial",
+      "category_label": "Facial · Óvalo facial",
+      "title": "Caso 02: Definición y marcación del reborde mandibular",
+      "area": "Tercio inferior y línea mandibular",
+      "indication": "Flacidez cutánea leve-moderada y desdibujamiento del óvalo facial",
+      "technique": "Endolift® subdérmico con vectorización retráctil a lo largo del reborde mandibular",
+      "sessions": "1 sesión única",
+      "followup": "6 meses post-procedimiento (fase de maduración de colágeno)",
+      "anesthesia": "Anestesia local ambulatoria",
+      "clinical_notes": "Soporte estructural del óvalo facial y mayor firmeza dérmica por compactación del tejido conectivo sin aportar volumen exógeno artificial.",
+      "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
+      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado."
+    },
+    {
+      "id": "caso-03-abdomen-firmeza",
+      "category": "corporal",
+      "category_label": "Corporal · Abdomen",
+      "title": "Caso 03: Adiposidad localizada y laxitud cutánea en abdomen",
+      "area": "Abdomen supra e infraumbilical",
+      "indication": "Adiposidad localizada resistente y pérdida de elasticidad dérmica",
+      "technique": "Endoláser corporal con fibra óptica de 400–600 µm y pauta de compresión post-procedimiento (14 días)",
+      "sessions": "1 sesión única con medición ecográfica previa",
+      "followup": "3 meses post-procedimiento",
+      "anesthesia": "Anestesia local tumescente ambulatoria",
+      "clinical_notes": "Compactación del panículo adiposo superficial y retracción dérmica evidente en zona periumbilical, favorecida por la pauta de compresión elástica post-tratamiento.",
+      "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
+      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado."
+    },
+    {
+      "id": "caso-04-flancos-contorno",
+      "category": "corporal",
+      "category_label": "Corporal · Flancos",
+      "title": "Caso 04: Remodelación anatómica de flancos y cintura",
+      "area": "Flancos laterales y transición lumbar",
+      "indication": "Depósito graso localizado en flancos resistente a ejercicio y dieta",
+      "technique": "Endoláser corporal focalizado con emisión homogénea subdérmica en abanico",
+      "sessions": "1 sesión única",
+      "followup": "3 meses post-procedimiento",
+      "anesthesia": "Anestesia local tumescente ambulatoria",
+      "clinical_notes": "Remodelación del contorno anatómico lateral, reducción volumétrica focalizada y preservación de la elasticidad de la piel circundante.",
+      "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
+      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado."
+    }
+  ]
+}
