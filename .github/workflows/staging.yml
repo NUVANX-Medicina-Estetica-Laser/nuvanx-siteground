@@ -1202,6 +1202,7 @@ jobs:
           umask 077; mkdir -p "$ROLLBACK_DIR"
           tar -czf "$ROLLBACK_DIR/theme.tgz" -C "$STAGING_ROOT" wp-content/themes/nuvanx-medical
           if [[ -d wp-content/mu-plugins ]]; then tar -czf "$ROLLBACK_DIR/mu-plugins.tgz" -C "$STAGING_ROOT" wp-content/mu-plugins; fi
+          cp -p "$STAGING_ROOT/wp-config.php" "$ROLLBACK_DIR/wp-config.php"
           wp db export "$ROLLBACK_DIR/staging-db.sql" --quiet
           if [[ -f wp-content/themes/nuvanx-medical/.nvx-deploy-sha ]]; then tr -d '\r\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha > "$ROLLBACK_DIR/previous-sha.txt"; else : > "$ROLLBACK_DIR/previous-sha.txt"; fi
           REMOTE
@@ -1352,6 +1353,7 @@ jobs:
           [[ "$ROLLBACK_DIR" == '/home/customer/www/staging2.nuvanx.com/.nvx-rollback/'* ]]
           rm -rf "$STAGING_ROOT/wp-content/themes/nuvanx-medical"; tar -xzf "$ROLLBACK_DIR/theme.tgz" -C "$STAGING_ROOT"
           if [[ -f "$ROLLBACK_DIR/mu-plugins.tgz" ]]; then rm -rf "$STAGING_ROOT/wp-content/mu-plugins"; tar -xzf "$ROLLBACK_DIR/mu-plugins.tgz" -C "$STAGING_ROOT"; fi
+          if [[ -f "$ROLLBACK_DIR/wp-config.php" ]]; then cp -p "$ROLLBACK_DIR/wp-config.php" "$STAGING_ROOT/wp-config.php"; php -l "$STAGING_ROOT/wp-config.php" >/dev/null; fi
           cd "$STAGING_ROOT"; wp db import "$ROLLBACK_DIR/staging-db.sql"; wp cache flush
           if wp plugin is-installed sg-cachepress; then wp plugin activate sg-cachepress --quiet || true; wp sg purge || true; wp plugin deactivate sg-cachepress --quiet || true; fi
           echo 'PR_ROLLBACK_STAGING=PASS'

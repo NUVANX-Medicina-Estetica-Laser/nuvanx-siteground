@@ -435,9 +435,10 @@ echo '== Purge staging2 caches =='
   wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); echo "opcache=ok\n"; }'
 )
 
+DEPLOY_SUCCESS=1
 rm -f "$CONFIG_BACKUP"
 CONFIG_BACKUP=''
-trap - ERR
+trap - EXIT ERR INT TERM
 MUTATION_STARTED=0
 
 echo "DEPLOY_STAGING2_OK sha=$DEPLOY_SHA backup=$BACKUP_DIR"
