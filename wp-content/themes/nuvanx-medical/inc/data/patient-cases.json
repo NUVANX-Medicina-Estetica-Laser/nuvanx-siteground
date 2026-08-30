@@ -1,6 +1,6 @@
 {
   "schema": "nuvanx-patient-cases",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "disclaimer": "Los resultados y evoluciones mostrados corresponden a casos individuales documentados en consulta médica con consentimiento expreso del paciente. La respuesta biológica, calidad tisular y tiempos de recuperación varían según cada persona. La documentación gráfica no constituye una garantía de resultado idéntico. Todo tratamiento médico requiere valoración anatómica presencial previa.",
   "cases": [
     {
@@ -16,7 +16,9 @@
       "anesthesia": "Anestesia local tumescente ambulatoria",
       "clinical_notes": "Reducción del panículo adiposo submentoniano y retracción tisular progresiva mediante fotocoagulación subdérmica y neocolagénesis profunda. Mejora del ángulo cérvico-mandibular sin cicatrices.",
       "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
-      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado."
+      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
+      "image": "assets/images/cases/caso-01-papada-submenton.webp",
+      "image_alt": "Evolución clínica documentada: Endolift® papada y ángulo mandibular a 3 meses"
     },
     {
       "id": "caso-02-marcacion-mandibular",
@@ -31,7 +33,9 @@
       "anesthesia": "Anestesia local ambulatoria",
       "clinical_notes": "Soporte estructural del óvalo facial y mayor firmeza dérmica por compactación del tejido conectivo sin aportar volumen exógeno artificial.",
       "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
-      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado."
+      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
+      "image": "assets/images/cases/caso-02-marcacion-mandibular.webp",
+      "image_alt": "Evolución clínica documentada: Endolift® tercio inferior y reborde mandibular a 6 meses"
     },
     {
       "id": "caso-03-abdomen-firmeza",
@@ -46,12 +50,14 @@
       "anesthesia": "Anestesia local tumescente ambulatoria",
       "clinical_notes": "Compactación del panículo adiposo superficial y retracción dérmica evidente en zona periumbilical, favorecida por la pauta de compresión elástica post-tratamiento.",
       "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
-      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado."
+      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
+      "image": "assets/images/cases/caso-03-abdomen-firmeza.webp",
+      "image_alt": "Evolución clínica documentada: Endoláser corporal en abdomen a 3 meses"
     },
     {
       "id": "caso-04-flancos-contorno",
       "category": "corporal",
-      "category_label": "Corporal · Flancos",
+      "category_label": "Corporal · Flancos y cintura",
       "title": "Caso 04: Remodelación anatómica de flancos y cintura",
       "area": "Flancos laterales y transición lumbar",
       "indication": "Depósito graso localizado en flancos resistente a ejercicio y dieta",
@@ -61,7 +67,26 @@
       "anesthesia": "Anestesia local tumescente ambulatoria",
       "clinical_notes": "Remodelación del contorno anatómico lateral, reducción volumétrica focalizada y preservación de la elasticidad de la piel circundante.",
       "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
-      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado."
+      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
+      "image": "assets/images/cases/caso-04-flancos-contorno.webp",
+      "image_alt": "Evolución clínica documentada: Endoláser corporal en flancos y transición lumbar a 3 meses"
+    },
+    {
+      "id": "caso-05-brazos-firmeza",
+      "category": "corporal",
+      "category_label": "Corporal · Brazos",
+      "title": "Caso 05: Compactación dérmica y firmeza en cara interna de brazos",
+      "area": "Cara interna de brazos (zona braquial)",
+      "indication": "Laxitud dérmica y adiposidad leve en cara interna de brazos",
+      "technique": "Endoláser corporal braquial con micropulsos subdérmicos y compresión",
+      "sessions": "1 sesión única",
+      "followup": "3 meses post-procedimiento",
+      "anesthesia": "Anestesia local ambulatoria",
+      "clinical_notes": "Mejora de la tensión cutánea y firmeza tisular en la cara interna del brazo con retracción visible del pliegue braquial sin cicatrices.",
+      "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
+      "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
+      "image": "assets/images/cases/caso-05-brazos-firmeza.webp",
+      "image_alt": "Evolución clínica documentada: Endoláser corporal braquial a 3 meses"
     }
   ]
 }

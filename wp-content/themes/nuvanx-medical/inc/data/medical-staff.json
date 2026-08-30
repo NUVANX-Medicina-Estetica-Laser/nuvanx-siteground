@@ -5,20 +5,27 @@
       "name": "Dr. José Javier Rivera Tejeda",
       "colegiado": "282864786",
       "doctoralia_url": "https://www.doctoralia.es/jose-javier-rivera-tejeda/medico-estetico/madrid",
-      "profile_media_attachment_id": 2381
+      "profile_media_attachment_id": 2896,
+      "photo": "assets/images/team/dr-jose-javier-rivera-tejeda.webp"
     },
     "ivon": {
       "name": "Dra. Ivon Yamileth Rivera Deras",
-      "colegiado": "284621525"
+      "colegiado": "284621525",
+      "profile_media_attachment_id": 1840,
+      "photo": "assets/images/team/dra-ivon-yamileth-rivera-deras.webp"
     },
     "fabio": {
       "name": "Dr. Fabio Augusto Quiñónez Bareiro",
-      "colegiado": "282877543"
+      "colegiado": "282877543",
+      "profile_media_attachment_id": 3099,
+      "photo": "assets/images/team/dr-fabio-quinonez-bareiro.webp"
     },
     "cristina": {
       "name": "Dra. Cristina Márquez González",
       "colegiado": "282858861",
-      "doctoralia_url": "https://www.doctoralia.es/cristina-marquez-gonzalez-2/radiologo-medico-estetico/madrid"
+      "doctoralia_url": "https://www.doctoralia.es/cristina-marquez-gonzalez-2/radiologo-medico-estetico/madrid",
+      "profile_media_attachment_id": 3719,
+      "photo": "assets/images/team/dra-cristina-marquez-gonzalez.webp"
     }
   }
 }

@@ -46,8 +46,8 @@ function nvx_authentic_page_photo_registry(): array {
 			'eyebrow' => 'Consulta NUVANX',
 			'title'   => 'Una indicación empieza por escuchar y valorar',
 			'images'  => array(
-				array( 'id' => 2896, 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Dirección médica' ),
-				array( 'id' => nvx_medical_staff_profile_media_attachment_id( 'director' ), 'alt' => 'Dr. José Javier Rivera durante una valoración médica en NUVANX Madrid', 'caption' => 'Valoración personalizada' ),
+				array( 'id' => nvx_medical_staff_profile_media_attachment_id( 'director' ), 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Dirección médica' ),
+				array( 'id' => 2381, 'alt' => 'Dr. José Javier Rivera durante una valoración médica en NUVANX Madrid', 'caption' => 'Valoración personalizada' ),
 				array( 'id' => 1630, 'alt' => 'Box de tratamiento real de NUVANX', 'caption' => 'Entorno clínico' ),
 			),
 		),
@@ -55,7 +55,7 @@ function nvx_authentic_page_photo_registry(): array {
 			'eyebrow' => 'NUVANX',
 			'title'   => 'Equipo, método y lugar',
 			'images'  => array(
-				array( 'id' => 2896, 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Dirección médica' ),
+				array( 'id' => nvx_medical_staff_profile_media_attachment_id( 'director' ), 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Dirección médica' ),
 				array( 'id' => 1632, 'alt' => 'Recepción real de NUVANX', 'caption' => 'La clínica' ),
 				array( 'id' => 2796, 'alt' => 'Fachada de NUVANX Chamberí', 'caption' => 'Chamberí' ),
 			),
@@ -190,7 +190,7 @@ function nvx_authentic_page_photo_registry(): array {
 			'title'   => 'Profesionales que acompañan cada decisión',
 			'images'  => array(
 				array( 'id' => nvx_medical_staff_profile_media_attachment_id( 'director' ), 'alt' => 'Dr. José Javier Rivera durante una valoración médica en NUVANX Madrid', 'caption' => 'Dirección médica' ),
-				array( 'id' => 1840, 'alt' => 'Dra. Ivon Rivera Deras — equipo médico NUVANX Madrid', 'caption' => 'Medicina preventiva' ),
+				array( 'id' => nvx_medical_staff_profile_media_attachment_id( 'ivon' ), 'alt' => 'Dra. Ivon Rivera Deras — equipo médico NUVANX Madrid', 'caption' => 'Medicina preventiva' ),
 				array( 'id' => 2897, 'alt' => 'Francisco Geraldo — coordinación NUVANX Madrid', 'caption' => 'Coordinación NUVANX' ),
 			),
 		),
@@ -198,7 +198,7 @@ function nvx_authentic_page_photo_registry(): array {
 			'eyebrow' => 'Nosotros',
 			'title'   => 'Una práctica médica de personas y espacios reales',
 			'images'  => array(
-				array( 'id' => 2896, 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Equipo médico' ),
+				array( 'id' => nvx_medical_staff_profile_media_attachment_id( 'director' ), 'alt' => 'Dr. José Javier Rivera — dirección médica NUVANX Madrid', 'caption' => 'Equipo médico' ),
 				array( 'id' => 1632, 'alt' => 'Interior de NUVANX Chamberí, Madrid', 'caption' => 'La clínica' ),
 				array( 'id' => 2796, 'alt' => 'Fachada de NUVANX Chamberí, Madrid', 'caption' => 'Chamberí' ),
 			),
@@ -319,7 +319,8 @@ function nvx_governed_public_srcset_cap( int $attachment_id ): int {
 	if ( $director_profile_id > 0 && $director_profile_id === $attachment_id ) {
 		return 768;
 	}
-	if ( in_array( $attachment_id, array( 1630, 1632, 1840 ), true ) ) {
+	$ivon_profile_id = nvx_medical_staff_profile_media_attachment_id( 'ivon' );
+	if ( in_array( $attachment_id, array_filter( array( 1630, 1632, $ivon_profile_id ) ), true ) ) {
 		return 1024;
 	}
 	return 1280;

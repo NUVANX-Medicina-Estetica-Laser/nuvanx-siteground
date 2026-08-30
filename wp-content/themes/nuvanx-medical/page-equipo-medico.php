@@ -45,15 +45,21 @@ get_header();
 	  </div>
 
 	  <!-- DR. RIVERA TEJEDA -->
-	  <div class="doc">
-	    <div class="doc-hero">
-	      <div class="doc-name">Dr. José Javier Rivera Tejeda</div>
-	      <div class="doc-title">Director médico &middot; Endolift&reg; &middot; Láser CO&sub2; fraccionado &middot; Tricología</div>
-	      <div class="doc-meta">
-	        <span class="doc-pill accent">ICOMEM <?php echo esc_html( nvx_medical_colegiado( 'director' ) ); ?></span>
-	        <span class="doc-pill">+17 años de trayectoria</span>
-	        <span class="doc-pill">166 opiniones verificadas Doctoralia</span>
-	        <span class="doc-pill">Idiomas: ES &middot; EN &middot; DE</span>
+	  <div class="doc" itemscope itemtype="https://schema.org/Person">
+	    <meta itemprop="sameAs" content="<?php echo esc_url( $director_doctoralia ); ?>" />
+	    <div class="doc-hero doc-hero--with-portrait">
+	      <div class="doc-portrait">
+	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/dr-jose-javier-rivera-tejeda.webp' ); ?>" alt="<?php esc_attr_e( 'Dr. José Javier Rivera Tejeda — Director Médico NUVANX Madrid', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="eager" decoding="async" />
+	      </div>
+	      <div class="doc-hero__info">
+	        <div class="doc-name" itemprop="name">Dr. José Javier Rivera Tejeda</div>
+	        <div class="doc-title" itemprop="jobTitle">Director médico &middot; Endolift&reg; &middot; Láser CO&sub2; fraccionado &middot; Tricología</div>
+	        <div class="doc-meta">
+	          <span class="doc-pill accent">ICOMEM <?php echo esc_html( nvx_medical_colegiado( 'director' ) ); ?></span>
+	          <span class="doc-pill">+17 años de trayectoria</span>
+	          <span class="doc-pill"><a href="<?php echo esc_url( $director_doctoralia ); ?>" target="_blank" rel="noopener noreferrer">166 opiniones verificadas Doctoralia</a></span>
+	          <span class="doc-pill">Idiomas: ES &middot; EN &middot; DE</span>
+	        </div>
 	      </div>
 	    </div>
 
@@ -137,15 +143,20 @@ get_header();
 	  </div>
 
 	  <!-- DRA. RIVERA DERAS -->
-	  <div class="doc">
-	    <div class="doc-hero">
-	      <div class="doc-name">Dra. Ivon Yamileth Rivera Deras</div>
-	      <div class="doc-title">Well-aging &middot; Geriatría preventiva &middot; Longevidad &middot; Medicina funcional</div>
-	      <div class="doc-meta">
-	        <span class="doc-pill accent">ICOMEM <?php echo esc_html( nvx_medical_colegiado( 'ivon' ) ); ?></span>
-	        <span class="doc-pill">FEA Hospital Universitario La Paz</span>
-	        <span class="doc-pill">SEMEG &middot; EuGMS</span>
-	        <span class="doc-pill">OXON Epidemiology</span>
+	  <div class="doc" itemscope itemtype="https://schema.org/Person">
+	    <div class="doc-hero doc-hero--with-portrait">
+	      <div class="doc-portrait">
+	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/dra-ivon-yamileth-rivera-deras.webp' ); ?>" alt="<?php esc_attr_e( 'Dra. Ivon Yamileth Rivera Deras — Well-Aging y Geriatría Preventiva NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
+	      </div>
+	      <div class="doc-hero__info">
+	        <div class="doc-name" itemprop="name">Dra. Ivon Yamileth Rivera Deras</div>
+	        <div class="doc-title" itemprop="jobTitle">Well-aging &middot; Geriatría preventiva &middot; Longevidad &middot; Medicina funcional</div>
+	        <div class="doc-meta">
+	          <span class="doc-pill accent">ICOMEM <?php echo esc_html( nvx_medical_colegiado( 'ivon' ) ); ?></span>
+	          <span class="doc-pill">FEA Hospital Universitario La Paz</span>
+	          <span class="doc-pill">SEMEG &middot; EuGMS</span>
+	          <span class="doc-pill">OXON Epidemiology</span>
+	        </div>
 	      </div>
 	    </div>
 
@@ -226,14 +237,19 @@ get_header();
 	    <div itemprop="affiliation" itemscope itemtype="https://schema.org/MedicalOrganization">
 	      <meta itemprop="name" content="NUVANX Medicina Estética Láser" />
 	    </div>
-	    <div class="doc-hero">
-	      <div class="doc-name" itemprop="name">Dr. Fabio Augusto Quiñónez Bareiro</div>
-	      <div class="doc-title" itemprop="jobTitle">Geriatría &middot; Gerontología &middot; Fisiología del envejecimiento &middot; Paciente complejo</div>
-	      <div class="doc-meta">
-	        <span class="doc-pill accent">ICOMEM <?php echo esc_html( nvx_medical_colegiado( 'fabio' ) ); ?></span>
-	        <span class="doc-pill">Ph.D. UAM &mdash; 11 jun. 2024</span>
-	        <span class="doc-pill">CIBERFES (ISCIII)</span>
-	        <span class="doc-pill">SEMEG</span>
+	    <div class="doc-hero doc-hero--with-portrait">
+	      <div class="doc-portrait">
+	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/dr-fabio-quinonez-bareiro.webp' ); ?>" alt="<?php esc_attr_e( 'Dr. Fabio Augusto Quiñónez Bareiro — Geriatría y Paciente Complejo NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
+	      </div>
+	      <div class="doc-hero__info">
+	        <div class="doc-name" itemprop="name">Dr. Fabio Augusto Quiñónez Bareiro</div>
+	        <div class="doc-title" itemprop="jobTitle">Geriatría &middot; Gerontología &middot; Fisiología del envejecimiento &middot; Paciente complejo</div>
+	        <div class="doc-meta">
+	          <span class="doc-pill accent">ICOMEM <?php echo esc_html( nvx_medical_colegiado( 'fabio' ) ); ?></span>
+	          <span class="doc-pill">Ph.D. UAM &mdash; 11 jun. 2024</span>
+	          <span class="doc-pill">CIBERFES (ISCIII)</span>
+	          <span class="doc-pill">SEMEG</span>
+	        </div>
 	      </div>
 	    </div>
 
@@ -327,13 +343,106 @@ get_header();
 	          <a href="<?php echo esc_url( home_url( '/resurfacing-laser-co2-fraccionado/' ) ); ?>" class="tag blue">Láser CO&sub2; fraccionado</a>
 	          <a href="<?php echo esc_url( home_url( '/exion-rf-fraccionada-microneedling-madrid/' ) ); ?>" class="tag blue">EXION&reg; Fractional RF</a>
 	          <a href="<?php echo esc_url( home_url( '/exion-face/' ) ); ?>" class="tag blue">EXION Face</a>
-          <a href="<?php echo esc_url( home_url( '/exion-body/' ) ); ?>" class="tag blue">EXION Body</a>
+	          <a href="<?php echo esc_url( home_url( '/exion-body/' ) ); ?>" class="tag blue">EXION Body</a>
 	          <a href="<?php echo esc_url( home_url( '/btl-exilite-ipl-madrid/' ) ); ?>" class="tag blue">BTL EXILITE&trade; IPL</a>
 	          <a href="<?php echo esc_url( home_url( '/medicina-estetica/' ) ); ?>" class="tag blue">Medicina inyectable</a>
 	          <a href="<?php echo esc_url( home_url( '/armonizacion-facial-radiesse-madrid/' ) ); ?>" class="tag blue">Bioestimuladores de colágeno</a>
 	        </div>
 	      </div>
 
+	    </div>
+	  </div>
+
+	  <!-- DRA. CRISTINA MÁRQUEZ -->
+	  <div class="doc" itemscope itemtype="https://schema.org/Person">
+	    <?php $cristina_doc = function_exists( 'nvx_medical_staff_doctoralia_url' ) ? nvx_medical_staff_doctoralia_url( 'cristina' ) : ''; ?>
+	    <?php if ( '' !== $cristina_doc ) : ?>
+	      <meta itemprop="sameAs" content="<?php echo esc_url( $cristina_doc ); ?>" />
+	    <?php endif; ?>
+	    <div class="doc-hero doc-hero--with-portrait">
+	      <div class="doc-portrait">
+	        <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/dra-cristina-marquez-gonzalez.webp' ); ?>" alt="<?php esc_attr_e( 'Dra. Cristina Márquez González — Senología y Medicina Estética NUVANX', 'nuvanx-medical' ); ?>" class="doc-portrait__img" width="130" height="130" loading="lazy" decoding="async" />
+	      </div>
+	      <div class="doc-hero__info">
+	        <div class="doc-name" itemprop="name">Dra. Cristina Márquez González</div>
+	        <div class="doc-title" itemprop="jobTitle">Radiología mamaria &middot; Senología &middot; Medicina estética facial</div>
+	        <div class="doc-meta">
+	          <span class="doc-pill accent">ICOMEM <?php echo esc_html( nvx_medical_colegiado( 'cristina' ) ); ?></span>
+	          <span class="doc-pill">HM Hospitales</span>
+	          <span class="doc-pill">Sede Goya · Barrio Salamanca</span>
+	          <?php if ( '' !== $cristina_doc ) : ?>
+	            <span class="doc-pill"><a href="<?php echo esc_url( $cristina_doc ); ?>" target="_blank" rel="noopener noreferrer">Perfil verificado Doctoralia</a></span>
+	          <?php endif; ?>
+	        </div>
+	      </div>
+	    </div>
+
+	    <div class="doc-body">
+	      <div>
+	        <div class="section-label">Ámbito asistencial y formación</div>
+	        <div class="timeline">
+	          <div class="tl-item">
+	            <div class="tl-year">Hospitalario</div>
+	            <div class="tl-content">Facultativa Especialista en Radiología Mamaria en HM Hospitales<em>Diagnóstico mamario avanzado, ecografía intervencionista y seguimiento clínico</em></div>
+	          </div>
+	          <div class="tl-item">
+	            <div class="tl-year">NUVANX</div>
+	            <div class="tl-content">Médica estética en centro clínico NUVANX Salamanca–Goya<em>Protocolos de armonización facial, inductores de colágeno y rejuvenecimiento</em></div>
+	          </div>
+	          <div class="tl-item">
+	            <div class="tl-year">Posgrado</div>
+	            <div class="tl-content">Especialización en Senología y Patología Mamaria &middot; Máster en Medicina Estética</div>
+	          </div>
+	        </div>
+	      </div>
+
+	      <hr class="divider">
+
+	      <div>
+	        <div class="section-label">Protocolos que realiza en NUVANX</div>
+	        <div class="tags">
+	          <a href="<?php echo esc_url( home_url( '/medicina-estetica/' ) ); ?>" class="tag blue">Armonización facial</a>
+	          <a href="<?php echo esc_url( home_url( '/armonizacion-facial-radiesse-madrid/' ) ); ?>" class="tag blue">Bioestimuladores e inductores de colágeno</a>
+	          <a href="<?php echo esc_url( home_url( '/medicina-estetica/' ) ); ?>" class="tag blue">Neuromoduladores</a>
+	          <a href="<?php echo esc_url( home_url( '/resurfacing-laser-co2-fraccionado/' ) ); ?>" class="tag blue">Láser CO&sub2;</a>
+	        </div>
+	      </div>
+	    </div>
+	  </div>
+
+	  <!-- EQUIPO CLÍNICO Y COORDINACIÓN -->
+	  <div class="nvx-staff-section">
+	    <div class="section-label">Equipo de coordinación asistencial y enfermería</div>
+	    <div class="nvx-staff-grid">
+	      <div class="nvx-staff-card">
+	        <div class="nvx-staff-portrait">
+	          <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/francisco-geraldo-lorenzo.webp' ); ?>" alt="Francisco Geraldo Lorenzo" class="nvx-staff-img" width="72" height="72" loading="lazy" decoding="async" />
+	        </div>
+	        <div class="nvx-staff-info">
+	          <div class="nvx-staff-name">Francisco Geraldo Lorenzo</div>
+	          <div class="nvx-staff-role">Coordinación clínica · Enfermería · Dermocosmética</div>
+	        </div>
+	      </div>
+
+	      <div class="nvx-staff-card">
+	        <div class="nvx-staff-portrait">
+	          <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/eva-lazaro.webp' ); ?>" alt="Eva Lázaro" class="nvx-staff-img" width="72" height="72" loading="lazy" decoding="async" />
+	        </div>
+	        <div class="nvx-staff-info">
+	          <div class="nvx-staff-name">Eva Lázaro</div>
+	          <div class="nvx-staff-role">Auxiliar de enfermería · Técnico especialista láser</div>
+	        </div>
+	      </div>
+
+	      <div class="nvx-staff-card">
+	        <div class="nvx-staff-portrait">
+	          <img src="<?php echo esc_url( get_template_directory_uri() . '/assets/images/team/gosia.webp' ); ?>" alt="Gosia" class="nvx-staff-img" width="72" height="72" loading="lazy" decoding="async" />
+	        </div>
+	        <div class="nvx-staff-info">
+	          <div class="nvx-staff-name">Gosia</div>
+	          <div class="nvx-staff-role">Atención al paciente · Coordinación de agenda</div>
+	        </div>
+	      </div>
 	    </div>
 	  </div>
 

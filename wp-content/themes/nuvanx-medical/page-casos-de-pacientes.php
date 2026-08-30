@@ -78,11 +78,28 @@ get_header();
 			<?php if ( ! empty( $cases_list ) ) : ?>
 				<ul class="nvx-cases-list">
 					<?php foreach ( $cases_list as $case ) : ?>
-						<li class="nvx-case-card">
+						<li class="nvx-case-card" id="<?php echo esc_attr( $case['id'] ?? '' ); ?>">
 							<div class="nvx-case-card__header">
 								<span class="nvx-case-card__badge"><?php echo esc_html( $case['category_label'] ?? '' ); ?></span>
 								<h3 class="nvx-case-card__title"><?php echo esc_html( $case['title'] ?? '' ); ?></h3>
 							</div>
+
+							<?php if ( ! empty( $case['image'] ) ) : ?>
+								<?php
+								$img_relative = '/' . ltrim( (string) $case['image'], '/' );
+								$img_src      = get_template_directory_uri() . $img_relative;
+								$img_alt      = $case['image_alt'] ?? $case['title'] ?? 'Evolución clínica documentada';
+								?>
+								<div class="nvx-case-card__visual">
+									<figure class="nvx-case-card__media">
+										<img src="<?php echo esc_url( $img_src ); ?>" alt="<?php echo esc_attr( $img_alt ); ?>" class="nvx-case-card__img" loading="lazy" decoding="async">
+									</figure>
+									<div class="nvx-case-card__visual-caption">
+										<span class="nvx-case-card__visual-badge"><?php esc_html_e( 'Registro clínico estandarizado', 'nuvanx-medical' ); ?></span>
+										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $case['consent_status'] ?? '' ); ?></span>
+									</div>
+								</div>
+							<?php endif; ?>
 
 							<dl class="nvx-case-card__meta-grid">
 								<div class="nvx-case-card__meta-item">
