@@ -42,18 +42,49 @@ fail() {
   exit 1
 }
 
-verify_staging_hubspot_embed_contract() {
-  local modal_file="$SOURCE_THEME/inc/nvx-valoracion-modal.php"
+fail_config() {
+  echo "FAIL_CONFIG: $*" >&2
+  exit 78
+}
 
-  # The HubSpot iframe is configured with its public portal/form identifiers.
-  # A deployment must never copy a private credential from production or write a
-  # secret into staging wp-config.php: that bypasses repository provenance and
-  # makes staging availability depend on production configuration.
+verify_staging_hubspot_embed_contract() {
+  local secure_file="$SOURCE_THEME/inc/nvx-hubspot-secure-attribution.php"
+  local modal_file="$SOURCE_THEME/inc/nvx-valoracion-modal.php"
+  local portal=''
+  local form=''
+  local source=''
+
+  # Source contract: account/form identity belongs to the validated resolver,
+  # never to a theme-owned Production fallback in the modal or embed markup.
+  [[ -f "$secure_file" ]] || fail 'HubSpot secure identity resolver is missing from the immutable theme payload'
   [[ -f "$modal_file" ]] || fail 'HubSpot modal source is missing from the immutable theme payload'
-  grep -Fq "NVX_VALORACION_HS_FRAME_PORTAL_ID" "$modal_file" || fail 'HubSpot portal identifier contract is missing'
-  grep -Fq "NVX_VALORACION_HS_FRAME_FORM_ID" "$modal_file" || fail 'HubSpot form identifier contract is missing'
-  grep -Fq "js-eu1.hsforms.net/forms/embed/" "$modal_file" || fail 'HubSpot public embed contract is missing'
-  echo 'STAGING_HUBSPOT_EMBED=PASS mode=public-embed credential-transfer=disabled'
+  grep -Fq 'function nvx_hubspot_secure_identity' "$secure_file" || fail 'HubSpot canonical identity resolver contract is missing'
+  grep -Fq 'nvx_hubspot_secure_identity_configured' "$modal_file" || fail 'HubSpot modal does not enforce the canonical configured-identity contract'
+  grep -Fq 'nvx_hubspot_secure_portal_id' "$modal_file" || fail 'HubSpot modal does not consume the canonical portal resolver'
+  grep -Fq 'nvx_hubspot_secure_form_id' "$modal_file" || fail 'HubSpot modal does not consume the canonical form resolver'
+
+  # Runtime precondition: Staging2 must provision one complete identity pair in
+  # wp-config.php. wp config get intentionally inspects environment configuration
+  # rather than loading the active theme, so a theme fallback cannot satisfy it.
+  (
+    cd "$WP_ROOT"
+    portal="$(wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
+    form="$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
+    if [[ -n "$portal" || -n "$form" ]]; then
+      source='canonical_wp_config'
+    else
+      portal="$(wp config get NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || true)"
+      form="$(wp config get NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null || true)"
+      if [[ -n "$portal" || -n "$form" ]]; then
+        source='legacy_wp_config'
+      fi
+    fi
+
+    [[ -n "$source" ]] || fail_config 'Staging2 HubSpot portal/form identity is not provisioned in wp-config.php'
+    [[ "$portal" =~ ^[0-9]{1,20}$ ]] || fail_config "Staging2 HubSpot portal identity is malformed source=$source"
+    [[ "$form" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$ ]] || fail_config "Staging2 HubSpot form identity is malformed source=$source"
+    echo "STAGING_HUBSPOT_CONFIG=PASS source=$source runtime_fallback=disabled"
+  )
 }
 
 purge_siteground_cache_if_available() {
@@ -195,6 +226,7 @@ SOURCE_REQUIRED_FILES=(
   inc/nvx-page-hygiene.php
   inc/nvx-solutions-page.php
   inc/nvx-clinics-hub.php
+  inc/nvx-hubspot-secure-attribution.php
   inc/nvx-valoracion-modal.php
   inc/data/publication-manifest.json
 )
@@ -254,7 +286,7 @@ echo '== Guard production read-only source identity =='
   [[ "$(wp theme list --status=active --field=name)" == 'nuvanx-medical' ]] || fail 'unexpected production active theme'
 )
 
-echo '== Verify Staging2 HubSpot public embed contract =='
+echo '== Verify Staging2 HubSpot fail-closed identity contract =='
 verify_staging_hubspot_embed_contract
 
 echo '== Validate source PHP =='
