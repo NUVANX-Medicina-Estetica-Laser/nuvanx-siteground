@@ -283,7 +283,7 @@ function nvx_schema_semantic_normalize_graph( $graph ) {
 		if ( ! is_array( $node ) ) {
 			continue;
 		}
-		$types = isset( $node['@type'] ) ? (array) $node['@type'] : array();
+		$types = nvx_schema_semantic_types( $node['@type'] ?? array() );
 		if ( in_array( 'BreadcrumbList', $types, true ) ) {
 			$id       = isset( $node['@id'] ) ? (string) $node['@id'] : '';
 			$elements = isset( $node['itemListElement'] ) && is_array( $node['itemListElement'] ) ? $node['itemListElement'] : array();
@@ -299,8 +299,8 @@ function nvx_schema_semantic_normalize_graph( $graph ) {
 			continue;
 		}
 
-		$types = isset( $node['@type'] ) ? (array) $node['@type'] : array();
-		if ( in_array( 'WebPage', $types, true ) || in_array( 'ItemPage', $types, true ) ) {
+		$types = nvx_schema_semantic_types( $node['@type'] ?? array() );
+		if ( nvx_schema_semantic_is_webpage( $types ) ) {
 			if ( isset( $node['breadcrumb'] ) ) {
 				$ref = is_array( $node['breadcrumb'] ) && isset( $node['breadcrumb']['@id'] )
 					? (string) $node['breadcrumb']['@id']
