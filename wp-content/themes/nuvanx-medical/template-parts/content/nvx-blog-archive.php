@@ -43,7 +43,7 @@ function nvx_blog_archive_semantic_image( array $args = array() ): string {
 			$attr['fetchpriority'] = 'high';
 		}
 
-		$html = '' !== $alt ? get_the_post_thumbnail( null, 'large', $attr ) : '';
+		$html = get_the_post_thumbnail( null, 'large', $attr );
 		if ( is_string( $html ) && '' !== $html
 			&& 1 !== preg_match( '/logo-nuvanx|nuvanx-web\.webp|\/logo[-_]|nvx-logo|site-logo|custom-logo/iu', $html )
 			&& ( ! function_exists( 'nvx_public_html_is_vendor_image' ) || ! nvx_public_html_is_vendor_image( $html ) )
