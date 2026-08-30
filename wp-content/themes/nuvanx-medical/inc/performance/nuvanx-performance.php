@@ -132,6 +132,10 @@ function nuvanx_resolve_hero_image_id(): int {
 
 /**
  * Emit `<link rel="preload" as="image">` for the LCP hero in `<head>` priority 1.
+ *
+ * Attachment metadata can outlive physical derivatives in uploads. Preload is
+ * a browser fetch contract, so never advertise a local candidate that the
+ * public-media filesystem guard cannot verify as readable.
  */
 function nuvanx_preload_lcp_hero(): void {
 	$hero_id = nuvanx_resolve_hero_image_id();
@@ -144,11 +148,15 @@ function nuvanx_preload_lcp_hero(): void {
 
 	foreach ( array( NUVANX_HERO_IMAGE_SIZE, 'hero-full', 'large', 'full' ) as $size ) {
 		$url = (string) wp_get_attachment_image_url( $hero_id, $size );
-		if ( '' !== $url ) {
-			$canonical_size = $size;
-			$canonical_url  = $url;
-			break;
+		if ( '' === $url ) {
+			continue;
 		}
+		if ( function_exists( 'nvx_public_media_upload_url_is_readable' ) && ! nvx_public_media_upload_url_is_readable( $url ) ) {
+			continue;
+		}
+		$canonical_size = $size;
+		$canonical_url  = $url;
+		break;
 	}
 
 	if ( '' === $canonical_url ) {
@@ -156,18 +164,23 @@ function nuvanx_preload_lcp_hero(): void {
 	}
 
 	$srcset = (string) wp_get_attachment_image_srcset( $hero_id, $canonical_size );
-	$sizes  = is_front_page()
+	if ( '' !== $srcset && function_exists( 'nvx_public_media_runtime_filter_srcset_attribute' ) ) {
+		$srcset = nvx_public_media_runtime_filter_srcset_attribute( $srcset );
+	}
+	$sizes = is_front_page()
 		? '100vw'
 		: '(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 1440px';
 
 	$srcset_attr = $srcset ? ' imagesrcset="' . esc_attr( $srcset ) . '"' : '';
 	$sizes_attr  = ' imagesizes="' . esc_attr( $sizes ) . '"';
 
-	$webp_url = (string) preg_replace( '/\.(jpe?g|png)$/i', '.webp', $canonical_url );
+	$webp_url      = (string) preg_replace( '/\.(jpe?g|png)$/i', '.webp', $canonical_url );
+	$webp_readable = $webp_url !== $canonical_url
+		&& ( ! function_exists( 'nvx_public_media_upload_url_is_readable' ) || nvx_public_media_upload_url_is_readable( $webp_url ) );
 
 	echo "\n<!-- nuvanx LCP preload -->\n";
 
-	if ( $webp_url !== $canonical_url ) {
+	if ( $webp_readable ) {
 		echo '<link rel="preload" as="image"'
 			. ' href="' . esc_url( $webp_url ) . '"'
 			. $srcset_attr
