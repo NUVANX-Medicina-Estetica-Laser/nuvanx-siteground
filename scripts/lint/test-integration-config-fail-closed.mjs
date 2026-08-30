@@ -31,6 +31,7 @@ const managed = fs.readFileSync(new URL('wp-content/themes/nuvanx-medical/inc/nv
 const direct = fs.readFileSync(new URL('wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php', repoRoot), 'utf8');
 const diagnostic = fs.readFileSync(new URL('scripts/ci/validate-hubspot-form.sh', repoRoot), 'utf8');
 const stagingDeploy = fs.readFileSync(new URL('tools/deploy/deploy-to-staging2.sh', repoRoot), 'utf8');
+const stagingIdentity = JSON.parse(fs.readFileSync(new URL('lib/staging-public-integration-identities.json', repoRoot), 'utf8'));
 
 assert.match(secure, /return '';\s*\n}/, 'HubSpot identity resolver must be able to return empty');
 assert.match(secure, /nvx_missing_hubspot_identity/, 'Missing HubSpot identity must fail explicitly');
@@ -47,6 +48,8 @@ assert.match(stagingDeploy, /fail_config\(\)/, 'Staging deploy must expose a FAI
 assert.match(stagingDeploy, /exit 78/, 'Staging configuration failures must use EX_CONFIG=78');
 assert.match(stagingDeploy, /wp config get NVX_HUBSPOT_PORTAL_ID/, 'Staging must read canonical portal identity from wp-config');
 assert.match(stagingDeploy, /wp config get NVX_HUBSPOT_VALORACION_FORM_ID/, 'Staging must read canonical form identity from wp-config');
+assert.match(stagingDeploy, /staging-public-integration-identities\.json/, 'Staging deploy must source public identity from the governed Staging manifest');
+assert.doesNotMatch(stagingDeploy, /canonical_production_wp_config|legacy_production_wp_config/, 'Staging deploy must not infer HubSpot identity from Production wp-config');
 assert.match(stagingDeploy, /function nvx_hubspot_secure_identity/, 'Staging source gate must require the canonical resolver');
 assert.match(stagingDeploy, /nvx_hubspot_secure_identity_configured/, 'Staging source gate must require fail-closed modal behavior');
 assert.doesNotMatch(
@@ -54,6 +57,15 @@ assert.doesNotMatch(
   /grep -Fq ["']NVX_VALORACION_HS_FRAME_(?:PORTAL|FORM)_ID["'] \"\$modal_file\"/,
   'Staging deploy must not require legacy identity constants to be embedded in modal source',
 );
+
+assert.equal(stagingIdentity.schema, 1, 'Staging public integration manifest must use schema 1');
+assert.equal(stagingIdentity.scope, 'staging2', 'Public integration manifest must be scoped only to Staging2');
+assert.equal(stagingIdentity.classification, 'public_integration_identity', 'HubSpot account/form IDs must be classified as public integration identity');
+assert.match(String(stagingIdentity.hubspot?.portal_id || ''), /^[0-9]{1,20}$/, 'Staging HubSpot portal ID must be syntactically valid');
+assert.match(String(stagingIdentity.hubspot?.form_id || ''), /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$/, 'Staging HubSpot form ID must be syntactically valid');
+assert.equal(stagingIdentity.guardrails?.theme_runtime_fallback, false, 'Staging identity manifest must not authorize a theme runtime fallback');
+assert.equal(stagingIdentity.guardrails?.contains_private_credentials, false, 'Staging identity manifest must not contain private credentials');
+assert.equal(stagingIdentity.guardrails?.production_mutation, false, 'Staging identity manifest must forbid Production mutation');
 
 // Verify runtime fail-closed behavior across priority layers via PHP subprocesses.
 const TEST_PORTAL = '88888888';
@@ -77,4 +89,4 @@ run_case("putenv('NVX_HUBSPOT_PORTAL_ID=invalid'); putenv('NVX_VALORACION_HS_FRA
 
 execSync('php', { input: phpRunner, cwd: repoRoot, stdio: ['pipe', 'inherit', 'inherit'] });
 
-console.log('INTEGRATION_CONFIG_FAIL_CLOSED=PASS hubspot_runtime_fallbacks=0 validated_pairs=6 staging_config_gate=1');
+console.log('INTEGRATION_CONFIG_FAIL_CLOSED=PASS hubspot_runtime_fallbacks=0 validated_pairs=6 staging_config_gate=1 public_manifest=1');

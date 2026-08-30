@@ -18,6 +18,7 @@ MUTATION_STARTED=0
 CONFIG_BACKUP=''
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR=''
+PUBLIC_INTEGRATION_CONFIG=''
 
 if [[ -d "$SCRIPT_DIR/tools/migrations" ]]; then
   # Immutable GitHub Actions release layout: deploy script copied to release root.
@@ -25,6 +26,14 @@ if [[ -d "$SCRIPT_DIR/tools/migrations" ]]; then
 elif [[ -d "$SCRIPT_DIR/../migrations" ]]; then
   # Repository/operator layout: tools/deploy/deploy-to-staging2.sh.
   MIGRATIONS_DIR="$(cd "$SCRIPT_DIR/../migrations" && pwd)"
+fi
+
+if [[ -f "$SCRIPT_DIR/lib/staging-public-integration-identities.json" ]]; then
+  # Immutable GitHub Actions release layout: lib/ is copied beside this script.
+  PUBLIC_INTEGRATION_CONFIG="$SCRIPT_DIR/lib/staging-public-integration-identities.json"
+elif [[ -f "$SCRIPT_DIR/../../lib/staging-public-integration-identities.json" ]]; then
+  # Repository/operator layout: tools/deploy/deploy-to-staging2.sh.
+  PUBLIC_INTEGRATION_CONFIG="$(cd "$SCRIPT_DIR/../.." && pwd)/lib/staging-public-integration-identities.json"
 fi
 
 usage() {
@@ -51,23 +60,28 @@ fail_config() {
 provision_staging_hubspot_identity() {
   local portal=''
   local form=''
-  local source=''
+  local scope=''
+  local classification=''
+  local private_credentials=''
+  local production_mutation=''
 
-  portal="$(cd "$PROD_ROOT" && wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
-  form="$(cd "$PROD_ROOT" && wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
-  if [[ -n "$portal" || -n "$form" ]]; then
-    source='canonical_production_wp_config'
-  else
-    portal="$(cd "$PROD_ROOT" && wp config get NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || true)"
-    form="$(cd "$PROD_ROOT" && wp config get NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null || true)"
-    if [[ -n "$portal" || -n "$form" ]]; then
-      source='legacy_production_wp_config'
-    fi
-  fi
+  [[ -n "$PUBLIC_INTEGRATION_CONFIG" && -f "$PUBLIC_INTEGRATION_CONFIG" ]] \
+    || fail_config 'Staging public integration identity manifest is unavailable'
 
-  [[ -n "$source" ]] || fail_config 'Production HubSpot public portal/form identity is not provisioned'
-  [[ "$portal" =~ ^[0-9]{1,20}$ ]] || fail_config "Production HubSpot portal identity is malformed source=$source"
-  [[ "$form" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$ ]] || fail_config "Production HubSpot form identity is malformed source=$source"
+  scope="$(jq -r '.scope // empty' "$PUBLIC_INTEGRATION_CONFIG")"
+  classification="$(jq -r '.classification // empty' "$PUBLIC_INTEGRATION_CONFIG")"
+  portal="$(jq -r '.hubspot.portal_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
+  form="$(jq -r '.hubspot.form_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
+  private_credentials="$(jq -r '.guardrails.contains_private_credentials // true' "$PUBLIC_INTEGRATION_CONFIG")"
+  production_mutation="$(jq -r '.guardrails.production_mutation // true' "$PUBLIC_INTEGRATION_CONFIG")"
+
+  [[ "$scope" == 'staging2' ]] || fail_config "HubSpot identity manifest has unexpected scope=$scope"
+  [[ "$classification" == 'public_integration_identity' ]] || fail_config "HubSpot identity manifest classification is invalid: $classification"
+  [[ "$private_credentials" == 'false' ]] || fail_config 'HubSpot identity manifest must not contain private credentials'
+  [[ "$production_mutation" == 'false' ]] || fail_config 'HubSpot identity manifest must forbid Production mutation'
+  [[ "$portal" =~ ^[0-9]{1,20}$ ]] || fail_config 'HubSpot portal identity in Staging manifest is malformed'
+  [[ "$form" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$ ]] \
+    || fail_config 'HubSpot form identity in Staging manifest is malformed'
 
   (
     cd "$WP_ROOT"
@@ -78,7 +92,7 @@ provision_staging_hubspot_identity() {
     [[ "$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID)" == "$form" ]]
   )
 
-  echo "STAGING_HUBSPOT_PROVISION=PASS source=$source target=canonical_wp_config private_credentials=none"
+  echo 'STAGING_HUBSPOT_PROVISION=PASS source=governed_public_manifest target=canonical_wp_config private_credentials=none production_mutation=none'
 }
 
 verify_staging_hubspot_embed_contract() {
@@ -225,6 +239,7 @@ done
 [[ -n "$SOURCE_THEME" ]] || fail 'source theme path is required'
 [[ "$SOURCE_THEME" == "$WP_ROOT"/wp-content/.nuvanx-deployments/*/theme ]] || fail 'source theme must be inside the staging2 deployment area'
 [[ -n "$MIGRATIONS_DIR" && -d "$MIGRATIONS_DIR" ]] || fail 'migration directory cannot be resolved from repository or immutable release layout'
+[[ -n "$PUBLIC_INTEGRATION_CONFIG" && -f "$PUBLIC_INTEGRATION_CONFIG" ]] || fail_config 'public Staging integration identity manifest cannot be resolved from repository or immutable release layout'
 
 for command_name in wp rsync tar php find mktemp sha256sum awk jq; do
   command -v "$command_name" >/dev/null 2>&1 || fail "required command is unavailable: $command_name"
@@ -327,7 +342,7 @@ echo '== Guard production read-only source identity =='
 
 CONFIG_BACKUP="$(mktemp)"
 cp -p "$WP_ROOT/wp-config.php" "$CONFIG_BACKUP"
-echo '== Provision Staging2 HubSpot public identity from Production read-only config =='
+echo '== Provision Staging2 HubSpot public identity from governed manifest =='
 provision_staging_hubspot_identity
 
 echo '== Verify Staging2 HubSpot fail-closed identity contract =='
