@@ -25,7 +25,17 @@ export function isHubSpotEmbedDefinitionUrl(value) {
     const url = new URL(value);
     const host = url.hostname.toLowerCase();
     const trustedHost = host === 'forms.hsforms.com' || host.endsWith('.hsforms.com');
-    return trustedHost && /\/embed\/v3\/form\/[^/]+\/[^/]+\/json$/i.test(url.pathname);
+    if (!trustedHost) return false;
+    const pathname = url.pathname.toLowerCase();
+    // V4: /embed/v4/render-definition/{portalId}/{formId}
+    if (/\/embed\/v4\/render-definition\/[^/]+\/[^/]+(?:\/.*)?$/i.test(pathname)) {
+      return true;
+    }
+    // V3: /embed/v3/form/{portalId}/{formId}/json
+    if (/\/embed\/v3\/form\/[^/]+\/[^/]+\/json$/i.test(pathname)) {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -33,8 +43,27 @@ export function isHubSpotEmbedDefinitionUrl(value) {
 
 export function embedResponseMatchesForm(entry, formId) {
   try {
-    const pathname = new URL(entry?.url || '').pathname.toLowerCase();
-    return pathname.endsWith(`/${String(formId || '').toLowerCase()}/json`);
+    const url = new URL(entry?.url || '');
+    const host = url.hostname.toLowerCase();
+    const trustedHost = host === 'forms.hsforms.com' || host.endsWith('.hsforms.com');
+    if (!trustedHost) return false;
+    const targetId = String(formId || '').toLowerCase().trim();
+    if (!targetId) return false;
+    const pathname = url.pathname.toLowerCase();
+
+    // V4: /embed/v4/render-definition/{portalId}/{formId}
+    const v4Match = pathname.match(/\/embed\/v4\/render-definition\/[^/]+\/([^/?#]+)/i);
+    if (v4Match && v4Match[1].toLowerCase() === targetId) {
+      return true;
+    }
+
+    // V3: /embed/v3/form/{portalId}/{formId}/json
+    const v3Match = pathname.match(/\/embed\/v3\/form\/[^/]+\/([^/?#]+)\/json$/i);
+    if (v3Match && v3Match[1].toLowerCase() === targetId) {
+      return true;
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -171,22 +200,76 @@ export async function waitForHubSpotEmbedDefinition(
   }
 }
 
+function extractFieldsFromModules(modules) {
+  if (!Array.isArray(modules)) return [];
+  const fields = [];
+
+  function traverse(list) {
+    if (!Array.isArray(list)) return;
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue;
+
+      const propName = item?.propertyReference?.name
+        || item?.propertyReference?.propertyName
+        || item?.propertyReference?.property
+        || item?.name
+        || item?.propertyName
+        || item?.property?.name
+        || item?.field?.name
+        || item?.fieldName;
+
+      const isHiddenType = String(item?.type || '').toLowerCase() === 'hidden'
+        || String(item?.moduleType || '').toLowerCase() === 'hidden';
+      const isExplicitHidden = item?.hidden === true || item?.field?.hidden === true;
+
+      if (propName) {
+        fields.push({
+          name: String(propName),
+          hidden: isHiddenType || isExplicitHidden,
+          fieldType: item?.fieldType || item?.type,
+          raw: item,
+        });
+      }
+
+      if (Array.isArray(item?.modules)) traverse(item.modules);
+      if (Array.isArray(item?.children)) traverse(item.children);
+      if (Array.isArray(item?.fields)) traverse(item.fields);
+      if (Array.isArray(item?.formFieldGroups)) traverse(item.formFieldGroups);
+      if (Array.isArray(item?.fieldGroups)) traverse(item.fieldGroups);
+    }
+  }
+
+  traverse(modules);
+  return fields;
+}
+
 export function inspectHubSpotFormDefinition(payload, expectedFormId) {
   const expected = String(expectedFormId || '').trim().toLowerCase();
   const definition = resolveFormDefinition(payload);
   const actual = String(
-    definition?.guid || definition?.id || definition?.formId || payload?.formId || ''
+    definition?.guid || definition?.id || definition?.formId || payload?.guid || payload?.id || payload?.formId || ''
   ).trim().toLowerCase();
 
-  const groups = [
-    definition?.formFieldGroups,
-    definition?.fieldGroups,
-    payload?.formFieldGroups,
-    payload?.fieldGroups,
-  ].find((candidate) => Array.isArray(candidate)) || [];
+  let fields = [];
+  let isV4Modules = false;
 
-  let fields = groups.flatMap((group) => Array.isArray(group?.fields) ? group.fields : []);
-  if (fields.length === 0 && Array.isArray(definition?.fields)) fields = definition.fields;
+  if (Array.isArray(definition?.modules) || Array.isArray(payload?.modules)) {
+    isV4Modules = true;
+    fields = extractFieldsFromModules(definition?.modules || payload?.modules);
+  }
+
+  if (fields.length === 0) {
+    const groups = [
+      definition?.formFieldGroups,
+      definition?.fieldGroups,
+      payload?.formFieldGroups,
+      payload?.fieldGroups,
+    ].find((candidate) => Array.isArray(candidate)) || [];
+
+    fields = groups.flatMap((group) => Array.isArray(group?.fields) ? group.fields : []);
+    if (fields.length === 0 && Array.isArray(definition?.fields)) fields = definition.fields;
+    if (fields.length === 0 && Array.isArray(payload?.fields)) fields = payload.fields;
+  }
 
   const index = new Map();
   for (const field of fields) {
@@ -198,18 +281,30 @@ export function inspectHubSpotFormDefinition(payload, expectedFormId) {
   const missing = REQUIRED_NATIVE_LINEAGE_FIELDS.filter((name) => !index.has(name));
   const notHidden = REQUIRED_NATIVE_LINEAGE_FIELDS.filter((name) => {
     const field = index.get(name);
-    return field && field.hidden !== true;
+    return !field || field.hidden !== true;
   });
 
-  const publishedValue = definition?.isPublished ?? payload?.isPublished;
+  const rawStatus = definition?.status || payload?.status;
+  let publishedValue = definition?.isPublished ?? payload?.isPublished;
+  if (publishedValue === undefined && typeof rawStatus === 'string') {
+    publishedValue = rawStatus.toUpperCase() === 'PUBLISHED';
+  }
+
   const updatedAt = definition?.updatedAt ?? definition?.internalUpdatedAt ?? payload?.updatedAt ?? null;
+
+  let source = 'hubspot_form_definition';
+  if (isV4Modules) {
+    source = 'hubspot_render_definition_v4';
+  } else if (payload?.form && typeof payload.form === 'object') {
+    source = 'hubspot_embed_v3';
+  }
 
   return {
     schema: 2,
-    source: payload?.form && typeof payload.form === 'object' ? 'hubspot_embed_v3' : 'hubspot_form_definition',
+    source,
     expected_form_id: expected,
     actual_form_id: actual,
-    form_name: String(definition?.name || ''),
+    form_name: String(definition?.name || payload?.name || ''),
     published: publishedValue === undefined ? null : publishedValue === true,
     updated_at: updatedAt,
     required_fields: [...REQUIRED_NATIVE_LINEAGE_FIELDS],
