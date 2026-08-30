@@ -180,8 +180,9 @@ try {
 assert.equal(ownKeysCalls, 2, 'Both HubSpot async entry points must exercise syncForm');
 assert.equal(unhandled.length, 0, 'HubSpot async sync entry points must consume rejected promises');
 
-// This regression relies on the public sync API that this integration wiring
-// installs, so load it only after the API contract above has been exercised.
+// These regressions rely on the public sync API and form-contract helper used by
+// Staging lineage acceptance, so load them only after the base API is installed.
 await import('./test-hubspot-v4-hidden-lineage.mjs');
+await import('./test-hubspot-form-definition-contract.mjs');
 
-console.log('ATTRIBUTION_INTEGRATION_WIRING=PASS lineage=1 hidden_fields=string_array consent_split=1 qa_hidden_string_array=true+false canonical_form=1 async_field_writes=awaited async_rejections=contained applied_lead_id=untouched');
+console.log('ATTRIBUTION_INTEGRATION_WIRING=PASS lineage=1 hidden_fields=string_array consent_split=1 qa_hidden_string_array=true+false canonical_form=1 async_field_writes=awaited async_rejections=contained applied_lead_id=untouched embed_contract_tested=1');
