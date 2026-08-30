@@ -117,7 +117,9 @@
   justify-content: center;
   gap: var(--nvx-space-2);
   min-height: var(--nvx-control-size);
+  min-width: var(--nvx-touch-target-min, 48px);
   padding: var(--nvx-space-2) var(--nvx-space-4);
+  touch-action: manipulation;
   box-sizing: border-box;
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-button);

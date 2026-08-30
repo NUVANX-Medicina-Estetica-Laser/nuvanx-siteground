@@ -1,7 +1,9 @@
 # NUVANX Medicina Estética Láser
 
+> Centro de medicina estética láser avanzada en Madrid (Chamberí y Salamanca–Goya). Dirección médica: Dr. José Javier Rivera Tejeda (Col. ICOMEM 282864786). Especialistas en Endolift® facial y corporal, láser CO₂ fraccionado, inductores de colágeno y armonización facial.
+
 ## Sobre NUVANX
-NUVANX es un centro de medicina estética láser en Madrid. La información clínica del sitio se presenta con criterio médico y la indicación final de cualquier tratamiento depende de una valoración individual.
+NUVANX es un centro de medicina estética láser en Madrid. La información clínica del sitio se presenta con criterio médico y la indicación final de cualquier tratamiento depende de una valoración individualizada presencial en clínica.
 
 ## Dirección médica
 - **Director médico**: Dr. José Javier Rivera Tejeda
@@ -77,14 +79,14 @@ Los importes publicados por NUVANX se gobiernan desde su catálogo tarifario can
 - Los resultados varían entre pacientes y no se garantizan resultados concretos.
 
 ## URLs canónicas principales
-- [Inicio](https://nuvanx.com/)
-- [Valoración médica en Madrid](https://nuvanx.com/madrid/valoracion/)
-- [NUVANX Chamberí](https://nuvanx.com/medicina-estetica-chamberi/)
-- [NUVANX Salamanca–Goya](https://nuvanx.com/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/)
-- [Equipo médico](https://nuvanx.com/equipo-medico/)
-- [Endolift® y ciencia del láser subdérmico](https://nuvanx.com/endolift-ciencia-laser-subdermico/)
-- [Well Aging](https://nuvanx.com/well-aging-estrategia-medica-global/)
-- [Blog / Journal](https://nuvanx.com/blog/)
+- [Inicio](https://nuvanx.com/): Portal principal de NUVANX Medicina Estética Láser en Madrid.
+- [Valoración médica en Madrid](https://nuvanx.com/madrid/valoracion/): Solicitud de valoración médica diagnóstica presencial con el equipo médico.
+- [NUVANX Chamberí](https://nuvanx.com/medicina-estetica-chamberi/): Clínica en Calle de Fernández de la Hoz, 4 (Registro sanitario CS20144).
+- [NUVANX Salamanca–Goya](https://nuvanx.com/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/): Clínica en Calle de Fernán González, 26 (Registro sanitario CS20073).
+- [Equipo médico](https://nuvanx.com/equipo-medico/): Cuadro médico liderado por el Dr. José Javier Rivera Tejeda.
+- [Endolift® y ciencia del láser subdérmico](https://nuvanx.com/endolift-ciencia-laser-subdermico/): Información médica y científica sobre el láser intersticial subdérmico.
+- [Well Aging](https://nuvanx.com/well-aging-estrategia-medica-global/): Enfoque médico global de longevidad y rejuvenecimiento armónico.
+- [Blog / Journal](https://nuvanx.com/blog/): Publicaciones, artículos médicos y novedades sobre tratamientos láser.
 
 ## Uso de este archivo
 Este documento resume información pública y canónica del sitio para sistemas automatizados que decidan consultarlo. Las páginas canónicas enlazadas y los datos estructurados del sitio prevalecen ante cualquier discrepancia.

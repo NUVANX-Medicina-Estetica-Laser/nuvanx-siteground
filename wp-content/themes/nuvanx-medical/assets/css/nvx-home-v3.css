@@ -647,8 +647,11 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-height: var(--nvx-touch-target-text-min);
-	padding-block: var(--nvx-space-1);
+	min-height: var(--nvx-touch-target-min, 48px);
+	min-width: var(--nvx-touch-target-min, 48px);
+	padding-block: var(--nvx-space-2);
+	padding-inline: var(--nvx-space-3);
+	touch-action: manipulation;
 	font-family: var(--nvx-sans);
 	font-size: var(--nvx-type-small);
 	color: var(--nvx-ink);
@@ -695,12 +698,4 @@
 	justify-content: center;
 	align-items: center;
 	gap: var(--nvx-space-4);
-}
-
-/* Core Web Vitals optimization: defer below-the-fold rendering (CSS-4) */
-.nvx-home-locations,
-.nvx-home-team,
-.nvx-home-portfolio {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 600px;
 }

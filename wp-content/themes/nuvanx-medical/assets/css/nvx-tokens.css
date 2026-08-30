@@ -133,7 +133,7 @@
   --nvx-header-height-mobile: 72px;
   --nvx-touch-target-min: 48px;
   /* Compact inline-link targets are intentionally smaller than form controls. */
-  --nvx-touch-target-text-min: 44px;
+  --nvx-touch-target-text-min: 48px;
   --nvx-card-index-size: 40px;
   --nvx-control-size: var(--nvx-touch-target-min);
   --nvx-logo-height: 40px;
