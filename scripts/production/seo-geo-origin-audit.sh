@@ -293,6 +293,40 @@ done
 
 if fetch_url "$BASE_URL/" schema-home && grep -Fq 'MedicalOrganization' "$BODY"; then pass 'SCHEMA_MEDICAL_ORGANIZATION'; else fail 'SCHEMA_MEDICAL_ORGANIZATION'; fi
 if fetch_url "$BASE_URL/clinicas-de-medicina-estetica-nuvanx/" schema-clinics && grep -Fq 'MedicalClinic' "$BODY"; then pass 'SCHEMA_MEDICAL_CLINIC'; else fail 'SCHEMA_MEDICAL_CLINIC'; fi
+if fetch_url "$BASE_URL/equipo-medico/" schema-physicians && grep -Fq 'Physician' "$BODY"; then pass 'SCHEMA_PHYSICIAN'; else fail 'SCHEMA_PHYSICIAN'; fi
+
+treatment_procedure_paths=(
+  '/endolift-facial-papada-mandibula/'
+  '/endolaser-corporal-grasa-localizada/'
+  '/laser-co2-madrid/'
+  '/btl-exion-madrid/'
+  '/acido-hialuronico-madrid/'
+)
+for path in "${treatment_procedure_paths[@]}"; do
+  tag="schema-proc-${path//\//-}"
+  if fetch_url "$BASE_URL$path" "$tag" && grep -Fq 'MedicalProcedure' "$BODY"; then
+    pass "SCHEMA_MEDICAL_PROCEDURE path=$path"
+  else
+    fail "SCHEMA_MEDICAL_PROCEDURE path=$path"
+  fi
+done
+
+treatment_faq_paths=(
+  '/endolift-facial-papada-mandibula/'
+  '/endolaser-corporal-grasa-localizada/'
+  '/laser-co2-madrid/'
+  '/btl-exion-madrid/'
+  '/profhilo-madrid/'
+  '/protocolos-signature/'
+)
+for path in "${treatment_faq_paths[@]}"; do
+  tag="schema-faq-${path//\//-}"
+  if fetch_url "$BASE_URL$path" "$tag" && grep -Fq 'FAQPage' "$BODY"; then
+    pass "SCHEMA_FAQPAGE path=$path"
+  else
+    fail "SCHEMA_FAQPAGE path=$path"
+  fi
+done
 
 printf 'SEO_GEO_RELEASE_SHA=%s\n' "$release_sha"
 printf 'SITEMAP_CHILDREN=%s\n' "$child_count"
