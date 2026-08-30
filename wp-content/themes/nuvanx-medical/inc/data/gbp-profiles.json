@@ -44,8 +44,8 @@
       "reg": "CS20073",
       "place_id": "ChIJlZAA78cpQg0RXFxu-B2lgQI",
       "review_url": "https://search.google.com/local/writereview?placeid=ChIJlZAA78cpQg0RXFxu-B2lgQI",
-      "gbp_primary_category": "public_medical_center",
-      "gbp_additional_categories": ["medical_center", "beauty_salon"],
+      "gbp_primary_category": "medical_center",
+      "gbp_additional_categories": ["beauty_salon"],
       "regular_hours": {
         "monday": "11:00-20:00",
         "tuesday": "11:00-20:00",
