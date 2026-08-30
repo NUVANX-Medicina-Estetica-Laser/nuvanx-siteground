@@ -204,8 +204,8 @@ function nvx_clinics_hub_page_markup(): string {
 	$chamberi_wa = ! empty( $config['chamberi']['whatsapp_href'] ) ? (string) $config['chamberi']['whatsapp_href'] : 'https://wa.me/' . preg_replace( '/\D/', '', $chamberi_phone );
 	$goya_wa     = ! empty( $config['goya']['whatsapp_href'] ) ? (string) $config['goya']['whatsapp_href'] : 'https://wa.me/' . preg_replace( '/\D/', '', $goya_phone );
 
-	$chamberi_hours = ! empty( $config['chamberi']['hours'] ) ? (string) $config['chamberi']['hours'] : __( 'lunes a viernes, 12:00–20:00; sábados, 10:00–18:00', 'nuvanx-medical' );
-	$goya_hours     = ! empty( $config['goya']['hours'] ) ? (string) $config['goya']['hours'] : __( 'lunes a viernes, 11:00–20:00', 'nuvanx-medical' );
+	$chamberi_hours = ! empty( $config['chamberi']['hours'] ) ? (string) $config['chamberi']['hours'] : __( 'lunes a sábado, 10:00–20:00', 'nuvanx-medical' );
+	$goya_hours     = ! empty( $config['goya']['hours'] ) ? (string) $config['goya']['hours'] : __( 'lunes a sábado, 11:00–20:00', 'nuvanx-medical' );
 
 	$chamberi_addr = ! empty( $config['chamberi']['address'] ) ? sprintf( '%s, %s %s', $config['chamberi']['address'], $config['chamberi']['postal_code'], $config['chamberi']['locality'] ) : '';
 	$goya_addr     = ! empty( $config['goya']['address'] ) ? sprintf( '%s, %s %s', $config['goya']['address'], $config['goya']['postal_code'], $config['goya']['locality'] ) : '';
