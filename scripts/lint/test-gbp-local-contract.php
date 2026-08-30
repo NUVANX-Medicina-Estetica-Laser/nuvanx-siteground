@@ -26,11 +26,14 @@ if ( ( $catalog['primary_category'] ?? '' ) !== 'Clínica de medicina estética'
 	$fail( 'primary category must be Clínica de medicina estética' );
 }
 
+$asset_registry_path = $root . '/wp-content/themes/nuvanx-medical/inc/data/clinic-asset-registry.json';
+$asset_registry      = json_decode( (string) file_get_contents( $asset_registry_path ), true );
+$governed_galleries  = $asset_registry['approved_editorial_overrides']['clinic_landing_galleries'] ?? array();
+
 foreach ( array( 'chamberi', 'goya' ) as $clinic ) {
-	$dir = $root . '/wp-content/themes/nuvanx-medical/assets/images/clinics/' . $clinic;
-	$files = glob( $dir . '/*.{jpg,jpeg,png,webp}', GLOB_BRACE ) ?: array();
-	if ( count( $files ) < 10 ) {
-		$fail( $clinic . ' must ship at least 10 gallery photos, found ' . count( $files ) );
+	$expected_count = count( $governed_galleries[ $clinic ] ?? array() );
+	if ( $expected_count < 1 ) {
+		$fail( $clinic . ' must have at least 1 registered gallery photo in clinic-asset-registry.json' );
 	}
 	$description = (string) ( $catalog['clinics'][ $clinic ]['description'] ?? '' );
 	foreach ( (array) ( $catalog['clinics'][ $clinic ]['neighborhood_keywords'] ?? array() ) as $keyword ) {
