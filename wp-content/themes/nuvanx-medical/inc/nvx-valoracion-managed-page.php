@@ -79,14 +79,19 @@ function nvx_valoracion_managed_intro_markup(): string {
  * to optimizer timing without introducing a second form instance.
  */
 function nvx_valoracion_hubspot_bootstrap_markup(): string {
-	$portal_id = defined( 'NVX_VALORACION_HS_FRAME_PORTAL_ID' ) ? (string) NVX_VALORACION_HS_FRAME_PORTAL_ID : '147416356';
-	$form_id   = defined( 'NVX_VALORACION_HS_FRAME_FORM_ID' ) ? (string) NVX_VALORACION_HS_FRAME_FORM_ID : '5042522a-0bc5-4381-ac3e-5aee8649b69c';
+	$portal_id = function_exists( 'nvx_hubspot_secure_portal_id' ) ? nvx_hubspot_secure_portal_id() : '';
+	$form_id   = function_exists( 'nvx_hubspot_secure_form_id' ) ? nvx_hubspot_secure_form_id() : '';
 	$region    = defined( 'NVX_VALORACION_HS_FRAME_REGION' ) ? (string) NVX_VALORACION_HS_FRAME_REGION : 'eu1';
 
 	$portal_id = trim( $portal_id );
+	$form_id   = strtolower( trim( $form_id ) );
 	$region    = strtolower( trim( $region ) );
-	if ( 1 !== preg_match( '/^\d{1,20}$/', $portal_id ) ) {
-		$portal_id = '147416356';
+	if (
+		1 !== preg_match( '/^\d{1,20}$/', $portal_id )
+		|| 1 !== preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $form_id )
+	) {
+		error_log( 'NVX_HUBSPOT_FORM_UNAVAILABLE reason=identity_not_configured' );
+		return '<!-- NVX_HUBSPOT_FORM_UNAVAILABLE identity_not_configured -->';
 	}
 	if ( 1 !== preg_match( '/^[a-z]{2,4}\d{1,2}$/', $region ) ) {
 		$region = 'eu1';
@@ -100,18 +105,19 @@ function nvx_valoracion_hubspot_bootstrap_markup(): string {
 		),
 		JSON_UNESCAPED_SLASHES
 	);
-	if ( ! is_string( $config ) ) {
-		$config = '{"portalId":"147416356","formId":"5042522a-0bc5-4381-ac3e-5aee8649b69c","region":"eu1"}';
+	if ( ! is_string( $config ) || '' === $config ) {
+		error_log( 'NVX_HUBSPOT_FORM_UNAVAILABLE reason=config_encoding_failed' );
+		return '<!-- NVX_HUBSPOT_FORM_UNAVAILABLE config_encoding_failed -->';
 	}
 
-		// The valuation form is a functional lead-request channel. Its HubSpot embed
-		// must remain available when marketing cookies are declined; attribution and
-		// other marketing scripts continue to require Complianz marketing consent.
-		return '<script id="nvx-valoracion-form-eager">(function(){"use strict";var cfg=' . $config . ';var recoveryTimer=0;var formHost=null;'
-			. 'function hostMatches(hostname,domain){hostname=String(hostname||"").toLowerCase();return hostname===domain||hostname.slice(-(domain.length+1))==="."+domain;}'
-			. 'function isAllowedHubSpotHost(hostname){return hostMatches(hostname,"hsforms.net")||hostMatches(hostname,"hsforms.com")||hostMatches(hostname,"hubspot.com");}'
-			. 'function getFormHost(){if(formHost&&document.documentElement.contains(formHost)){return formHost;}formHost=document.getElementById("nvx-hubspot-native-form");return formHost;}'
-			. 'function hasMarketingConsent(){if(typeof window.cmplz_has_consent!=="function"){return false;}try{return window.cmplz_has_consent("marketing")===true;}catch(e){return false;}}' . 'function hasFormAccess(){var host=getFormHost();if(host&&host.getAttribute("data-nvx-consent")==="functional"){return true;}return hasMarketingConsent();}'
+	// The valuation form is a functional lead-request channel. Its HubSpot embed
+	// must remain available when marketing cookies are declined; attribution and
+	// other marketing scripts continue to require Complianz marketing consent.
+	return '<script id="nvx-valoracion-form-eager">(function(){"use strict";var cfg=' . $config . ';var recoveryTimer=0;var formHost=null;'
+		. 'function hostMatches(hostname,domain){hostname=String(hostname||"").toLowerCase();return hostname===domain||hostname.slice(-(domain.length+1))==="."+domain;}'
+		. 'function isAllowedHubSpotHost(hostname){return hostMatches(hostname,"hsforms.net")||hostMatches(hostname,"hsforms.com")||hostMatches(hostname,"hubspot.com");}'
+		. 'function getFormHost(){if(formHost&&document.documentElement.contains(formHost)){return formHost;}formHost=document.getElementById("nvx-hubspot-native-form");return formHost;}'
+		. 'function hasMarketingConsent(){if(typeof window.cmplz_has_consent!=="function"){return false;}try{return window.cmplz_has_consent("marketing")===true;}catch(e){return false;}}' . 'function hasFormAccess(){var host=getFormHost();if(host&&host.getAttribute("data-nvx-consent")==="functional"){return true;}return hasMarketingConsent();}'
 		. 'function iframeIsHubSpot(iframe){if(!iframe){return false;}var src=(iframe.getAttribute("src")||"").trim();if(!src||src==="about:blank"){return false;}try{return isAllowedHubSpotHost(new URL(src,window.location.href).hostname);}catch(e){return false;}}'
 		. 'function hasUsableHubSpotIframe(root){if(!root||!hasFormAccess()){return false;}var iframes=root.querySelectorAll("iframe");for(var i=0;i<iframes.length;i++){if(iframeIsHubSpot(iframes[i])){return true;}}return false;}'
 		. 'function isRenderable(root){if(!root||!hasFormAccess()){return false;}if(root.querySelector(".hbspt-form input,.hbspt-form textarea,.hs-form input")){return true;}return hasUsableHubSpotIframe(root);}'
