@@ -52,6 +52,9 @@ assert.match(stagingDeploy, /staging-public-integration-identities\.json/, 'Stag
 assert.doesNotMatch(stagingDeploy, /canonical_production_wp_config|legacy_production_wp_config/, 'Staging deploy must not infer HubSpot identity from Production wp-config');
 assert.match(stagingDeploy, /function nvx_hubspot_secure_identity/, 'Staging source gate must require the canonical resolver');
 assert.match(stagingDeploy, /nvx_hubspot_secure_identity_configured/, 'Staging source gate must require fail-closed modal behavior');
+assert.match(stagingDeploy, /jq -e 'type == "object"'/, 'Staging deploy must validate JSON object structure before extraction');
+assert.match(stagingDeploy, /\[\[ "\$schema" == '1' \]\]/, 'Staging deploy must require schema 1');
+assert.match(stagingDeploy, /\[\[ "\$theme_runtime_fallback" == 'false' \]\]/, 'Staging deploy must require theme_runtime_fallback == false');
 assert.doesNotMatch(
   stagingDeploy,
   /grep -Fq ["']NVX_VALORACION_HS_FRAME_(?:PORTAL|FORM)_ID["'] \"\$modal_file\"/,

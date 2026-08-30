@@ -9,6 +9,7 @@ on:
       - 'wp-content/**'
       - 'scripts/**'
       - 'tools/**'
+      - 'lib/**'
       - '.github/workflows/**'
       - 'package.json'
       - 'package-lock.json'

@@ -58,25 +58,34 @@ fail_config() {
 }
 
 provision_staging_hubspot_identity() {
+  local schema=''
   local portal=''
   local form=''
   local scope=''
   local classification=''
+  local theme_runtime_fallback=''
   local private_credentials=''
   local production_mutation=''
 
   [[ -n "$PUBLIC_INTEGRATION_CONFIG" && -f "$PUBLIC_INTEGRATION_CONFIG" ]] \
     || fail_config 'Staging public integration identity manifest is unavailable'
 
+  jq -e 'type == "object"' "$PUBLIC_INTEGRATION_CONFIG" >/dev/null 2>&1 \
+    || fail_config 'Staging public integration identity manifest is malformed or unreadable'
+
+  schema="$(jq -r '.schema // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   scope="$(jq -r '.scope // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   classification="$(jq -r '.classification // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   portal="$(jq -r '.hubspot.portal_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   form="$(jq -r '.hubspot.form_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
+  theme_runtime_fallback="$(jq -r 'if .guardrails | has("theme_runtime_fallback") then .guardrails.theme_runtime_fallback else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
   private_credentials="$(jq -r 'if .guardrails | has("contains_private_credentials") then .guardrails.contains_private_credentials else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
   production_mutation="$(jq -r 'if .guardrails | has("production_mutation") then .guardrails.production_mutation else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
 
+  [[ "$schema" == '1' ]] || fail_config "HubSpot identity manifest has unexpected schema=$schema"
   [[ "$scope" == 'staging2' ]] || fail_config "HubSpot identity manifest has unexpected scope=$scope"
   [[ "$classification" == 'public_integration_identity' ]] || fail_config "HubSpot identity manifest classification is invalid: $classification"
+  [[ "$theme_runtime_fallback" == 'false' ]] || fail_config 'HubSpot identity manifest must disable theme runtime fallback'
   [[ "$private_credentials" == 'false' ]] || fail_config 'HubSpot identity manifest must not contain private credentials'
   [[ "$production_mutation" == 'false' ]] || fail_config 'HubSpot identity manifest must forbid Production mutation'
   [[ "$portal" =~ ^[0-9]{1,20}$ ]] || fail_config 'HubSpot portal identity in Staging manifest is malformed'
