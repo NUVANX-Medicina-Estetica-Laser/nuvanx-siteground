@@ -3,7 +3,7 @@
   "primary_category": "Clínica de medicina estética",
   "service_projection_source": "treatment-hub-schema.json",
   "review_policy": {
-    "delay_days": 7,
+    "delay_days": 3,
     "incentives_forbidden": true,
     "star_coaching_forbidden": true
   },

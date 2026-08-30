@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 const NVX_GBP_VISIT_CPT   = 'nvx_gbp_visit';
 const NVX_GBP_CRON_HOOK   = 'nvx_gbp_send_due_review_requests';
-const NVX_GBP_DELAY_DAYS  = 7;
+const NVX_GBP_DELAY_DAYS  = 3;
 
 /** @return array<string,mixed> */
 function nvx_gbp_profiles_catalog(): array {

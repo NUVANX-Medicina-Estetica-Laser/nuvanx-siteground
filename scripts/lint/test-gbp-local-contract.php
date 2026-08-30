@@ -43,8 +43,8 @@ foreach ( array( 'chamberi', 'goya' ) as $clinic ) {
 	}
 }
 
-if ( 7 !== (int) ( $catalog['review_policy']['delay_days'] ?? 0 ) ) {
-	$fail( 'review delay must be 7 days' );
+if ( 3 !== (int) ( $catalog['review_policy']['delay_days'] ?? 0 ) ) {
+	$fail( 'review delay must be 3 days' );
 }
 
 if ( empty( $catalog['review_policy']['incentives_forbidden'] ) || empty( $catalog['review_policy']['star_coaching_forbidden'] ) ) {
@@ -60,10 +60,10 @@ foreach ( array( 'regalo', 'descuento', '5 estrellas', 'a cambio' ) as $banned )
 	}
 }
 
-if ( ! str_contains( $module, 'NVX_GBP_DELAY_DAYS  = 7' )
+if ( ! str_contains( $module, 'NVX_GBP_DELAY_DAYS  = 3' )
 	|| ! str_contains( $module, 'nvx_gbp_send_due_review_requests' )
 	|| ! str_contains( $module, 'writereview' ) ) {
-	$fail( 'T+7 review sender or GBP review URL helper is missing' );
+	$fail( 'T+3 review sender or GBP review URL helper is missing' );
 }
 
-echo 'GBP_LOCAL_CONTRACT=PASS' . PHP_EOL;
+echo 'GBP_LOCAL_CONTRACT=PASS delay_days=3' . PHP_EOL;
