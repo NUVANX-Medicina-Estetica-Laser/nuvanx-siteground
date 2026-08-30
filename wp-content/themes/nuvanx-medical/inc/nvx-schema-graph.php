@@ -259,14 +259,14 @@ function nvx_schema_attach_treatment_and_faq( array &$graph, int $page_id, strin
 
 
 /**
- * Emits BreadcrumbList schema based on routes.json
+ * Emits BreadcrumbList schema based on routes.json or dynamic post hierarchy.
  */
 function nvx_schema_breadcrumb_node( $page_id ) {
 	$path = nvx_schema_current_path( $page_id );
 	if ( function_exists( 'nvx_catalog_json_resolved' ) ) {
 		$routes = nvx_catalog_json_resolved( 'routes.json' );
 		if ( ! empty( $routes[ $path ]['breadcrumb'] ) && is_array( $routes[ $path ]['breadcrumb'] ) ) {
-			$items = array();
+			$items    = array();
 			$position = 1;
 			foreach ( $routes[ $path ]['breadcrumb'] as $b ) {
 				if ( ! empty( $b['name'] ) && ! empty( $b['url'] ) ) {
@@ -287,6 +287,39 @@ function nvx_schema_breadcrumb_node( $page_id ) {
 			}
 		}
 	}
+
+	// Dynamic breadcrumbs for single blog posts: Inicio > Blog > Título
+	$target_id = $page_id > 0 ? (int) $page_id : (int) get_queried_object_id();
+	if ( $target_id > 0 && ( is_single( $target_id ) || 'post' === get_post_type( $target_id ) ) ) {
+		$title = get_the_title( $target_id );
+		if ( is_string( $title ) && '' !== trim( $title ) ) {
+			return array(
+				'@type'           => 'BreadcrumbList',
+				'@id'             => home_url( $path . '#breadcrumb' ),
+				'itemListElement' => array(
+					array(
+						'@type'    => 'ListItem',
+						'position' => 1,
+						'name'     => 'Inicio',
+						'item'     => home_url( '/' ),
+					),
+					array(
+						'@type'    => 'ListItem',
+						'position' => 2,
+						'name'     => 'Blog',
+						'item'     => home_url( '/blog/' ),
+					),
+					array(
+						'@type'    => 'ListItem',
+						'position' => 3,
+						'name'     => trim( wp_strip_all_tags( $title ) ),
+						'item'     => home_url( $path ),
+					),
+				),
+			);
+		}
+	}
+
 	return null;
 }
 
