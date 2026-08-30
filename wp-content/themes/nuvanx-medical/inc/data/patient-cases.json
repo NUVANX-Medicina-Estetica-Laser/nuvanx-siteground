@@ -1,6 +1,6 @@
 {
   "schema": "nuvanx-patient-cases",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "disclaimer": "Los resultados y evoluciones mostrados corresponden a casos individuales documentados en consulta médica con consentimiento expreso del paciente. La respuesta biológica, calidad tisular y tiempos de recuperación varían según cada persona. La documentación gráfica no constituye una garantía de resultado idéntico. Todo tratamiento médico requiere valoración anatómica presencial previa.",
   "cases": [
     {
@@ -18,6 +18,8 @@
       "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
       "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
       "image": "assets/images/cases/caso-01-papada-submenton.webp",
+      "image_before": "assets/images/cases/nvx-caso-endolift-papada-antes.webp",
+      "image_after": "assets/images/cases/nvx-caso-endolift-papada-despues.webp",
       "image_alt": "Evolución clínica documentada: Endolift® papada y ángulo mandibular a 3 meses"
     },
     {
@@ -35,6 +37,8 @@
       "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
       "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
       "image": "assets/images/cases/caso-02-marcacion-mandibular.webp",
+      "image_before": "assets/images/cases/nvx-caso-endolift-mandibula-antes.webp",
+      "image_after": "assets/images/cases/nvx-caso-endolift-mandibula-despues.webp",
       "image_alt": "Evolución clínica documentada: Endolift® tercio inferior y reborde mandibular a 6 meses"
     },
     {
@@ -52,6 +56,8 @@
       "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
       "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
       "image": "assets/images/cases/caso-03-abdomen-firmeza.webp",
+      "image_before": "assets/images/cases/nvx-caso-endolaser-abdomen-antes.webp",
+      "image_after": "assets/images/cases/nvx-caso-endolaser-abdomen-despues.webp",
       "image_alt": "Evolución clínica documentada: Endoláser corporal en abdomen a 3 meses"
     },
     {
@@ -69,6 +75,8 @@
       "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
       "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
       "image": "assets/images/cases/caso-04-flancos-contorno.webp",
+      "image_before": "assets/images/cases/nvx-caso-endolaser-flancos-antes.webp",
+      "image_after": "assets/images/cases/nvx-caso-endolaser-flancos-despues.webp",
       "image_alt": "Evolución clínica documentada: Endoláser corporal en flancos y transición lumbar a 3 meses"
     },
     {
@@ -86,6 +94,8 @@
       "consent_status": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
       "photo_conditions": "Misma posición anatómica y plano de registro clínico fotográfico estandarizado.",
       "image": "assets/images/cases/caso-05-brazos-firmeza.webp",
+      "image_before": "assets/images/cases/nvx-caso-endolaser-brazos-antes.webp",
+      "image_after": "assets/images/cases/nvx-caso-endolaser-brazos-despues.webp",
       "image_alt": "Evolución clínica documentada: Endoláser corporal braquial a 3 meses"
     }
   ]

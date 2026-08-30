@@ -110,6 +110,39 @@
   width: 100%;
 }
 
+.nvx-case-card__gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nvx-space-3);
+  width: 100%;
+}
+
+.nvx-case-card__gallery-item {
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  border: var(--nvx-border-hairline) solid var(--nvx-color-line);
+  border-radius: var(--nvx-radius-card);
+  background: var(--nvx-surface-soft);
+  box-shadow: var(--nvx-shadow-min);
+}
+
+.nvx-case-card__gallery-label {
+  position: absolute;
+  top: var(--nvx-space-2);
+  left: var(--nvx-space-2);
+  z-index: 2;
+  padding: calc(var(--nvx-space-1) / 3) var(--nvx-space-2);
+  border-radius: var(--nvx-radius-pill);
+  background: var(--nvx-charcoal);
+  color: var(--nvx-light);
+  font-family: var(--nvx-sans);
+  font-size: var(--nvx-type-micro);
+  font-weight: var(--nvx-fw-heading);
+  letter-spacing: var(--nvx-track-kicker);
+  text-transform: uppercase;
+}
+
 .nvx-case-card__media {
   position: relative;
   overflow: hidden;
@@ -154,6 +187,12 @@
   font-family: var(--nvx-sans);
   font-size: var(--nvx-type-caption2);
   color: var(--nvx-text-muted);
+}
+
+@media (max-width: 640px) {
+  .nvx-case-card__gallery {
+    grid-template-columns: 1fr;
+  }
 }
 
 .nvx-case-card__meta-grid {

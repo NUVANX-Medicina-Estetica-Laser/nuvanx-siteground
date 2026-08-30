@@ -84,7 +84,31 @@ get_header();
 								<h3 class="nvx-case-card__title"><?php echo esc_html( $case['title'] ?? '' ); ?></h3>
 							</div>
 
-							<?php if ( ! empty( $case['image'] ) ) : ?>
+							<?php if ( ! empty( $case['image_before'] ) && ! empty( $case['image_after'] ) ) : ?>
+								<?php
+								$before_relative = '/' . ltrim( (string) $case['image_before'], '/' );
+								$after_relative  = '/' . ltrim( (string) $case['image_after'], '/' );
+								$before_src      = get_template_directory_uri() . $before_relative;
+								$after_src       = get_template_directory_uri() . $after_relative;
+								$title           = $case['title'] ?? 'Caso clínico';
+								?>
+								<div class="nvx-case-card__visual">
+									<div class="nvx-case-card__gallery">
+										<figure class="nvx-case-card__gallery-item">
+											<span class="nvx-case-card__gallery-label"><?php esc_html_e( 'Antes', 'nuvanx-medical' ); ?></span>
+											<img src="<?php echo esc_url( $before_src ); ?>" alt="<?php echo esc_attr( $title . ' — Antes del tratamiento' ); ?>" class="nvx-case-card__img" loading="lazy" decoding="async">
+										</figure>
+										<figure class="nvx-case-card__gallery-item">
+											<span class="nvx-case-card__gallery-label"><?php esc_html_e( 'Después', 'nuvanx-medical' ); ?></span>
+											<img src="<?php echo esc_url( $after_src ); ?>" alt="<?php echo esc_attr( $title . ' — Resultado y evolución' ); ?>" class="nvx-case-card__img" loading="lazy" decoding="async">
+										</figure>
+									</div>
+									<div class="nvx-case-card__visual-caption">
+										<span class="nvx-case-card__visual-badge"><?php esc_html_e( 'Registro clínico estandarizado', 'nuvanx-medical' ); ?></span>
+										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $case['consent_status'] ?? '' ); ?></span>
+									</div>
+								</div>
+							<?php elseif ( ! empty( $case['image'] ) ) : ?>
 								<?php
 								$img_relative = '/' . ltrim( (string) $case['image'], '/' );
 								$img_src      = get_template_directory_uri() . $img_relative;
