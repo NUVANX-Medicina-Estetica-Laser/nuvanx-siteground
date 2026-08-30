@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
+import {
+  assertHubSpotFormDefinitionContract,
+  fetchHubSpotFormDefinition,
+  inspectHubSpotFormDefinition,
+} from './hubspot-form-definition-contract.mjs';
 import { EX_TEMPFAIL, getGitHubEventPath, EXECUTION_PATHS } from './siteground-transient-classifier.mjs';
 
 const BASE_URL = (process.env.BASE_URL || '').replace(/\/+$/, '');
@@ -32,6 +37,7 @@ function delay(ms) {
 }
 
 function isTransient(error) {
+  if (error?.exitCode === EX_TEMPFAIL) return true;
   if (error instanceof assert.AssertionError) return false;
   const message = error instanceof Error ? error.message : String(error);
   if (/CANDIDATE_REGRESSION|AssertionError/i.test(message)) return false;
@@ -127,6 +133,28 @@ try {
     'Attribution contract must provide one session UUID v4'
   );
 
+  // Fail early against the actual published HubSpot form definition. The legacy
+  // read endpoint is intentionally unauthenticated and returns only public form
+  // metadata, so this check cannot mutate HubSpot or expose private credentials.
+  const hubspotDefinition = await fetchHubSpotFormDefinition(managedState.formId);
+  const hubspotContract = inspectHubSpotFormDefinition(hubspotDefinition, managedState.formId);
+  await fs.writeFile(
+    ARTIFACT_PATH,
+    `${JSON.stringify({
+      schema: 3,
+      environment: 'staging2',
+      mode: 'zero_submit_preflight',
+      form_contract: hubspotContract,
+      submission_performed: false,
+      verified_at: new Date().toISOString(),
+    }, null, 2)}\n`,
+    'utf8'
+  );
+  assertHubSpotFormDefinitionContract(hubspotContract);
+  console.log(
+    `HUBSPOT_NATIVE_FORM_CONTRACT=PASS form_id=${managedState.formId} required=${hubspotContract.required_fields.length}`
+  );
+
   const hubspotFormDiscovered = await page.waitForFunction((formId) => {
     const api = window.HubSpotFormsV4;
     if (!api || typeof api.getForms !== 'function') return false;
@@ -147,6 +175,28 @@ try {
     if (nativeLineageReady) break;
     await delay(250);
   }
+
+  await fs.writeFile(
+    ARTIFACT_PATH,
+    `${JSON.stringify({
+      schema: 3,
+      environment: 'staging2',
+      mode: 'zero_submit_native_readback',
+      form_contract: hubspotContract,
+      native_field_names: Object.keys(nativeFields || {}).sort(),
+      native_lineage_presence: {
+        nvx_lead_id: Object.hasOwn(nativeFields || {}, 'nvx_lead_id'),
+        nvx_is_test_lead: Object.hasOwn(nativeFields || {}, 'nvx_is_test_lead'),
+        nvx_test_run_id: Object.hasOwn(nativeFields || {}, 'nvx_test_run_id'),
+        nvx_utm_source: Object.hasOwn(nativeFields || {}, 'nvx_utm_source'),
+        nvx_google_click_id: Object.hasOwn(nativeFields || {}, 'nvx_google_click_id'),
+      },
+      native_qa_value: nativeFields?.nvx_is_test_lead ?? null,
+      submission_performed: false,
+      verified_at: new Date().toISOString(),
+    }, null, 2)}\n`,
+    'utf8'
+  );
 
   assert.ok(nativeFields, 'Canonical HubSpot V4 form must be discoverable after marketing consent');
   assert.equal(String(nativeFields.nvx_lead_id || '').toLowerCase(), managedState.leadId);
@@ -211,7 +261,7 @@ try {
   // Deliberately zero-submit: acceptance must not create QA contacts in the commercial HubSpot portal
   // or production attribution rows. Server relay behavior is covered by deterministic contract tests.
   const evidence = {
-    schema: 2,
+    schema: 3,
     environment: 'staging2',
     source: EVENT_NAME,
     mode: 'zero_submit',
@@ -221,6 +271,7 @@ try {
     test_run_id: String(managedState.qa.test_run_id),
     managed_surface: '/madrid/valoracion/',
     fallback_surface: '/',
+    hubspot_form_contract: hubspotContract,
     native_form_lineage: true,
     direct_form_lineage: true,
     submission_performed: false,
