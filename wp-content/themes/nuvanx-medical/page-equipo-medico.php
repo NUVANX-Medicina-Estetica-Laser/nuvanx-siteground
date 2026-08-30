@@ -225,9 +225,9 @@ get_header();
 
 	      <div>
 	        <div class="section-label">Publicaciones y obra reciente</div>
-	        <div class="pub"><strong>J. Ageing Longev. (2026) &mdash; primer autor</strong> «Oral Nutritional Supplementation in Routine Clinical Practice to Improve Physical Performance and Nutrition in Frail Adults at Risk of Falls: Preliminary Evidence».</div>
-	        <div class="pub"><strong>Neurama (2025) &mdash; primer autor</strong> «Integración de biomarcadores y valoración geriátrica integral en el diagnóstico de deterioro cognitivo en adultos mayores».</div>
-	        <div class="pub"><strong>2026</strong> Coautora de «Síndrome de Titono» y «Síndrome del Tántalo»; coordinadora científica del protocolo SEMEG «Consulta de deterioro cognitivo».</div>
+	        <div class="pub" id="work-ivon-j-ageing-longev-2026"><strong>J. Ageing Longev. (2026) &mdash; primer autor</strong> «Oral Nutritional Supplementation in Routine Clinical Practice to Improve Physical Performance and Nutrition in Frail Adults at Risk of Falls: Preliminary Evidence».</div>
+	        <div class="pub" id="work-ivon-neurama-2025"><strong>Neurama (2025) &mdash; primer autor</strong> «Integración de biomarcadores y valoración geriátrica integral en el diagnóstico de deterioro cognitivo en adultos mayores».</div>
+	        <div class="pub"><strong>2026</strong> Coautora de <span id="work-ivon-sindrome-titono">«Síndrome de Titono»</span> y <span id="work-ivon-sindrome-tantalo">«Síndrome del Tántalo»</span>; coordinadora científica del protocolo SEMEG <span id="work-ivon-protocolo-deterioro-cognitivo">«Consulta de deterioro cognitivo»</span>.</div>
 	      </div>
 
 	      <hr class="divider">
@@ -295,7 +295,7 @@ get_header();
 	      <div>
 	        <div class="section-label">Formación académica</div>
 	        <div class="timeline">
-	          <div class="tl-item">
+	          <div class="tl-item" id="work-fabio-tesis-uam">
 	            <div class="tl-year">UAM &middot; 2024</div>
 	            <div class="tl-content">Doctor en Medicina (Ph.D.) &mdash; Tesis leída el 11 de junio de 2024<em>«Disfunción vascular sub-clínica, declinar cognitivo y fragilidad» &middot; Dir: F.J. García García y J.A. Carnicero &middot; Dpto. de Medicina Preventiva y Salud Pública</em></div>
 	          </div>

@@ -234,11 +234,17 @@ function nvx_schema_physician_fabio( $organization_id ) {
 function nvx_schema_ivon_publications( $author_id ) {
 	return array(
 		array(
-			'@type'  => 'ScholarlyArticle',
-			'@id'    => home_url( '/equipo-medico/#work-ivon-j-ageing-longev-2026' ),
-			'name'   => 'Oral Nutritional Supplementation in Routine Clinical Practice to Improve Physical Performance and Nutrition in Frail Adults at Risk of Falls: Preliminary Evidence',
-			'author' => array( '@id' => $author_id ),
-			'doi'    => '10.3390/jal6010015',
+			'@type'         => 'ScholarlyArticle',
+			'@id'           => home_url( '/equipo-medico/#work-ivon-j-ageing-longev-2026' ),
+			'name'          => 'Oral Nutritional Supplementation in Routine Clinical Practice to Improve Physical Performance and Nutrition in Frail Adults at Risk of Falls: Preliminary Evidence',
+			'author'        => array( '@id' => $author_id ),
+			'url'           => 'https://doi.org/10.3390/jal6010015',
+			'sameAs'        => 'https://doi.org/10.3390/jal6010015',
+			'identifier'    => array(
+				'@type'      => 'PropertyValue',
+				'propertyID' => 'DOI',
+				'value'      => '10.3390/jal6010015',
+			),
 			'datePublished' => '2026',
 		),
 		array(
