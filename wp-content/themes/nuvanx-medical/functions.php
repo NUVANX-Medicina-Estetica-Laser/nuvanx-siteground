@@ -190,6 +190,7 @@ function nvx_theme_scripts(): void {
 		wp_enqueue_style( 'nvx-layout', $css . 'nvx-site-layout.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-site-layout.css' ) );
 		wp_enqueue_style( 'nvx-components', $css . 'nvx-components.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-components.css' ) );
 		wp_enqueue_style( 'nvx-patterns', $css . 'nvx-patterns-editorial.css', array( 'nvx-components' ), nvx_asset_version( 'assets/css/nvx-patterns-editorial.css' ) );
+		wp_enqueue_style( 'nvx-treatment-authority', $css . 'nvx-treatment-authority.css', array( 'nvx-patterns' ), nvx_asset_version( 'assets/css/nvx-treatment-authority.css' ) );
 		wp_enqueue_style( 'nvx-header', $css . 'nvx-header.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-header.css' ) );
 		wp_enqueue_style( 'nvx-footer', $css . 'nvx-footer.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-footer.css' ) );
 	}
