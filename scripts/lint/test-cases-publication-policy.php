@@ -50,7 +50,7 @@ if ( false === $function_end ) {
 $noindex_owner = substr( $hygiene, $function_start, $function_end - $function_start );
 
 $required_executable = array(
-	"$cases_id = nvx_page_id_by_slug( 'casos-de-pacientes' );",
+	'$cases_id = nvx_page_id_by_slug( \'casos-de-pacientes\' );',
 	'if ( $cases_id > 0 ) {',
 	'$ids[] = $cases_id;',
 );
