@@ -113,8 +113,8 @@ assert.match(
 );
 assert.match(
   heroAndForms,
-  new RegExp(formId),
-  'canonical HubSpot mount must retain the canonical HubSpot form ID'
+  /nvx_hubspot_secure_form_id/,
+  'canonical HubSpot mount must resolve the form ID via the canonical secure resolver'
 );
 assert.match(
   heroAndForms,
@@ -123,8 +123,8 @@ assert.match(
 );
 assert.match(
   heroAndForms,
-  new RegExp(portalId),
-  'canonical HubSpot mount must retain the canonical HubSpot portal ID'
+  /nvx_hubspot_secure_portal_id/,
+  'canonical HubSpot mount must resolve the portal ID via the canonical secure resolver'
 );
 assert.match(
   heroAndForms,
@@ -268,8 +268,8 @@ assert.match(
 );
 assert.match(
   directForm,
-  /api\.hsforms\.com\/submissions\/v3\/integration\/submit/,
-  'first-party form must forward leads to the HubSpot Forms API'
+  /nvx_hubspot_secure_original_url/,
+  'first-party form must forward leads via the canonical secure resolver URL'
 );
 assert.match(
   managedPage,

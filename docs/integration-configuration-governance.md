@@ -18,5 +18,3 @@ Production currently provisions the legacy frame constants outside the theme. St
 Google Ads is the authority for conversion action identity and status. `ads-conversion-catalog.json` is a browser-facing governed mirror, not the authoritative marketing configuration.
 
 A change to the mirrored `send_to` must be accompanied by a live read from the owning Google Ads account confirming the conversion action ID, action name, enabled status, and event snippet. The catalog records the date and method of the last live verification. CODEOWNERS requires explicit integration-owner review.
-
-Current live verification on 2026-08-30 confirmed account `8201489748`, conversion action `7717851061` (`Clic en teléfono o WhatsApp`), status `ENABLED`, and `send_to` `AW-18236597403/qut3CLWflOAcEJvJ8fdD`.
