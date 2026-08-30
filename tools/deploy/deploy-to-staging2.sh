@@ -72,8 +72,8 @@ provision_staging_hubspot_identity() {
   classification="$(jq -r '.classification // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   portal="$(jq -r '.hubspot.portal_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
   form="$(jq -r '.hubspot.form_id // empty' "$PUBLIC_INTEGRATION_CONFIG")"
-  private_credentials="$(jq -r '.guardrails.contains_private_credentials // true' "$PUBLIC_INTEGRATION_CONFIG")"
-  production_mutation="$(jq -r '.guardrails.production_mutation // true' "$PUBLIC_INTEGRATION_CONFIG")"
+  private_credentials="$(jq -r 'if .guardrails | has("contains_private_credentials") then .guardrails.contains_private_credentials else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
+  production_mutation="$(jq -r 'if .guardrails | has("production_mutation") then .guardrails.production_mutation else "missing" end' "$PUBLIC_INTEGRATION_CONFIG")"
 
   [[ "$scope" == 'staging2' ]] || fail_config "HubSpot identity manifest has unexpected scope=$scope"
   [[ "$classification" == 'public_integration_identity' ]] || fail_config "HubSpot identity manifest classification is invalid: $classification"
@@ -116,16 +116,16 @@ verify_staging_hubspot_embed_contract() {
   # rather than loading the active theme, so a theme fallback cannot satisfy it.
   (
     cd "$WP_ROOT"
-    portal="$(wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
-    form="$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
-    if [[ -n "$portal" || -n "$form" ]]; then
+    if wp config has NVX_HUBSPOT_PORTAL_ID 2>/dev/null || \
+       wp config has NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null; then
       source='canonical_wp_config'
-    else
+      portal="$(wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
+      form="$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
+    elif wp config has NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || \
+         wp config has NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null; then
+      source='legacy_wp_config'
       portal="$(wp config get NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || true)"
       form="$(wp config get NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null || true)"
-      if [[ -n "$portal" || -n "$form" ]]; then
-        source='legacy_wp_config'
-      fi
     fi
 
     [[ -n "$source" ]] || fail_config 'Staging2 HubSpot portal/form identity is not provisioned in wp-config.php'
@@ -287,28 +287,37 @@ done
 LIVE_THEME="$WP_ROOT/$THEME_REL"
 [[ -d "$LIVE_THEME" ]] || fail "live staging2 theme does not exist: $LIVE_THEME"
 
+DEPLOY_SUCCESS=0
+
 rollback() {
   local exit_code=$?
-  trap - ERR
-  if [[ "$MUTATION_STARTED" -eq 1 && -n "$BACKUP_DIR" && -f "$BACKUP_DIR/theme.tgz" ]]; then
-    echo 'SAFETY_RESTORE: restoring the pre-deploy staging2 theme after rejected deployment' >&2
-    rm -rf "$LIVE_THEME"
-    tar -xzf "$BACKUP_DIR/theme.tgz" -C "$WP_ROOT"
-    (
-      cd "$WP_ROOT"
-      wp cache flush || true
-      purge_siteground_cache_if_available || true
-    )
-    echo "SAFETY_RESTORE_COMPLETE backup=$BACKUP_DIR" >&2
+  trap - EXIT ERR INT TERM
+  if [[ "$DEPLOY_SUCCESS" -ne 1 ]]; then
+    if [[ "$MUTATION_STARTED" -eq 1 && -n "$BACKUP_DIR" && -f "$BACKUP_DIR/theme.tgz" ]]; then
+      echo 'SAFETY_RESTORE: restoring the pre-deploy staging2 theme after rejected deployment' >&2
+      rm -rf "$LIVE_THEME"
+      tar -xzf "$BACKUP_DIR/theme.tgz" -C "$WP_ROOT"
+      (
+        cd "$WP_ROOT"
+        wp cache flush || true
+        purge_siteground_cache_if_available || true
+      )
+      echo "SAFETY_RESTORE_COMPLETE backup=$BACKUP_DIR" >&2
+    fi
+    if [[ -n "$CONFIG_BACKUP" && -f "$CONFIG_BACKUP" ]]; then
+      cp -p "$CONFIG_BACKUP" "$WP_ROOT/wp-config.php"
+      php -l "$WP_ROOT/wp-config.php" >/dev/null || true
+      echo 'SAFETY_RESTORE_CONFIG=PASS' >&2
+    fi
   fi
+
   if [[ -n "$CONFIG_BACKUP" && -f "$CONFIG_BACKUP" ]]; then
-    cp -p "$CONFIG_BACKUP" "$WP_ROOT/wp-config.php"
-    php -l "$WP_ROOT/wp-config.php" >/dev/null
-    echo 'SAFETY_RESTORE_CONFIG=PASS' >&2
+    rm -f "$CONFIG_BACKUP"
   fi
+
   exit "$exit_code"
 }
-trap rollback ERR
+trap rollback EXIT ERR INT TERM
 
 echo '== Guard staging2 identity =='
 (
