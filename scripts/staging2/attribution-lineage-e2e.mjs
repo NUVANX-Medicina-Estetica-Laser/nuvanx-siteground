@@ -32,8 +32,10 @@ function delay(ms) {
 }
 
 function isTransient(error) {
+  if (error instanceof assert.AssertionError) return false;
   const message = error instanceof Error ? error.message : String(error);
-  return /ERR_(?:CONNECTION|NAME|TIMED_OUT)|Timeout|net::|502|503|504|temporar/i.test(message);
+  if (/CANDIDATE_REGRESSION|AssertionError/i.test(message)) return false;
+  return /ERR_(?:CONNECTION|NAME|TIMED_OUT)|navigation.*timeout|net::|502|503|504|temporar/i.test(message);
 }
 
 async function assertHealthyNavigation(page, target) {
@@ -44,7 +46,8 @@ async function assertHealthyNavigation(page, target) {
 }
 
 async function enableConsentAndSync(page) {
-  await page.waitForFunction(() => Boolean(window.NUVANXAttributionContract?.getLeadId), null, { timeout: 15_000 });
+  const contractReady = await page.waitForFunction(() => Boolean(window.NUVANXAttributionContract?.getLeadId), null, { timeout: 15_000 }).catch(() => null);
+  assert.ok(contractReady, 'CANDIDATE_REGRESSION: NUVANXAttributionContract unavailable in page runtime');
   return page.evaluate(() => {
     window.wp_has_consent = (type) => type === 'marketing' || type === 'statistics';
     window.cmplz_has_consent = (type) => type === 'marketing' || type === 'statistics';
@@ -113,11 +116,12 @@ try {
     'Attribution contract must provide one session UUID v4'
   );
 
-  await page.waitForFunction((formId) => {
+  const hubspotFormDiscovered = await page.waitForFunction((formId) => {
     const api = window.HubSpotFormsV4;
     if (!api || typeof api.getForms !== 'function') return false;
     return api.getForms().some((candidate) => String(candidate?.getFormId?.() || '').toLowerCase() === formId);
-  }, managedState.formId, { timeout: 20_000 });
+  }, managedState.formId, { timeout: 20_000 }).catch(() => null);
+  assert.ok(hubspotFormDiscovered, `CANDIDATE_REGRESSION: HubSpot form ${managedState.formId} not rendered in DOM`);
 
   let nativeFields = null;
   const nativeDeadline = Date.now() + 7_000;
@@ -140,7 +144,8 @@ try {
   // Surface 2: a normal public page owns the site-wide modal with the first-party fallback.
   // Reuse the same browser context/session to prove one lineage UUID crosses both surfaces.
   await assertHealthyNavigation(page, modalTarget);
-  await page.waitForSelector('[data-nvx-direct-form]', { state: 'attached', timeout: 15_000 });
+  const directFormAttached = await page.waitForSelector('[data-nvx-direct-form]', { state: 'attached', timeout: 15_000 }).catch(() => null);
+  assert.ok(directFormAttached, 'CANDIDATE_REGRESSION: First-party fallback form [data-nvx-direct-form] missing from public modal page');
   const modalState = await enableConsentAndSync(page);
   assert.equal(modalState.env, 'staging2');
   assert.equal(String(modalState.qa?.test_run_id || ''), String(managedState.qa.test_run_id));
