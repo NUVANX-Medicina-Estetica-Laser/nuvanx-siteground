@@ -1,8 +1,8 @@
 <?php
 /**
  * Lock the patient-cases holding route to the same publication policy as the
- * runtime hygiene safeguard. A future clinical release must deliberately change
- * both owners in the same reviewed change.
+ * executable runtime hygiene safeguard. A future clinical release must change
+ * both owners deliberately in the same reviewed change.
  */
 
 $root          = dirname( __DIR__, 2 );
@@ -37,21 +37,41 @@ if ( false !== ( $route['robots']['index'] ?? null ) || true !== ( $route['robot
 $hygiene  = (string) file_get_contents( $hygiene_path );
 $template = (string) file_get_contents( $template_path );
 
-$required_hygiene = array(
-	"nvx_page_id_by_slug( 'casos-de-pacientes' )",
-	'Casos de pacientes remains reachable only as an editorial holding route.',
+$function_start = strpos( $hygiene, 'function nvx_noindex_page_ids()' );
+if ( false === $function_start ) {
+	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=noindex_owner_missing\n" );
+	exit( 1 );
+}
+$function_end = strpos( $hygiene, 'function nvx_noindex_but_navigable_page_ids()', $function_start );
+if ( false === $function_end ) {
+	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=noindex_owner_boundary_missing\n" );
+	exit( 1 );
+}
+$noindex_owner = substr( $hygiene, $function_start, $function_end - $function_start );
+
+$required_executable = array(
+	"$cases_id = nvx_page_id_by_slug( 'casos-de-pacientes' );",
+	'if ( $cases_id > 0 ) {',
 	'$ids[] = $cases_id;',
 );
-foreach ( $required_hygiene as $marker ) {
-	if ( false === strpos( $hygiene, $marker ) ) {
-		fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=runtime_holding_safeguard_missing\n" );
+foreach ( $required_executable as $marker ) {
+	if ( false === strpos( $noindex_owner, $marker ) ) {
+		fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=runtime_noindex_safeguard_missing\n" );
 		exit( 1 );
 	}
 }
 
-if ( false === strpos( $template, 'responsible holding state' ) || false === strpos( $template, '_nvx_cases_publication_ready=1' ) ) {
-	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=holding_template_contract_missing\n" );
-	exit( 1 );
+$required_template = array(
+	"nvx_catalog_json_load( 'patient-cases.json' )",
+	'get_header();',
+	'class="nvx-page nvx-brand-page nvx-cases-holding"',
+	'get_footer();',
+);
+foreach ( $required_template as $marker ) {
+	if ( false === strpos( $template, $marker ) ) {
+		fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=holding_template_runtime_missing\n" );
+		exit( 1 );
+	}
 }
 
-fwrite( STDOUT, "CASES_PUBLICATION_POLICY=PASS status=publish robots=noindex,follow runtime_safeguard=active\n" );
+fwrite( STDOUT, "CASES_PUBLICATION_POLICY=PASS status=publish robots=noindex,follow runtime_safeguard=active holding_template=active\n" );
