@@ -127,7 +127,14 @@ try {
   const nativeDeadline = Date.now() + 7_000;
   while (Date.now() < nativeDeadline) {
     nativeFields = await readNativeFields(page, managedState.formId);
-    if (String(nativeFields?.nvx_lead_id || '').toLowerCase() === managedState.leadId) break;
+    const qaReady = nativeFields?.nvx_is_test_lead === true
+      || String(nativeFields?.nvx_is_test_lead ?? '').toLowerCase() === 'true';
+    const nativeLineageReady = String(nativeFields?.nvx_lead_id || '').toLowerCase() === managedState.leadId
+      && qaReady
+      && String(nativeFields?.nvx_test_run_id || '') === String(managedState.qa.test_run_id)
+      && String(nativeFields?.nvx_utm_source || '') === 'google'
+      && String(nativeFields?.nvx_google_click_id || '') === gclid;
+    if (nativeLineageReady) break;
     await delay(250);
   }
 
