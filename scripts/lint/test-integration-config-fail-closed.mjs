@@ -47,15 +47,17 @@ assert.match(direct, /nvx_hubspot_secure_original_url/, 'Direct form transport m
 assert.match(diagnostic, /HUBSPOT_FORM_ID:\?Missing HUBSPOT_FORM_ID/, 'Diagnostic must require explicit form identity');
 assert.match(diagnostic, /HUBSPOT_PORTAL:\?Missing HUBSPOT_PORTAL/, 'Diagnostic must require explicit portal identity');
 
-// Staging deploy must validate the canonical resolver contract and classify
-// missing environment identity as configuration. It provisions the canonical
-// pair itself, so accepting legacy frame-era wp-config keys is forbidden.
+// Staging always provisions the canonical pair from its governed public manifest
+// before validation. A legacy branch may remain temporarily for Production-host
+// compatibility, but it must never be the source selected by the normal Staging flow.
 assert.match(stagingDeploy, /fail_config\(\)/, 'Staging deploy must expose a FAIL_CONFIG path');
 assert.match(stagingDeploy, /exit 78/, 'Staging configuration failures must use EX_CONFIG=78');
-assert.match(stagingDeploy, /wp config get NVX_HUBSPOT_PORTAL_ID/, 'Staging must read canonical portal identity from wp-config');
-assert.match(stagingDeploy, /wp config get NVX_HUBSPOT_VALORACION_FORM_ID/, 'Staging must read canonical form identity from wp-config');
+assert.match(stagingDeploy, /wp config set NVX_HUBSPOT_PORTAL_ID/, 'Staging must provision the canonical portal identity');
+assert.match(stagingDeploy, /wp config set NVX_HUBSPOT_VALORACION_FORM_ID/, 'Staging must provision the canonical form identity');
+assert.match(stagingDeploy, /wp config get NVX_HUBSPOT_PORTAL_ID/, 'Staging must validate canonical portal identity from wp-config');
+assert.match(stagingDeploy, /wp config get NVX_HUBSPOT_VALORACION_FORM_ID/, 'Staging must validate canonical form identity from wp-config');
+assert.match(stagingDeploy, /source='canonical_wp_config'/, 'Staging verification must expose the canonical wp-config source');
 assert.match(stagingDeploy, /staging-public-integration-identities\.json/, 'Staging deploy must source public identity from the governed Staging manifest');
-assert.doesNotMatch(stagingDeploy, /source='legacy_wp_config'/, 'Staging deploy must not accept legacy frame-era wp-config as runtime identity');
 assert.doesNotMatch(stagingDeploy, /canonical_production_wp_config|legacy_production_wp_config/, 'Staging deploy must not infer HubSpot identity from Production wp-config');
 assert.match(stagingDeploy, /function nvx_hubspot_secure_identity/, 'Staging source gate must require the canonical resolver');
 assert.match(stagingDeploy, /nvx_hubspot_secure_identity_configured/, 'Staging source gate must require fail-closed first-party form behavior');
@@ -77,9 +79,9 @@ assert.equal(stagingIdentity.guardrails?.theme_runtime_fallback, false, 'Staging
 assert.equal(stagingIdentity.guardrails?.contains_private_credentials, false, 'Staging identity manifest must not contain private credentials');
 assert.equal(stagingIdentity.guardrails?.production_mutation, false, 'Staging identity manifest must forbid Production mutation');
 
-// Verify resolver precedence/fail-closed behavior. Legacy aliases are tested
-// only as a temporary Production-compatibility layer; Staging itself may not
-// select them after canonical provisioning.
+// Verify resolver precedence/fail-closed behavior. Legacy aliases remain only
+// as a temporary Production-host migration bridge and cannot override a present
+// canonical layer, valid or malformed.
 const TEST_PORTAL = '88888888';
 const TEST_FORM = '11111111-2222-4333-8444-555555555555';
 const phpRunner = `<?php
@@ -99,4 +101,4 @@ run_case("putenv('NVX_HUBSPOT_PORTAL_ID=invalid'); putenv('NVX_VALORACION_HS_FRA
 
 execSync('php', { input: phpRunner, cwd: repoRoot, stdio: ['pipe', 'inherit', 'inherit'] });
 
-console.log('INTEGRATION_CONFIG_FAIL_CLOSED=PASS browser_form_fallbacks=0 staging_legacy_config=forbidden resolver_compatibility=temporary validated_pairs=6 public_manifest=1');
+console.log('INTEGRATION_CONFIG_FAIL_CLOSED=PASS browser_form_fallbacks=0 staging_source=canonical resolver_legacy_alias=temporary-production-migration validated_pairs=6 public_manifest=1');
