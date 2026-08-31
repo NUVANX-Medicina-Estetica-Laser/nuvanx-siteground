@@ -463,8 +463,6 @@ function nvx_document_governance_print_head_contract(): void {
 }
 add_action( 'wp_head', 'nvx_document_governance_print_head_contract', 2 );
 
-/* Head buffering logic removed in favor of targeted wp_footer script tags stripping. */
-
 /**
  * Enqueue the platform accessibility/runtime layer.
  */
@@ -495,40 +493,8 @@ function nvx_document_governance_enqueue_assets(): void {
 		)
 	);
 
-	// Eager HubSpot strip is owned solely by nvx-integrations.php
-	// (wp_enqueue_scripts + script_loader_tag).
-
-	$modal_enabled = function_exists( 'nvx_valoracion_modal_enabled' )
-		? nvx_valoracion_modal_enabled()
-		: false;
-
-	$page_url = function_exists( 'nvx_cta_valoracion_url' )
-		? nvx_cta_valoracion_url()
-		: home_url( '/madrid/valoracion/' );
-	$hubspot_config = function_exists( 'nvx_valoracion_modal_hubspot_config' )
-		? nvx_valoracion_modal_hubspot_config()
-		: array(
-			'portal_id' => '',
-			'form_id'   => '',
-			'region'    => 'eu1',
-		);
-
-	// Never emit a full hsforms URL in server HTML: consent/optimizer scanners
-	// treat any inline mention of that domain as an eager marketing embed and can
-	// drop the entire runtime-governance handle from modal-enabled routes.
 	$config = array(
-		'modalEnabled'     => $modal_enabled,
-		'modalId'          => 'nvx-valoracion-modal',
-		'pageUrl'          => $page_url,
-		'mobileNavId'      => 'nvx-mobile-nav',
-		'hubspotScriptId'  => 'nvx-hubspot-forms-runtime',
-		'hubspotPageMount' => true,
-		// Keep the page-form runtime self-sufficient if another plugin bypasses
-		// the output buffer that normally injects the canonical frame identity.
-		'hubspotPortalId'  => (string) $hubspot_config['portal_id'],
-		'hubspotFormId'    => (string) $hubspot_config['form_id'],
-		'hubspotRegion'    => (string) $hubspot_config['region'],
-		'debug'            => defined( 'WP_DEBUG' ) && WP_DEBUG === true,
+		'mobileNavId' => 'nvx-mobile-nav',
 	);
 
 	$encoded = wp_json_encode( $config, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP );

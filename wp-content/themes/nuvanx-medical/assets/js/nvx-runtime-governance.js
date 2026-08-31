@@ -46,7 +46,7 @@
 
     if (existing) return Promise.resolve();
 
-    const portalId = String(config.hubspotPortalId || modalConfig.hubspotPortalId || '').replace(/[^0-9]/g, '');
+    const portalId = String(modalConfig.hubspotPortalId || '').replace(/[^0-9]/g, '');
     if (!portalId) return Promise.resolve();
 
     return new Promise(function (resolve) {
