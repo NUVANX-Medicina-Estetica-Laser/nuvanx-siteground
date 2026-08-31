@@ -3,7 +3,9 @@
 
 	var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
 	var CLICK_KEYS = ['gclid', 'gbraid', 'wbraid', 'gclsrc'];
+	var META_CLICK_KEYS = ['fbclid'];
 	var ATTR_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+	var META_BROWSER_ID_MAX_LENGTH = 512;
 	var FIRST_TOUCH_KEY = 'nvx_first_touch';
 	var CONVERSION_TOUCH_KEY = 'nvx_conversion_touch';
 	var LEAD_SESSION_KEY = 'nvx_lead_id';
@@ -14,9 +16,7 @@
 	}
 
 	function createUuidV4() {
-		if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-			return window.crypto.randomUUID();
-		}
+		if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
 		if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
 			var bytes = new Uint8Array(16);
 			window.crypto.getRandomValues(bytes);
@@ -42,14 +42,28 @@
 		return id;
 	}
 
+	function urlClickSignal(url, key) {
+		try {
+			var parsed = new URL(url || '', window.location && window.location.href ? window.location.href : undefined);
+			return parsed.searchParams.get(key) || '';
+		} catch (_error) { return ''; }
+	}
+
+	function cleanFbclid(value) {
+		value = String(value || '').trim();
+		return /^[A-Za-z0-9._~:+-]{1,512}$/.test(value) ? value : '';
+	}
+
 	function classifyChannel(utm, referrer, url) {
 		if (utm.utm_source) {
 			if (utm.utm_source === 'google' && utm.utm_medium === 'cpc') return 'paid_search';
-			if (utm.utm_source === 'facebook' || utm.utm_source === 'instagram') return 'paid_social';
+			if (utm.utm_source === 'facebook' || utm.utm_source === 'instagram' || utm.utm_source === 'meta') return 'paid_social';
 			if (utm.utm_medium && utm.utm_medium.indexOf('cpc') !== -1) return 'paid_search';
 			if (utm.utm_medium && utm.utm_medium.indexOf('cpm') !== -1) return 'paid_display';
 			return 'paid_other';
 		}
+		if (cleanFbclid(urlClickSignal(url, 'fbclid'))) return 'paid_social';
+		if (urlClickSignal(url, 'gclid') || urlClickSignal(url, 'gbraid') || urlClickSignal(url, 'wbraid')) return 'paid_search';
 		if (referrer) {
 			if (referrer.indexOf('google') !== -1 || referrer.indexOf('bing') !== -1) return 'organic_search';
 			if (referrer.indexOf('facebook') !== -1 || referrer.indexOf('instagram') !== -1) return 'organic_social';
@@ -68,17 +82,32 @@
 		return false;
 	}
 
-	function lsGet(key) {
-		try { return window.localStorage.getItem(key); } catch (_error) { return null; }
+	function lsGet(key) { try { return window.localStorage.getItem(key); } catch (_error) { return null; } }
+	function lsSet(key, value) { try { window.localStorage.setItem(key, value); return true; } catch (_error) { return false; } }
+
+	function readCookie(name) {
+		try {
+			var prefix = String(name || '') + '=';
+			var parts = String(document.cookie || '').split(';');
+			for (var i = 0; i < parts.length; i++) {
+				var part = parts[i].trim();
+				if (part.indexOf(prefix) === 0) return decodeURIComponent(part.slice(prefix.length));
+			}
+		} catch (_error) {}
+		return '';
 	}
 
-	function lsSet(key, value) {
-		try {
-			window.localStorage.setItem(key, value);
-			return true;
-		} catch (_error) {
-			return false;
-		}
+	function cleanMetaBrowserId(value) {
+		value = String(value || '').trim();
+		if (!value || value.length > META_BROWSER_ID_MAX_LENGTH) return '';
+		return /^fb\.1\.\d{10,16}\.[A-Za-z0-9._~:+-]+$/.test(value) ? value : '';
+	}
+
+	function buildFbcFromFbclid(fbclid, capturedAtMs) {
+		var clickId = cleanFbclid(fbclid);
+		var timestamp = Number(capturedAtMs);
+		if (!clickId || !Number.isFinite(timestamp) || timestamp <= 0) return '';
+		return cleanMetaBrowserId('fb.1.' + Math.trunc(timestamp) + '.' + clickId);
 	}
 
 	function readTouch(key) {
@@ -91,39 +120,40 @@
 				return null;
 			}
 			return obj;
-		} catch (_error) {
-			return null;
-		}
+		} catch (_error) { return null; }
 	}
 
 	function buildTouch() {
 		var params = new URLSearchParams((window.location && window.location.search) || '');
 		var utm = {};
 		var clicks = {};
+		var allClickKeys = CLICK_KEYS.concat(META_CLICK_KEYS);
 		var i;
 		for (i = 0; i < UTM_KEYS.length; i++) {
 			var utmValue = params.get(UTM_KEYS[i]);
 			if (utmValue) utm[UTM_KEYS[i]] = utmValue;
 		}
-		for (i = 0; i < CLICK_KEYS.length; i++) {
-			var clickValue = params.get(CLICK_KEYS[i]);
-			if (clickValue) clicks[CLICK_KEYS[i]] = clickValue;
+		for (i = 0; i < allClickKeys.length; i++) {
+			var clickValue = params.get(allClickKeys[i]);
+			if (clickValue) clicks[allClickKeys[i]] = clickValue;
+		}
+		if (clicks.fbclid) {
+			clicks.fbclid = cleanFbclid(clicks.fbclid);
+			if (!clicks.fbclid) delete clicks.fbclid;
 		}
 
 		var href = (window.location && window.location.href) || '';
 		var landing = href;
-		try {
-			var parsed = new URL(href);
-			landing = parsed.origin + parsed.pathname;
-		} catch (_error) {}
-
+		try { var parsed = new URL(href); landing = parsed.origin + parsed.pathname; } catch (_error) {}
 		var referrer = (document && document.referrer) || '';
 		var channel = classifyChannel(utm, referrer, href);
 		var now = Date.now();
 		var inferredSource = utm.utm_source || '';
 		var inferredMedium = utm.utm_medium || '';
 
-		if (!inferredSource && referrer) {
+		if (!inferredSource && clicks.fbclid) { inferredSource = 'meta'; inferredMedium = 'paid_social'; }
+		else if (!inferredSource && (clicks.gclid || clicks.gbraid || clicks.wbraid)) { inferredSource = 'google'; inferredMedium = 'cpc'; }
+		else if (!inferredSource && referrer) {
 			if (referrer.indexOf('google') !== -1) { inferredSource = 'google'; inferredMedium = inferredMedium || 'organic'; }
 			else if (referrer.indexOf('bing') !== -1) { inferredSource = 'bing'; inferredMedium = inferredMedium || 'organic'; }
 			else if (referrer.indexOf('facebook') !== -1) { inferredSource = 'facebook'; inferredMedium = inferredMedium || 'organic'; }
@@ -131,39 +161,56 @@
 		}
 
 		var touch = {
-			channel: channel,
-			source: inferredSource,
-			medium: inferredMedium,
-			campaign_id: utm.utm_campaign || '',
-			utm_content: utm.utm_content || '',
-			utm_term: utm.utm_term || '',
-			landing_url: landing,
-			referrer_domain: '',
-			timestamp: new Date(now).toISOString(),
-			expires_at: now + ATTR_TTL_MS,
+			channel: channel, source: inferredSource, medium: inferredMedium,
+			campaign_id: utm.utm_campaign || '', utm_content: utm.utm_content || '', utm_term: utm.utm_term || '',
+			landing_url: landing, referrer_domain: '', timestamp: new Date(now).toISOString(), expires_at: now + ATTR_TTL_MS,
 		};
 		if (clicks.gclid) touch.gclid = clicks.gclid;
 		if (clicks.gbraid) touch.gbraid = clicks.gbraid;
 		if (clicks.wbraid) touch.wbraid = clicks.wbraid;
 		if (clicks.gclsrc) touch.gclsrc = clicks.gclsrc;
-		if (referrer) {
-			try { touch.referrer_domain = new URL(referrer).hostname; } catch (_error) {}
-		}
+		if (clicks.fbclid) touch.fbclid = clicks.fbclid;
+		var fbc = cleanMetaBrowserId(readCookie('_fbc'));
+		var fbp = cleanMetaBrowserId(readCookie('_fbp'));
+		if (!fbc && touch.fbclid) fbc = buildFbcFromFbclid(touch.fbclid, now);
+		if (fbc) touch.fbc = fbc;
+		if (fbp) touch.fbp = fbp;
+		if (referrer) { try { touch.referrer_domain = new URL(referrer).hostname; } catch (_error) {} }
 		return touch;
 	}
 
+	function ensureHiddenField(form, name) {
+		var field = form.querySelector('[name="' + name + '"]');
+		if (field) return field;
+		field = document.createElement('input');
+		field.type = 'hidden'; field.name = name; field.value = '';
+		form.appendChild(field);
+		return field;
+	}
+
+	function syncDirectFormMetaIdentity() {
+		var form;
+		try { form = document.querySelector('[data-nvx-direct-form]'); } catch (_error) { form = null; }
+		if (!form) return;
+		var first = readTouch(FIRST_TOUCH_KEY) || {};
+		var conversion = readTouch(CONVERSION_TOUCH_KEY) || first;
+		var consent = hasMarketingConsent();
+		var values = consent ? {
+			fbclid: conversion.fbclid || first.fbclid || '',
+			fbc: conversion.fbc || first.fbc || '',
+			fbp: conversion.fbp || first.fbp || '',
+		} : { fbclid: '', fbc: '', fbp: '' };
+		Object.keys(values).forEach(function(name) { ensureHiddenField(form, name).value = values[name]; });
+	}
+
 	function captureAttribution() {
-		if (!hasMarketingConsent()) return;
+		if (!hasMarketingConsent()) { syncDirectFormMetaIdentity(); return; }
 		var existingFirst = readTouch(FIRST_TOUCH_KEY);
 		var touch = buildTouch();
-		if (!existingFirst) {
-			lsSet(FIRST_TOUCH_KEY, JSON.stringify(touch));
-		}
-		if (touch.channel !== 'internal' && touch.channel !== 'direct') {
-			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
-		} else if (!readTouch(CONVERSION_TOUCH_KEY)) {
-			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
-		}
+		if (!existingFirst) lsSet(FIRST_TOUCH_KEY, JSON.stringify(touch));
+		if (touch.channel !== 'internal' && touch.channel !== 'direct') lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+		else if (!readTouch(CONVERSION_TOUCH_KEY)) lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+		syncDirectFormMetaIdentity();
 	}
 
 	function buildFormPayload(available) {
@@ -173,60 +220,19 @@
 		var conversion = readTouch(CONVERSION_TOUCH_KEY) || {};
 		var leadId = safeSessionStorage();
 		var fieldMap = {
-			nvx_lead_id: 'nvx_lead_id',
-			nvx_is_test_lead: 'nvx_is_test_lead',
-			nvx_test_run_id: 'nvx_test_run_id',
-			utm_source: 'nvx_utm_source',
-			utm_medium: 'nvx_utm_medium',
-			utm_campaign: 'nvx_utm_campaign',
-			utm_content: 'nvx_utm_content',
-			utm_term: 'nvx_utm_term',
-			gclid: 'nvx_google_click_id',
-			gbraid: 'nvx_google_braid',
-			wbraid: 'nvx_google_wbraid',
-			gclsrc: 'nvx_google_gclsrc',
-			nvx_first_source: 'nvx_first_source',
-			nvx_first_medium: 'nvx_first_medium',
-			nvx_first_campaign_id: 'nvx_first_campaign_id',
-			nvx_first_referrer_domain: 'nvx_first_referrer_domain',
-			nvx_first_landing_url: 'nvx_first_landing_url',
-			nvx_first_timestamp: 'nvx_first_timestamp',
-			nvx_first_channel: 'nvx_first_channel',
-			nvx_conversion_channel: 'nvx_conversion_channel',
-			nvx_conversion_source: 'nvx_conversion_source',
-			nvx_conversion_medium: 'nvx_conversion_medium',
-			nvx_conversion_campaign_id: 'nvx_conversion_campaign_id',
-			nvx_conversion_landing_url: 'nvx_conversion_landing_url',
-			nvx_conversion_timestamp: 'nvx_conversion_timestamp',
+			nvx_lead_id: 'nvx_lead_id', nvx_is_test_lead: 'nvx_is_test_lead', nvx_test_run_id: 'nvx_test_run_id',
+			utm_source: 'nvx_utm_source', utm_medium: 'nvx_utm_medium', utm_campaign: 'nvx_utm_campaign', utm_content: 'nvx_utm_content', utm_term: 'nvx_utm_term',
+			gclid: 'nvx_google_click_id', gbraid: 'nvx_google_braid', wbraid: 'nvx_google_wbraid', gclsrc: 'nvx_google_gclsrc',
+			nvx_first_source: 'nvx_first_source', nvx_first_medium: 'nvx_first_medium', nvx_first_campaign_id: 'nvx_first_campaign_id', nvx_first_referrer_domain: 'nvx_first_referrer_domain', nvx_first_landing_url: 'nvx_first_landing_url', nvx_first_timestamp: 'nvx_first_timestamp', nvx_first_channel: 'nvx_first_channel',
+			nvx_conversion_channel: 'nvx_conversion_channel', nvx_conversion_source: 'nvx_conversion_source', nvx_conversion_medium: 'nvx_conversion_medium', nvx_conversion_campaign_id: 'nvx_conversion_campaign_id', nvx_conversion_landing_url: 'nvx_conversion_landing_url', nvx_conversion_timestamp: 'nvx_conversion_timestamp',
 		};
 		var rawValues = {
-			nvx_lead_id: leadId,
-			nvx_is_test_lead: qa.is_test_lead === true,
-			nvx_test_run_id: qa.test_run_id || '',
-			utm_source: conversion.source || first.source || '',
-			utm_medium: conversion.medium || first.medium || '',
-			utm_campaign: conversion.campaign_id || first.campaign_id || '',
-			utm_content: conversion.utm_content || first.utm_content || '',
-			utm_term: conversion.utm_term || first.utm_term || '',
-			gclid: conversion.gclid || first.gclid || '',
-			gbraid: conversion.gbraid || first.gbraid || '',
-			wbraid: conversion.wbraid || first.wbraid || '',
-			gclsrc: conversion.gclsrc || first.gclsrc || '',
-			nvx_first_source: first.source || '',
-			nvx_first_medium: first.medium || '',
-			nvx_first_campaign_id: first.campaign_id || '',
-			nvx_first_referrer_domain: first.referrer_domain || '',
-			nvx_first_landing_url: first.landing_url || '',
-			nvx_first_timestamp: first.timestamp || '',
-			nvx_first_channel: first.channel || '',
-			nvx_conversion_channel: conversion.channel || '',
-			nvx_conversion_source: conversion.source || '',
-			nvx_conversion_medium: conversion.medium || '',
-			nvx_conversion_campaign_id: conversion.campaign_id || '',
-			nvx_conversion_landing_url: conversion.landing_url || '',
-			nvx_conversion_timestamp: conversion.timestamp || '',
+			nvx_lead_id: leadId, nvx_is_test_lead: qa.is_test_lead === true, nvx_test_run_id: qa.test_run_id || '',
+			utm_source: conversion.source || first.source || '', utm_medium: conversion.medium || first.medium || '', utm_campaign: conversion.campaign_id || first.campaign_id || '', utm_content: conversion.utm_content || first.utm_content || '', utm_term: conversion.utm_term || first.utm_term || '',
+			gclid: conversion.gclid || first.gclid || '', gbraid: conversion.gbraid || first.gbraid || '', wbraid: conversion.wbraid || first.wbraid || '', gclsrc: conversion.gclsrc || first.gclsrc || '',
+			nvx_first_source: first.source || '', nvx_first_medium: first.medium || '', nvx_first_campaign_id: first.campaign_id || '', nvx_first_referrer_domain: first.referrer_domain || '', nvx_first_landing_url: first.landing_url || '', nvx_first_timestamp: first.timestamp || '', nvx_first_channel: first.channel || '',
+			nvx_conversion_channel: conversion.channel || '', nvx_conversion_source: conversion.source || '', nvx_conversion_medium: conversion.medium || '', nvx_conversion_campaign_id: conversion.campaign_id || '', nvx_conversion_landing_url: conversion.landing_url || '', nvx_conversion_timestamp: conversion.timestamp || '',
 		};
-
 		var result = {};
 		Object.keys(fieldMap).forEach(function(key) {
 			var fieldName = fieldMap[key];
@@ -237,33 +243,21 @@
 		return result;
 	}
 
-	if (document.readyState === 'loading') {
-		document.addEventListener('DOMContentLoaded', captureAttribution);
-	} else {
-		captureAttribution();
-	}
+	if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', captureAttribution);
+	else captureAttribution();
 	document.addEventListener('wp_listen_for_consent_change', captureAttribution);
 	document.addEventListener('wp_consent_type_defined', captureAttribution);
 
 	window.NUVANXAttributionContract = {
 		getFirstTouch: function() { captureAttribution(); return readTouch(FIRST_TOUCH_KEY); },
 		getConversionTouch: function() { captureAttribution(); return readTouch(CONVERSION_TOUCH_KEY); },
-		getLeadId: safeSessionStorage,
-		buildFormPayload: buildFormPayload,
-		classifyChannel: classifyChannel,
-		FIRST_TOUCH_KEY: FIRST_TOUCH_KEY,
-		CONVERSION_TOUCH_KEY: CONVERSION_TOUCH_KEY,
-		UTM_KEYS: UTM_KEYS,
-		CLICK_KEYS: CLICK_KEYS,
-		ATTR_TTL_MS: ATTR_TTL_MS,
+		getLeadId: safeSessionStorage, buildFormPayload: buildFormPayload, classifyChannel: classifyChannel,
+		FIRST_TOUCH_KEY: FIRST_TOUCH_KEY, CONVERSION_TOUCH_KEY: CONVERSION_TOUCH_KEY,
+		UTM_KEYS: UTM_KEYS, CLICK_KEYS: CLICK_KEYS, META_CLICK_KEYS: META_CLICK_KEYS, ATTR_TTL_MS: ATTR_TTL_MS,
 	};
-
 	window.nvxAttribution = {
 		getLeadId: safeSessionStorage,
 		getFirstTouch: function() { return readTouch(FIRST_TOUCH_KEY) || {}; },
-		classifyChannel: classifyChannel,
-		UTM_KEYS: UTM_KEYS,
-		CLICK_KEYS: CLICK_KEYS,
-		ATTR_TTL_MS: ATTR_TTL_MS,
+		classifyChannel: classifyChannel, UTM_KEYS: UTM_KEYS, CLICK_KEYS: CLICK_KEYS, META_CLICK_KEYS: META_CLICK_KEYS, ATTR_TTL_MS: ATTR_TTL_MS,
 	};
 })();
