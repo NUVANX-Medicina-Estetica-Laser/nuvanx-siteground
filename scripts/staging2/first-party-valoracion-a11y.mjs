@@ -22,6 +22,7 @@ if (!/^[0-9a-f]{40}$/.test(expectedSha)) {
 }
 
 await fs.mkdir(outDir, { recursive: true });
+await fs.rm(outFile, { force: true });
 
 function transient(attempt, reason) {
   return { transient: true, realFailure: false, attempt, reason };
@@ -29,6 +30,10 @@ function transient(attempt, reason) {
 
 function failure(attempt, reason, details = {}) {
   return { transient: false, realFailure: true, attempt, reason, ...details };
+}
+
+async function persistResult(result) {
+  await fs.writeFile(outFile, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
 }
 
 async function auditAttempt(browser, attempt) {
@@ -64,7 +69,7 @@ async function auditAttempt(browser, attempt) {
     await page.waitForLoadState('load').catch(() => {});
     const form = page.locator('#nvx-valoracion-first-party-form[data-nvx-first-party-owner="1"] form[data-nvx-direct-form]').first();
     await form.scrollIntoViewIfNeeded().catch(() => {});
-    if (await form.count() !== 1) return failure(attempt, 'first_party_form_missing');
+    if (await form.count() !== 1) return failure(attempt, 'first_party_form_missing', { status, deploySha });
 
     const state = await page.evaluate((names) => {
       const ownerCount = document.querySelectorAll('#nvx-valoracion-first-party-form[data-nvx-first-party-owner="1"]').length;
@@ -112,7 +117,12 @@ async function auditAttempt(browser, attempt) {
 
     let postRequests = 0;
     page.on('request', (request) => {
-      if (request.method() === 'POST') postRequests += 1;
+      if (request.method() !== 'POST') return;
+      try {
+        if (new URL(request.url()).pathname === '/madrid/valoracion/') postRequests += 1;
+      } catch {
+        // Non-URL request targets are irrelevant to the first-party form boundary.
+      }
     });
     await page.evaluate(() => {
       const formNode = document.querySelector('#nvx-valoracion-first-party-form[data-nvx-first-party-owner="1"] form[data-nvx-direct-form]');
@@ -139,7 +149,7 @@ async function auditAttempt(browser, attempt) {
     if (!validation.formInvalid) issues.push('form_invalid_state_missing');
     if (postRequests !== 0) issues.push(`unsafe_blank_submit_post_observed:${postRequests}`);
 
-    const result = {
+    return {
       transient: false,
       realFailure: issues.length > 0,
       attempt,
@@ -152,8 +162,6 @@ async function auditAttempt(browser, attempt) {
       postRequests,
       issues,
     };
-    await fs.writeFile(outFile, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
-    return result;
   } catch (error) {
     if (isSiteGroundCaptchaInterruption(error, page.url())) {
       return transient(attempt, `siteground_inspection_challenge:${error instanceof Error ? error.message : String(error)}`);
@@ -170,6 +178,7 @@ try {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const result = await auditAttempt(browser, attempt);
     finalResult = result;
+    await persistResult(result);
     if (!result.transient) break;
     console.warn(`VALORACION_FIRST_PARTY_A11Y=RETRY attempt=${attempt}/${maxAttempts} reason=${result.reason}`);
     if (attempt < maxAttempts) await new Promise((resolve) => setTimeout(resolve, 3000 * attempt));
@@ -179,11 +188,12 @@ try {
 }
 
 if (!finalResult) {
+  const result = failure(0, 'no_result');
+  await persistResult(result).catch(() => {});
   console.error('VALORACION_FIRST_PARTY_A11Y=FAIL_REAL reason=no_result');
   process.exit(1);
 }
 if (finalResult.transient) {
-  await fs.writeFile(outFile, `${JSON.stringify(finalResult, null, 2)}\n`, 'utf8').catch(() => {});
   console.error(`VALORACION_FIRST_PARTY_A11Y=TRANSIENT_EXHAUSTED attempts=${maxAttempts}`);
   process.exit(EX_TEMPFAIL);
 }
