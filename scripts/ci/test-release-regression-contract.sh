@@ -76,6 +76,7 @@ grep -Eq 'EXPECTED_RUN_ID=.*GITHUB_RUN_ID' "$WORKFLOW" || fail 'release_expected
 grep -Fq 'ORIGIN_SSH_ALIAS=nvx-prod-audit' "$WORKFLOW" || fail 'audit_origin_alias_not_wired'
 grep -Fq 'ORIGIN_SSH_ALIAS=nvx-prod-hubspot' "$WORKFLOW" || fail 'hubspot_origin_alias_not_wired'
 grep -Fq 'steps.production_identity.outcome' "$WORKFLOW" || fail 'identity_failure_not_compensated'
+grep -Fq 'secrets.PROD_DB_NAME || vars.PROD_DB_NAME' "$WORKFLOW" || fail 'production_db_name_fallback_missing'
 pass_assert 'workflow-identity-wiring'
 
 # llms.txt remains an optional machine-readable discovery aid. Google Search
