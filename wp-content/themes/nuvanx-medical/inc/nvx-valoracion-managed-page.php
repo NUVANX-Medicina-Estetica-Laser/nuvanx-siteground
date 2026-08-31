@@ -2,14 +2,12 @@
 /**
  * Canonical theme-owned valuation landing.
  *
- * The CMS stores a stable route marker only. This module renders the full
- * hierarchy and the canonical HubSpot mount so staging and production do not
- * depend on historical database HTML.
+ * The CMS stores a stable route marker only. This module renders the complete
+ * hierarchy and the single first-party conversion form, so staging and
+ * production do not depend on historical database HTML or browser form embeds.
  *
- * SEO title/description are owned exclusively by nvx-seo-metadata.php. HubSpot
- * mount normalization is owned by nvx-runtime-governance.js; this dedicated
- * conversion route also ships a defensive bootstrap so the form cannot remain
- * blank if that runtime is delayed or dropped by an optimizer.
+ * SEO title/description are owned exclusively by nvx-seo-metadata.php.
+ * HubSpot transport is server-side through nvx-hubspot-secure-attribution.php.
  *
  * @package nuvanx-medical
  */
@@ -70,86 +68,27 @@ function nvx_valoracion_managed_intro_markup(): string {
 }
 
 /**
- * Deterministic loader for the dedicated valoración conversion page.
+ * Render the single canonical first-party conversion owner.
  *
- * The normal runtime remains the primary owner. This bootstrap first triggers
- * that runtime synchronously and only injects the same declarative HubSpot
- * portal loader when no owner has created it. It also repairs a missing frame
- * and removes extra frames inside the canonical host, making the page resilient
- * to optimizer timing without introducing a second form instance.
+ * Fail closed when the authenticated HubSpot transport is unavailable. The
+ * browser never owns HubSpot account/form identity on this route.
  */
-function nvx_valoracion_hubspot_bootstrap_markup(): string {
-	$portal_id = function_exists( 'nvx_hubspot_secure_portal_id' ) ? nvx_hubspot_secure_portal_id() : '';
-	$form_id   = function_exists( 'nvx_hubspot_secure_form_id' ) ? nvx_hubspot_secure_form_id() : '';
-	$region    = defined( 'NVX_VALORACION_HS_FRAME_REGION' ) ? (string) NVX_VALORACION_HS_FRAME_REGION : 'eu1';
-
-	$portal_id = trim( $portal_id );
-	$form_id   = strtolower( trim( $form_id ) );
-	$region    = strtolower( trim( $region ) );
+function nvx_valoracion_managed_form_markup(): string {
 	if (
-		1 !== preg_match( '/^\d{1,20}$/', $portal_id )
-		|| 1 !== preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $form_id )
+		! function_exists( 'nvx_hubspot_secure_identity_configured' )
+		|| ! nvx_hubspot_secure_identity_configured()
+		|| ! function_exists( 'nvx_valoracion_direct_form_markup' )
 	) {
-		error_log( 'NVX_HUBSPOT_FORM_UNAVAILABLE reason=identity_not_configured' );
-		return '<!-- NVX_HUBSPOT_FORM_UNAVAILABLE identity_not_configured -->';
-	}
-	if ( 1 !== preg_match( '/^[a-z]{2,4}\d{1,2}$/', $region ) ) {
-		$region = 'eu1';
+		return '<!-- NVX_VALORACION_FORM_UNAVAILABLE secure_identity_not_configured -->';
 	}
 
-	$config = wp_json_encode(
-		array(
-			'portalId' => $portal_id,
-			'formId'   => $form_id,
-			'region'   => $region,
-		),
-		JSON_UNESCAPED_SLASHES
-	);
-	if ( ! is_string( $config ) || '' === $config ) {
-		error_log( 'NVX_HUBSPOT_FORM_UNAVAILABLE reason=config_encoding_failed' );
-		return '<!-- NVX_HUBSPOT_FORM_UNAVAILABLE config_encoding_failed -->';
-	}
-
-	// The valuation form is a functional lead-request channel. Its HubSpot embed
-	// must remain available when marketing cookies are declined; attribution and
-	// other marketing scripts continue to require Complianz marketing consent.
-	return '<script id="nvx-valoracion-form-eager">(function(){"use strict";var cfg=' . $config . ';var recoveryTimer=0;var formHost=null;'
-		. 'function hostMatches(hostname,domain){hostname=String(hostname||"").toLowerCase();return hostname===domain||hostname.slice(-(domain.length+1))==="."+domain;}'
-		. 'function isAllowedHubSpotHost(hostname){return hostMatches(hostname,"hsforms.net")||hostMatches(hostname,"hsforms.com")||hostMatches(hostname,"hubspot.com");}'
-		. 'function getFormHost(){if(formHost&&document.documentElement.contains(formHost)){return formHost;}formHost=document.getElementById("nvx-hubspot-native-form");return formHost;}'
-		. 'function hasMarketingConsent(){if(typeof window.cmplz_has_consent!=="function"){return false;}try{return window.cmplz_has_consent("marketing")===true;}catch(e){return false;}}' . 'function hasFormAccess(){var host=getFormHost();if(host&&host.getAttribute("data-nvx-consent")==="functional"){return true;}return hasMarketingConsent();}'
-		. 'function iframeIsHubSpot(iframe){if(!iframe){return false;}var src=(iframe.getAttribute("src")||"").trim();if(!src||src==="about:blank"){return false;}try{return isAllowedHubSpotHost(new URL(src,window.location.href).hostname);}catch(e){return false;}}'
-		. 'function hasUsableHubSpotIframe(root){if(!root||!hasFormAccess()){return false;}var iframes=root.querySelectorAll("iframe");for(var i=0;i<iframes.length;i++){if(iframeIsHubSpot(iframes[i])){return true;}}return false;}'
-		. 'function isRenderable(root){if(!root||!hasFormAccess()){return false;}if(root.querySelector(".hbspt-form input,.hbspt-form textarea,.hs-form input")){return true;}return hasUsableHubSpotIframe(root);}'
-		. 'function formIsDirty(form){if(!form){return false;}var els=form.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=checkbox]),textarea");for(var i=0;i<els.length;i++){if(String(els[i].value||"").trim()){return true;}}return false;}'
-		. 'function sync(host,frame){if(!host){return;}var live=isRenderable(host)||isRenderable(frame);var form=host.querySelector("[data-nvx-direct-form]");if(live&&!formIsDirty(form)){host.classList.add("nvx-hubspot-is-live");}else{host.classList.remove("nvx-hubspot-is-live");}}'
-		. 'function hasActiveEmbed(){var scripts=document.querySelectorAll("#nvx-hubspot-forms-runtime,script[data-nvx-hubspot-canonical=\\"1\\"],script[src*=\\"/forms/embed/\\"]");for(var i=0;i<scripts.length;i++){var type=(scripts[i].getAttribute("type")||"text/javascript").toLowerCase();if(type==="text/plain"){continue;}return true;}return false;}'
-		. 'function boot(){var host=getFormHost();if(!host){return;}'
-		. 'var frames=host.querySelectorAll(".hs-form-frame");var frame=null;var i;'
-		. 'for(i=0;i<frames.length;i++){if(hasUsableHubSpotIframe(frames[i])||isRenderable(frames[i])){frame=frames[i];break;}}'
-		. 'if(!frame){frame=frames[0]||null;}'
-		. 'if(!frame){frame=document.createElement("div");frame.className="hs-form-frame";host.insertBefore(frame,host.firstChild);}'
-		. 'for(i=0;i<frames.length;i++){if(frames[i]!==frame){frames[i].remove();}}'
-		. 'frame.dataset.region=cfg.region;frame.dataset.portalId=cfg.portalId;frame.dataset.formId=cfg.formId;frame.dataset.nvxHubspotLazy="1";sync(host,frame);'
-		. 'if(typeof MutationObserver==="function"&&!host.dataset.nvxHubspotObserver){host.dataset.nvxHubspotObserver="1";new MutationObserver(function(){sync(host,frame);}).observe(host,{childList:true,subtree:true,attributes:true,attributeFilter:["src","data-category"]});}'
-		. 'if(!hasFormAccess()){return;}'
-		. 'if(isRenderable(host)||isRenderable(frame)){return;}'
-		. 'if(recoveryTimer){return;}'
-		. 'try{host.dispatchEvent(new Event("focusin",{bubbles:true}));}catch(e){}'
-		. 'recoveryTimer=window.setTimeout(function(){recoveryTimer=0;sync(host,frame);if(!hasFormAccess()){return;}if(isRenderable(host)||isRenderable(frame)){return;}'
-		. 'if(hasActiveEmbed()){return;}'
-		. 'var script=document.createElement("script");script.id="nvx-hubspot-forms-runtime";script.dataset.nvxHubspotCanonical="1";'
-		. 'script.src="https://js-"+cfg.region+".hs"+"forms.net/forms/embed/"+cfg.portalId+".js";script.async=true;'
-		. 'script.addEventListener("load",function(){script.dataset.nvxLoaded="1";sync(host,frame);},{once:true});document.head.appendChild(script);},0);}'
-		. 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",boot,{once:true});}else{boot();}'
-		. 'window.addEventListener("load",boot,{once:true});'
-		. 'document.addEventListener("cmplz_enable_category",function(){window.setTimeout(boot,0);});document.addEventListener("cmplz_status_change",function(){window.setTimeout(boot,0);});'
-		. 'window.addEventListener("hs-form-event:on-ready",function(){boot();});'
-		. 'window.addEventListener("message",function(event){var data=event&&event.data;if(typeof data==="string"){try{data=JSON.parse(data);}catch(e){data=null;}}if(!data||data.type!=="hsFormCallback"){return;}var name=String(data.eventName||"").toLowerCase();if(name==="onformready"||name==="onformsubmitted"){boot();}});})();</script>';
+	return '<div id="nvx-valoracion-first-party-form" class="nvx-valoracion-first-party-form" data-nvx-first-party-owner="1">'
+		. nvx_valoracion_direct_form_markup()
+		. '</div>';
 }
 
 /**
- * Build the canonical valuation page before form-order and HubSpot MU filters.
+ * Build the canonical valuation page before form-order filters.
  */
 function nvx_valoracion_managed_page_markup(): string {
 	// Hero image-free by design: block the featured-image injection performed by
@@ -158,7 +97,6 @@ function nvx_valoracion_managed_page_markup(): string {
 	global $nvx_page_shell_has_hero;
 	$nvx_page_shell_has_hero = true;
 
-	$valuation_url  = home_url( '/madrid/valoracion/' );
 	$doctoralia_url = 'https://www.doctoralia.es/clinicas/nuvanx-medicina-estetica-laser';
 	$wa_url         = function_exists( 'nvx_cta_whatsapp_url' ) ? nvx_cta_whatsapp_url() : 'https://wa.me/34689317399';
 
@@ -194,21 +132,13 @@ function nvx_valoracion_managed_page_markup(): string {
 	$html .= '</div></div>';
 	$html .= '<div class="nvx-form nvx-hs-native-section" aria-label="' . esc_attr__( 'Formulario de valoración médica NUVANX', 'nuvanx-medical' ) . '">';
 	$html .= '<div class="nvx-hs-native-box">';
-	// This node is a presentation host only. The output-governance layer inserts
-	// the single canonical .hs-form-frame child with the HubSpot identity. Repeating
-	// data-form-id/data-portal-id here makes the portal embed initialize a second form.
-	$html .= '<div id="nvx-hubspot-native-form" class="nvx-hubspot-native-form-v2" data-nvx-hubspot-native="1" data-nvx-hubspot-eager="1" data-nvx-consent="functional" data-page-origin="' . esc_attr__( 'Valoración médica estética en Madrid', 'nuvanx-medical' ) . '" data-page-url="' . esc_url( $valuation_url ) . '"></div>';
+	$html .= nvx_valoracion_managed_form_markup();
 	$html .= '<p class="nvx-copy nvx-form-note">' . esc_html__( 'La información enviada se utiliza para gestionar tu solicitud. La indicación final depende de valoración médica y los resultados pueden variar según cada paciente.', 'nuvanx-medical' ) . '</p>';
 	$html .= '<p class="nvx-copy nvx-form-note nvx-doctoralia-proof">' . esc_html__( 'Más de 100 opiniones verificadas en Doctoralia.', 'nuvanx-medical' ) . ' <a class="nvx-brand-inline-link" href="' . esc_url( $doctoralia_url ) . '" target="_blank" rel="noopener noreferrer external">' . esc_html__( 'Consultar opiniones verificadas', 'nuvanx-medical' ) . '</a></p>';
 	$html .= '</div></div></div></section>';
 
 	// Keep clinical explanation and locations after the conversion block.
 	$html .= nvx_valoracion_managed_intro_markup();
-
-	// Dedicated conversion route: trigger the normal runtime and recover if an
-	// optimizer delayed or removed it. The bootstrap never creates a second frame
-	// or a second portal loader when the canonical owner is already present.
-	$html .= nvx_valoracion_hubspot_bootstrap_markup();
 	$html .= '</div>';
 
 	return $html;
