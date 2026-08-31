@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HELPER="$ROOT/tools/deploy/siteground-cache-purge.sh"
+BEHAVIOR_TEST="$ROOT/scripts/ci/test-siteground-cache-purge-behavior.sh"
 DEPLOY="$ROOT/tools/deploy/deploy-to-staging2.sh"
 WORKFLOW="$ROOT/.github/workflows/staging.yml"
 RETIRED_PROD_CACHE="$ROOT/tools/deploy/flush-prod-cache.sh"
@@ -12,7 +13,7 @@ fail() {
   exit 1
 }
 
-for file in "$HELPER" "$DEPLOY" "$WORKFLOW"; do
+for file in "$HELPER" "$BEHAVIOR_TEST" "$DEPLOY" "$WORKFLOW"; do
   [[ -s "$file" ]] || fail "missing=$file"
 done
 [[ ! -e "$RETIRED_PROD_CACHE" ]] || fail 'retired_duplicate_production_cache_script_present'
@@ -40,7 +41,7 @@ grep -Fq 'tools/deploy/siteground-cache-purge.sh' "$WORKFLOW" \
 ! grep -Eq 'siteground_cache_purge[^\n]*\|\|[[:space:]]*true' "$WORKFLOW" \
   || fail 'workflow_cache_helper_must_be_fail_closed'
 
-grep -Fq 'restore_transient_activation_on_failure' "$HELPER" \
+grep -Fq 'restore_requested_state_on_failure' "$HELPER" \
   || fail 'helper_failure_restore_trap_missing'
 grep -Fq 'SITEGROUND_CACHE_PURGE_RESTORE=PASS' "$HELPER" \
   || fail 'helper_failure_restore_evidence_missing'
@@ -48,6 +49,8 @@ grep -Fq 'trap - ERR' "$HELPER" \
   || fail 'helper_must_clear_inherited_err_trap_before_failure_cleanup'
 
 bash -n "$HELPER"
+bash -n "$BEHAVIOR_TEST"
 bash -n "$DEPLOY"
+bash "$BEHAVIOR_TEST"
 
-echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count workflow_inline=0 deploy_inline=0 retired_prod_duplicate=absent rollback_state=snapshot inherited_err_trap=isolated"
+echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count workflow_inline=0 deploy_inline=0 retired_prod_duplicate=absent rollback_state=snapshot inherited_err_trap=isolated behavior=verified"
