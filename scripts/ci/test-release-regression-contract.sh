@@ -128,6 +128,10 @@ done
 grep -Fq '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/' "$SEO_GEO_AUDIT" || fail 'seo_geo_missing_canonical_co2_path'
 grep -Fq '/exion-btl/' "$SEO_GEO_AUDIT" || fail 'seo_geo_missing_canonical_exion_path'
 grep -Fq '/acido-hialuronico-relleno-madrid/' "$SEO_GEO_AUDIT" || fail 'seo_geo_missing_canonical_ha_path'
+FAQ_CATALOG="$ROOT/wp-content/themes/nuvanx-medical/inc/nvx-schema-faq.php"
+FAQ_CONTRACT="$ROOT/scripts/lint/test-treatment-faqpage-contract.php"
+grep -Fq "'facial_ha'        => 'acido_hialuronico'" "$FAQ_CATALOG" || fail 'seo_geo_missing_facial_ha_schema_alias'
+grep -Fq "'acido_hialuronico'," "$FAQ_CONTRACT" || fail 'seo_geo_missing_acido_hialuronico_faq_contract'
 pass_assert 'seo-geo-canonical-schema-paths'
 
 # Production identity is a hard boundary before the audit can report PASS.
