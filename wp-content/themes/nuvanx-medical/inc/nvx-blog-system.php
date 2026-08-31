@@ -162,9 +162,7 @@ function nvx_blog_named_image_catalog(): array {
 }
 
 /**
- * Pick a semantically matched catalog entry for a journal post without
- * repeating photos on the page. If there is no semantic match, return null;
- * archive cards must not fall back to an unrelated decorative asset.
+ * Pick a catalog entry for a journal post without repeating photos on the page.
  *
  * @param array<int, array{id:string,keys:string[],stem?:string,file?:string}> $catalog Catalog.
  * @param array<string,bool>                                                    $used    Used ids.
@@ -210,7 +208,17 @@ function nvx_blog_match_named_image( string $haystack, array $catalog, array &$u
 		return $best;
 	}
 
-	return null;
+	foreach ( $catalog as $asset ) {
+		$id = (string) $asset['id'];
+		if ( isset( $used[ $id ] ) ) {
+			continue;
+		}
+		$used[ $id ] = true;
+		return $asset;
+	}
+
+	$first = reset( $catalog );
+	return is_array( $first ) ? $first : null;
 }
 
 /**
@@ -488,6 +496,7 @@ function nvx_theme_wrap_top1_commercial_mentions( string $slug, string $content 
 				'needles' => array( 'endoláser corporal', 'composición corporal', 'grasa corporal' ),
 				'anchor'  => 'endoláser corporal',
 			),
+		),
 	);
 
 	if ( ! isset( $map[ $slug ] ) ) {
