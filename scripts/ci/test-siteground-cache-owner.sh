@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HELPER="$ROOT/tools/deploy/siteground-cache-purge.sh"
 DEPLOY="$ROOT/tools/deploy/deploy-to-staging2.sh"
 WORKFLOW="$ROOT/.github/workflows/staging.yml"
+RETIRED_PROD_CACHE="$ROOT/tools/deploy/flush-prod-cache.sh"
 
 fail() {
   echo "SITEGROUND_CACHE_OWNER_CONTRACT=FAIL $*" >&2
@@ -14,6 +15,7 @@ fail() {
 for file in "$HELPER" "$DEPLOY" "$WORKFLOW"; do
   [[ -s "$file" ]] || fail "missing=$file"
 done
+[[ ! -e "$RETIRED_PROD_CACHE" ]] || fail 'retired_duplicate_production_cache_script_present'
 
 helper_purge_count="$(grep -Fc 'wp sg purge' "$HELPER" || true)"
 deploy_purge_count="$(grep -Fc 'wp sg purge' "$DEPLOY" || true)"
@@ -48,4 +50,4 @@ grep -Fq 'trap - ERR' "$HELPER" \
 bash -n "$HELPER"
 bash -n "$DEPLOY"
 
-echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count workflow_inline=0 deploy_inline=0 rollback_state=snapshot inherited_err_trap=isolated"
+echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count workflow_inline=0 deploy_inline=0 retired_prod_duplicate=absent rollback_state=snapshot inherited_err_trap=isolated"
