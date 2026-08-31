@@ -2,7 +2,7 @@
 	'use strict';
 
 	var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
-	var CLICK_KEYS = ['gclid', 'gbraid', 'wbraid', 'gclsrc'];
+	var CLICK_KEYS = ['gclid', 'gbraid', 'wbraid', 'gclsrc', 'fbclid'];
 	var ATTR_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 	var FIRST_TOUCH_KEY = 'nvx_first_touch';
 	var CONVERSION_TOUCH_KEY = 'nvx_conversion_touch';
@@ -42,14 +42,25 @@
 		return id;
 	}
 
+	function urlClickSignal(url, key) {
+		try {
+			var parsed = new URL(url || '', window.location && window.location.href ? window.location.href : undefined);
+			return parsed.searchParams.get(key) || '';
+		} catch (_error) {
+			return '';
+		}
+	}
+
 	function classifyChannel(utm, referrer, url) {
 		if (utm.utm_source) {
 			if (utm.utm_source === 'google' && utm.utm_medium === 'cpc') return 'paid_search';
-			if (utm.utm_source === 'facebook' || utm.utm_source === 'instagram') return 'paid_social';
+			if (utm.utm_source === 'facebook' || utm.utm_source === 'instagram' || utm.utm_source === 'meta') return 'paid_social';
 			if (utm.utm_medium && utm.utm_medium.indexOf('cpc') !== -1) return 'paid_search';
 			if (utm.utm_medium && utm.utm_medium.indexOf('cpm') !== -1) return 'paid_display';
 			return 'paid_other';
 		}
+		if (urlClickSignal(url, 'fbclid')) return 'paid_social';
+		if (urlClickSignal(url, 'gclid') || urlClickSignal(url, 'gbraid') || urlClickSignal(url, 'wbraid')) return 'paid_search';
 		if (referrer) {
 			if (referrer.indexOf('google') !== -1 || referrer.indexOf('bing') !== -1) return 'organic_search';
 			if (referrer.indexOf('facebook') !== -1 || referrer.indexOf('instagram') !== -1) return 'organic_social';
@@ -79,6 +90,35 @@
 		} catch (_error) {
 			return false;
 		}
+	}
+
+	function readCookie(name) {
+		try {
+			var prefix = String(name || '') + '=';
+			var parts = String(document.cookie || '').split(';');
+			for (var i = 0; i < parts.length; i++) {
+				var part = parts[i].trim();
+				if (part.indexOf(prefix) === 0) return decodeURIComponent(part.slice(prefix.length));
+			}
+		} catch (_error) {}
+		return '';
+	}
+
+	function cleanFbclid(value) {
+		value = String(value || '').trim();
+		return /^[A-Za-z0-9._~:+-]{1,512}$/.test(value) ? value : '';
+	}
+
+	function cleanMetaBrowserId(value) {
+		value = String(value || '').trim();
+		return /^fb\.1\.\d{10,16}\.[A-Za-z0-9._~:+-]{1,512}$/.test(value) ? value : '';
+	}
+
+	function buildFbcFromFbclid(fbclid, capturedAtMs) {
+		var clickId = cleanFbclid(fbclid);
+		var timestamp = Number(capturedAtMs);
+		if (!clickId || !Number.isFinite(timestamp) || timestamp <= 0) return '';
+		return cleanMetaBrowserId('fb.1.' + Math.trunc(timestamp) + '.' + clickId);
 	}
 
 	function readTouch(key) {
@@ -123,7 +163,13 @@
 		var inferredSource = utm.utm_source || '';
 		var inferredMedium = utm.utm_medium || '';
 
-		if (!inferredSource && referrer) {
+		if (!inferredSource && clicks.fbclid) {
+			inferredSource = 'meta';
+			inferredMedium = 'paid_social';
+		} else if (!inferredSource && (clicks.gclid || clicks.gbraid || clicks.wbraid)) {
+			inferredSource = 'google';
+			inferredMedium = 'cpc';
+		} else if (!inferredSource && referrer) {
 			if (referrer.indexOf('google') !== -1) { inferredSource = 'google'; inferredMedium = inferredMedium || 'organic'; }
 			else if (referrer.indexOf('bing') !== -1) { inferredSource = 'bing'; inferredMedium = inferredMedium || 'organic'; }
 			else if (referrer.indexOf('facebook') !== -1) { inferredSource = 'facebook'; inferredMedium = inferredMedium || 'organic'; }
@@ -146,6 +192,14 @@
 		if (clicks.gbraid) touch.gbraid = clicks.gbraid;
 		if (clicks.wbraid) touch.wbraid = clicks.wbraid;
 		if (clicks.gclsrc) touch.gclsrc = clicks.gclsrc;
+		if (clicks.fbclid) touch.fbclid = cleanFbclid(clicks.fbclid);
+
+		var fbc = cleanMetaBrowserId(readCookie('_fbc'));
+		var fbp = cleanMetaBrowserId(readCookie('_fbp'));
+		if (!fbc && touch.fbclid) fbc = buildFbcFromFbclid(touch.fbclid, now);
+		if (fbc) touch.fbc = fbc;
+		if (fbp) touch.fbp = fbp;
+
 		if (referrer) {
 			try { touch.referrer_domain = new URL(referrer).hostname; } catch (_error) {}
 		}
@@ -185,6 +239,7 @@
 			gbraid: 'nvx_google_braid',
 			wbraid: 'nvx_google_wbraid',
 			gclsrc: 'nvx_google_gclsrc',
+			fbclid: 'hs_facebook_click_id',
 			nvx_first_source: 'nvx_first_source',
 			nvx_first_medium: 'nvx_first_medium',
 			nvx_first_campaign_id: 'nvx_first_campaign_id',
@@ -212,6 +267,7 @@
 			gbraid: conversion.gbraid || first.gbraid || '',
 			wbraid: conversion.wbraid || first.wbraid || '',
 			gclsrc: conversion.gclsrc || first.gclsrc || '',
+			fbclid: conversion.fbclid || first.fbclid || '',
 			nvx_first_source: first.source || '',
 			nvx_first_medium: first.medium || '',
 			nvx_first_campaign_id: first.campaign_id || '',
