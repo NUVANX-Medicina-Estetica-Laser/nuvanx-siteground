@@ -5,15 +5,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { EX_TEMPFAIL } from './siteground-transient-classifier.mjs';
 
-
 const activeChildren = new Set();
 ['SIGTERM', 'SIGINT'].forEach((sig) => {
   process.once(sig, () => {
     console.error(`VALORACION_ORCHESTRATOR=TERMINATED signal=${sig} active_children=${activeChildren.size}`);
     for (const child of activeChildren) {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill('SIGKILL');
-      }
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     }
     process.exit(sig === 'SIGINT' ? 130 : 143);
   });
@@ -25,7 +22,6 @@ function runProcess(moduleUrl) {
       env: process.env,
       stdio: 'inherit',
     });
-
     activeChildren.add(child);
     child.once('error', (err) => {
       activeChildren.delete(child);
@@ -80,7 +76,6 @@ async function prepareAllStageEvidence() {
 async function preserveStageEvidence(component) {
   const config = STAGE_EVIDENCE_MAP[component];
   if (!config) return true;
-
   try {
     if (config.sourceDirectory && config.destinationDirectory) {
       await fs.access(path.join(config.sourceDirectory, 'results.json'));
@@ -90,15 +85,12 @@ async function preserveStageEvidence(component) {
       console.log(`STAGING_ACCEPTANCE_EVIDENCE=PRESERVED component=${component} path=${config.destinationDirectory} mode=directory`);
       return true;
     }
-
     await fs.mkdir(config.destinationDir, { recursive: true });
     await fs.copyFile(config.source, config.destination);
     console.log(`STAGING_ACCEPTANCE_EVIDENCE=PRESERVED component=${component} path=${config.destination} mode=file`);
     return true;
   } catch (error) {
-    console.warn(
-      `STAGING_ACCEPTANCE_EVIDENCE=UNAVAILABLE component=${component} error=${error instanceof Error ? error.message : String(error)}`
-    );
+    console.warn(`STAGING_ACCEPTANCE_EVIDENCE=UNAVAILABLE component=${component} error=${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
 }
@@ -148,12 +140,8 @@ async function recordMissingEvidence(component) {
 async function runStage(name, moduleUrl, maxCycles = 1, backoffMs = 3500) {
   let lastExitCode = 1;
   let sawTransient = false;
-
   for (let cycle = 1; cycle <= maxCycles; cycle += 1) {
-    if (maxCycles > 1) {
-      console.log(`STAGING_ACCEPTANCE_CYCLE component=${name} cycle=${cycle}/${maxCycles}`);
-    }
-
+    if (maxCycles > 1) console.log(`STAGING_ACCEPTANCE_CYCLE component=${name} cycle=${cycle}/${maxCycles}`);
     let processError = null;
     let evidencePreserved = true;
     try {
@@ -163,12 +151,10 @@ async function runStage(name, moduleUrl, maxCycles = 1, backoffMs = 3500) {
     } finally {
       evidencePreserved = await preserveStageEvidence(name);
     }
-
     if (processError) {
       console.error(`STAGING_ACCEPTANCE_COMPONENT=FAIL component=${name} reason=${processError instanceof Error ? processError.message : String(processError)}`);
       return 1;
     }
-
     if (lastExitCode === 0) {
       if (!evidencePreserved) {
         await recordMissingEvidence(name);
@@ -178,23 +164,20 @@ async function runStage(name, moduleUrl, maxCycles = 1, backoffMs = 3500) {
         await writeRollbackState('1', name, 'transient-recovered');
         const envFile = (process.env.GITHUB_ENV || '').trim();
         if (envFile) {
-          try {
-            await fs.appendFile(envFile, 'STAGING_ACCEPTANCE_TRANSIENT=0\n', 'utf8');
+          await fs.appendFile(envFile, 'STAGING_ACCEPTANCE_TRANSIENT=0\n', 'utf8').then(() => {
             console.log(`STAGING_ACCEPTANCE_TRANSIENT=RESET component=${name} reason=transient-recovered`);
-          } catch (err) {
+          }).catch((err) => {
             console.warn(`STAGING_ACCEPTANCE_TRANSIENT=RESET_FAILED component=${name} error=${err instanceof Error ? err.message : String(err)}`);
-          }
+          });
         }
       }
       console.log(`STAGING_ACCEPTANCE_COMPONENT=PASS component=${name}${maxCycles > 1 ? ` cycle=${cycle}` : ''}`);
       return 0;
     }
-
     if (lastExitCode !== EX_TEMPFAIL) {
       console.error(`STAGING_ACCEPTANCE_COMPONENT=FAIL component=${name} exit=${lastExitCode}`);
       return lastExitCode;
     }
-
     sawTransient = true;
     if (cycle < maxCycles) {
       await writeRollbackState('1', name, 'outer-transient-retry');
@@ -203,42 +186,34 @@ async function runStage(name, moduleUrl, maxCycles = 1, backoffMs = 3500) {
       await delay(delayMs);
     }
   }
-
   await disarmRollbackAfterTransientExhaustion(name);
   console.error(`STAGING_ACCEPTANCE_COMPONENT=FAIL component=${name} cycles=${maxCycles} exit=${lastExitCode}`);
   return lastExitCode || 1;
 }
 
 const VALORACION_PLACEMENT_CYCLES = Number.parseInt(process.env.VALORACION_PLACEMENT_CYCLES || '3', 10) || 3;
-const HUBSPOT_A11Y_CYCLES = Number.parseInt(process.env.HUBSPOT_A11Y_CYCLES || '3', 10) || 3;
+const VALORACION_A11Y_CYCLES = Number.parseInt(
+  process.env.VALORACION_A11Y_CYCLES || process.env.HUBSPOT_A11Y_CYCLES || '3',
+  10
+) || 3;
 
 const stages = [
   { name: 'siteground-transient-classifier', url: new URL('./test-siteground-transient-classifier.mjs', import.meta.url), maxCycles: 1 },
   { name: 'hubspot-submission-classifier', url: new URL('./test-hubspot-submission-classifier.mjs', import.meta.url), maxCycles: 1 },
-  { name: 'hubspot-a11y-safe-unit', url: new URL('./test-hubspot-a11y-safe.mjs', import.meta.url), maxCycles: 1 },
   { name: 'governed-blog-head-contract', url: new URL('./governed-blog-head-resilient.mjs', import.meta.url), maxCycles: 1 },
   { name: 'governed-blog-runtime-identity', url: new URL('./governed-blog-runtime-contract.mjs', import.meta.url), maxCycles: 3 },
   { name: 'meta-no-consent', url: new URL('./meta-no-consent-contract.mjs', import.meta.url), maxCycles: 3, backoffMs: 5000 },
   { name: 'valoracion-placement', url: new URL('./valoracion-placement-resilient.mjs', import.meta.url), maxCycles: VALORACION_PLACEMENT_CYCLES },
-  { name: 'hubspot-a11y', url: new URL('./h1-hubspot-a11y-safe.mjs', import.meta.url), maxCycles: HUBSPOT_A11Y_CYCLES, backoffMs: 7000 },
+  { name: 'valoracion-first-party-a11y', url: new URL('./first-party-valoracion-a11y.mjs', import.meta.url), maxCycles: VALORACION_A11Y_CYCLES, backoffMs: 7000 },
 ];
 
-// P0 staging acceptance proves public delivery, render integrity, form placement
-// and accessibility. Attribution lineage runs in the dedicated Staging phase
-// after this suite and before acceptance-manifest.json is written.
-console.log('STAGING_ACCEPTANCE_SCOPE=P0 attribution_lineage=separate_phase');
+console.log('STAGING_ACCEPTANCE_SCOPE=P0 attribution_lineage=separate_phase form_owner=first-party browser_hubspot=retired');
 
-// Prove the real first-visit mobile state before the existing a11y gate accepts
-// consent. Every route/action uses a fresh browser context with no persisted
-// Complianz cookies, so an inaccessible or viewport-blocking banner cannot be
-// hidden by test setup.
 stages.push({ name: 'complianz-first-visit-mobile', url: new URL('./complianz-first-visit-mobile.mjs', import.meta.url), maxCycles: 1 });
 stages.push({ name: 'block-a11y', url: new URL('./block-a11y.mjs', import.meta.url), maxCycles: 1 });
 
 await prepareAllStageEvidence();
 for (const stage of stages) {
   const exitCode = await runStage(stage.name, stage.url, stage.maxCycles, stage.backoffMs);
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+  if (exitCode !== 0) process.exit(exitCode);
 }
