@@ -94,16 +94,17 @@ assert.equal(res13.isSubmission, false, 'malformed URL must not be classified as
 assert.equal(res13.shouldBlock, false);
 assert.equal(res13.reason, 'url');
 
-// 14. Form bootstrap URL must not be blocked (allows form to render)
+// 14. Form bootstrap URL is not itself a submission. Browser governance is
+// separately required to keep this endpoint unused by the public runtime.
 const bootstrapUrl = `https://forms.hsforms.com/embed/v3/form/${portalId}/${formId}`;
 const res14 = classify('POST', bootstrapUrl);
 assert.equal(res14.isSubmission, false, 'form bootstrap URL must not be classified as a submission');
-assert.equal(res14.shouldBlock, false, 'form bootstrap URL must not be blocked');
+assert.equal(res14.shouldBlock, false, 'form bootstrap URL is outside the submission classifier scope');
 assert.equal(res14.reason, 'path');
 assert.equal(res14.hostname, 'forms.hsforms.com');
 assert.equal(res14.pathname, `/embed/v3/form/${portalId}/${formId}`);
 
-// 15. Telemetry must not be blocked
+// 15. Telemetry must not be blocked by the submission classifier.
 const res15 = classify('POST', `https://forms.hsforms.com/telemetry?formId=${formId}`);
 assert.equal(res15.isSubmission, false, 'telemetry containing the form ID must not be classified as a submission');
 assert.equal(res15.shouldBlock, false);
@@ -141,30 +142,44 @@ assert.match(
   'production HubSpot probe must expose an auditable zero-submit PASS marker'
 );
 
-// HubSpot iframe naming must use the native iframe title. A prior runtime pass
-// also injected aria-label on the iframe; Axe reports that as aria-prohibited-attr
-// for the embedded frame role. Keep a deterministic source guard so that the
-// invalid attribute cannot return even when the vendor changes its initial title.
+// Browser HubSpot form rendering is retired. Runtime governance may load only
+// HubSpot's global analytics script after marketing consent; the visible form is
+// first-party HTML and its submission is bridged server-side.
 const runtimeGovernance = await fs.readFile(
   new URL('../../wp-content/themes/nuvanx-medical/assets/js/nvx-runtime-governance.js', import.meta.url),
   'utf8'
 );
+const directForm = await fs.readFile(
+  new URL('../../wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php', import.meta.url),
+  'utf8'
+);
+
 assert.match(
   runtimeGovernance,
-  /ifr\.setAttribute\('title', 'Formulario de valoración médica'\)/,
-  'HubSpot iframe governance must provide the native accessible title'
+  /function loadHubSpotGlobalTracking\(\)/,
+  'runtime must keep HubSpot global tracking isolated from form rendering'
 );
 assert.match(
   runtimeGovernance,
-  /ifr\.removeAttribute\('aria-label'\)/,
-  'HubSpot iframe governance must remove prohibited aria-label attributes'
+  /script\.src = 'https:\/\/js\.hs-scripts\.com\/' \+ portalId \+ '\.js'/,
+  'HubSpot browser ownership must be limited to the consented global analytics script'
 );
 assert.doesNotMatch(
   runtimeGovernance,
-  /ifr\.setAttribute\('aria-label'\s*,/,
-  'HubSpot iframe governance must not assign any aria-label to the iframe'
+  /hbspt\.forms\.create|forms\.hsforms\.com\/embed|\.hs-form-frame|iframe\s*\[[^\]]*hsforms/i,
+  'retired HubSpot browser-form owners must not return to runtime governance'
+);
+assert.match(
+  directForm,
+  /data-nvx-direct-form/,
+  'canonical first-party valoración form marker must remain in source'
+);
+assert.match(
+  directForm,
+  /First-party valoración form\./,
+  'first-party valoración source must remain the visible-form owner'
 );
 
 console.log('HUBSPOT_SUBMISSION_CLASSIFIER_TEST=PASS cases=17');
 console.log(`HUBSPOT_PRODUCTION_ZERO_SUBMIT_GUARD=PASS forbidden_patterns=${HUBSPOT_PRODUCTION_FORBIDDEN_PATTERNS.length}`);
-console.log('HUBSPOT_IFRAME_A11Y_CONTRACT=PASS native_title=1 prohibited_aria_label=0');
+console.log('HUBSPOT_BROWSER_FORM_RETIREMENT_CONTRACT=PASS iframe_owner=0 first_party_owner=1 analytics_owner=consented_global_only');
