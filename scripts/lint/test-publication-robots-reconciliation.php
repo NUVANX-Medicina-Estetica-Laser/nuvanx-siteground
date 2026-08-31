@@ -157,7 +157,7 @@ $required = array(
 	array( $staging_raw, "STAGING_SITEMAP_MANIFEST_COVERAGE=PASS" ),
 	array( $staging_raw, 'tools/deploy/siteground-cache-purge.sh' ),
 	array( $staging_raw, 'siteground_cache_purge "$STAGING_ROOT" active' ),
-	array( $cache_helper_raw, 'function_exists' ),
+	array( $cache_helper_raw, 'siteground_cache_purge()' ),
 	array( $cache_helper_raw, 'wp sg purge' ),
 	array( $cache_helper_raw, 'final_state' ),
 	array( $production_raw, "reconcile-publication-robots.php" ),
