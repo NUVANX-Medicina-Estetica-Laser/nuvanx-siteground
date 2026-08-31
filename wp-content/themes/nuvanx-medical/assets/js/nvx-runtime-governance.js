@@ -7,6 +7,7 @@
   };
 
   const config = window.nvxRuntimeGovernance || {};
+  const modalConfig = window.nvxValoracionModal || {};
 
   function setInert(element, inert) {
     if (!element) return;
@@ -45,7 +46,7 @@
 
     if (existing) return Promise.resolve();
 
-    const portalId = String(config.hubspotPortalId || '').replace(/[^0-9]/g, '');
+    const portalId = String(config.hubspotPortalId || modalConfig.hubspotPortalId || '').replace(/[^0-9]/g, '');
     if (!portalId) return Promise.resolve();
 
     return new Promise(function (resolve) {
@@ -170,10 +171,10 @@
 
   /** Govern the first-party valoración modal and CTA routing. */
   function initValoracionModalGovernance() {
-    const modal = document.getElementById(config.modalId || 'nvx-valoracion-modal');
+    const modal = document.getElementById(config.modalId || modalConfig.modalId || 'nvx-valoracion-modal');
     let lastFocus = null;
     const DEFAULT_VALORACION_PATH = '/madrid/valoracion/';
-    const pageUrl = (config.pageUrl || DEFAULT_VALORACION_PATH).replace(/\/?$/, '/');
+    const pageUrl = (config.pageUrl || modalConfig.pageUrl || DEFAULT_VALORACION_PATH).replace(/\/?$/, '/');
 
     let pagePath;
     try {
