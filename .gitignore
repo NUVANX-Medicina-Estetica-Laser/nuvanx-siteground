@@ -40,6 +40,7 @@ wp-content/themes/nuvanx-medical/vendor/
 wp-content/themes/nuvanx-medical/dist/
 vendor/
 dist/
+supabase/.temp/
 
 # ============================================================
 # Logs / operating-system files
@@ -76,6 +77,22 @@ audit-*.txt
 playwright-report/
 test-results/
 
+# CI/CD artifacts — never commit, use GitHub Actions Artifacts
+scripts/production/artifacts/
+scripts/staging2/artifacts/
+scripts/seo/artifacts/
+
+# Generated SEO / PageSpeed snapshots — never version runtime output
+scripts/seo/indexability-report.json
+scripts/seo/omnichannel-indexing-summary.json
+scripts/seo/pagespeed-all-81-pages.json
+scripts/seo/pagespeed-results.json
+
+# SEO credentials and raw data
+scripts/seo/credentials.json
+scripts/seo/raw-ads-audit-data.json
+scripts/seo/run-e2e-qa-test.js
+
 # ============================================================
 # Local scratch / patch residue
 # ============================================================
@@ -90,16 +107,5 @@ scratch/
 /.nvx-deploy-sha
 /wp-content/themes/nuvanx-medical/.nvx-deploy-sha
 
-# CI/CD artifacts — never commit, use GitHub Actions Artifacts
-scripts/production/artifacts/
-scripts/staging2/artifacts/
-scripts/seo/artifacts/
-
-# SEO credentials y raw data
-scripts/seo/credentials.json
-scripts/seo/raw-ads-audit-data.json
-scripts/seo/run-e2e-qa-test.js
-
-# Worktree residue (git worktree add crea estos en el runner)
+# Worktree residue (git worktree add creates these in the runner)
 .git/worktrees/
-.vscode/
