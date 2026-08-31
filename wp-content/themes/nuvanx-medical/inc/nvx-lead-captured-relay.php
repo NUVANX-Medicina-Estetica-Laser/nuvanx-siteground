@@ -13,17 +13,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/** Canonical Supabase capture ledger URL. */
 function nvx_lead_captured_endpoint(): string {
 	return 'https://ssvvuuysgxyqvmovrlvk.supabase.co/functions/v1/lead-captured';
 }
 
-/** Canonical one-purpose runtime bootstrap URL. */
 function nvx_lead_captured_bootstrap_endpoint(): string {
 	return 'https://ssvvuuysgxyqvmovrlvk.supabase.co/functions/v1/runtime-bootstrap';
 }
 
-/** Resolve the existing server-only HubSpot private-app token. */
 function nvx_lead_captured_hubspot_token(): string {
 	if ( ! defined( 'NVX_HUBSPOT_ACCESS_TOKEN' ) ) {
 		return '';
@@ -31,24 +28,12 @@ function nvx_lead_captured_hubspot_token(): string {
 	return trim( (string) NVX_HUBSPOT_ACCESS_TOKEN );
 }
 
-/**
- * Derive a dedicated HMAC key from the HubSpot token for capture signing.
- *
- * @param string $token HubSpot access token.
- * @return string Derived HMAC key as lowercase hexadecimal.
- */
 function nvx_lead_captured_derive_hmac_key( string $token ): string {
 	$context = 'nuvanx-lead-capture-hmac-key-v1';
 	$info    = hash_hmac( 'sha256', $context, $token, true );
 	return bin2hex( $info );
 }
 
-/**
- * Bootstrap the already-validated HubSpot credential into Supabase Vault.
- *
- * The token is sent only as an Authorization header to the pinned bootstrap
- * endpoint. It is never written to WordPress storage, payloads or logs.
- */
 function nvx_lead_captured_bootstrap_runtime( string $token, bool $force = false ): bool {
 	$transient = 'nvx_runtime_bootstrap_ok_v1';
 	if ( ! $force && '1' === (string) get_transient( $transient ) ) {
@@ -73,31 +58,18 @@ function nvx_lead_captured_bootstrap_runtime( string $token, bool $force = false
 	);
 
 	if ( is_wp_error( $response ) ) {
-		error_log(
-			sprintf(
-				'[NUVANX] runtime bootstrap transport failure; wp_error_code=%s.',
-				sanitize_key( (string) $response->get_error_code() )
-			)
-		);
+		error_log( sprintf( '[NUVANX] runtime bootstrap transport failure; wp_error_code=%s.', sanitize_key( (string) $response->get_error_code() ) ) );
 		return false;
 	}
-
 	$status = (int) wp_remote_retrieve_response_code( $response );
 	if ( $status < 200 || $status >= 300 ) {
 		error_log( sprintf( '[NUVANX] runtime bootstrap HTTP failure; status=%d.', $status ) );
 		return false;
 	}
-
 	set_transient( $transient, '1', HOUR_IN_SECONDS );
 	return true;
 }
 
-/**
- * Convert HubSpot fields to a simple name => value map.
- *
- * @param array $payload HubSpot request payload.
- * @return array<string, string>
- */
 function nvx_lead_captured_field_map( array $payload ): array {
 	$mapped = array();
 	$fields = isset( $payload['fields'] ) && is_array( $payload['fields'] ) ? $payload['fields'] : array();
@@ -116,12 +88,36 @@ function nvx_lead_captured_field_map( array $payload ): array {
 }
 
 /**
- * Build a non-clinical attribution snapshot from already-consent-filtered fields.
+ * Return consented Meta browser identity from the first-party request.
+ * FBP is never synthesized. FBC may arrive from the consented runtime or the
+ * real `_fbc` cookie. Values are bounded and format-validated before relay.
  *
- * @param array<string, string> $fields HubSpot field map.
- * @param string                $prefix nvx_first_ or nvx_conversion_.
- * @return array<string, string>
+ * @return array<string,string>
  */
+function nvx_lead_captured_meta_identity(): array {
+	$out = array();
+	if ( ! function_exists( 'nvx_hubspot_secure_post_value' ) ) {
+		return $out;
+	}
+
+	$fbclid = nvx_hubspot_secure_post_value( 'fbclid', 512 );
+	if ( '' !== $fbclid && 1 === preg_match( '/^[A-Za-z0-9._~:+-]{1,512}$/', $fbclid ) ) {
+		$out['fbclid'] = $fbclid;
+	}
+
+	foreach ( array( 'fbc' => '_fbc', 'fbp' => '_fbp' ) as $key => $cookie_name ) {
+		$value = nvx_hubspot_secure_post_value( $key, 600 );
+		if ( '' === $value && isset( $_COOKIE[ $cookie_name ] ) ) {
+			$value = sanitize_text_field( wp_unslash( (string) $_COOKIE[ $cookie_name ] ) );
+		}
+		$value = trim( $value );
+		if ( '' !== $value && 1 === preg_match( '/^fb\.1\.\d{10,16}\.[A-Za-z0-9._~:+-]{1,512}$/', $value ) ) {
+			$out[ $key ] = $value;
+		}
+	}
+	return $out;
+}
+
 function nvx_lead_captured_attribution( array $fields, string $prefix ): array {
 	$property_map = array(
 		'source'      => $prefix . 'source',
@@ -159,18 +155,13 @@ function nvx_lead_captured_attribution( array $fields, string $prefix ): array {
 				$out[ $key ] = $fields[ $property ];
 			}
 		}
+		foreach ( nvx_lead_captured_meta_identity() as $key => $value ) {
+			$out[ $key ] = $value;
+		}
 	}
-
 	return $out;
 }
 
-/**
- * Extract optional IDs returned by HubSpot without depending on their presence.
- * No response body fragment is logged because it may contain personal data.
- *
- * @param mixed $response WordPress HTTP response.
- * @return array{contact_id:string,submission_id:string}
- */
 function nvx_lead_captured_hubspot_ids( $response ): array {
 	$result = array( 'contact_id' => '', 'submission_id' => '' );
 	if ( is_wp_error( $response ) ) {
@@ -181,13 +172,7 @@ function nvx_lead_captured_hubspot_ids( $response ): array {
 	if ( ! is_array( $decoded ) ) {
 		$status     = (int) wp_remote_retrieve_response_code( $response );
 		$json_error = function_exists( 'json_last_error' ) ? (int) json_last_error() : -1;
-		error_log(
-			sprintf(
-				'[NUVANX] lead-captured relay: HubSpot response IDs unavailable; status=%d json_error=%d.',
-				$status,
-				$json_error
-			)
-		);
+		error_log( sprintf( '[NUVANX] lead-captured relay: HubSpot response IDs unavailable; status=%d json_error=%d.', $status, $json_error ) );
 		return $result;
 	}
 	foreach ( array( 'contactId', 'contact_id' ) as $key ) {
@@ -208,7 +193,6 @@ function nvx_lead_captured_hubspot_ids( $response ): array {
 	return $result;
 }
 
-/** Build one signed capture request. */
 function nvx_lead_captured_post_signed( string $body, string $token ) {
 	$timestamp = (string) time();
 	$hmac_key  = nvx_lead_captured_derive_hmac_key( $token );
@@ -229,15 +213,9 @@ function nvx_lead_captured_post_signed( string $body, string $token ) {
 	);
 }
 
-/** Log only bounded transport/status metadata for a failed capture. */
 function nvx_lead_captured_log_relay_failure( $relay ): void {
 	if ( is_wp_error( $relay ) ) {
-		error_log(
-			sprintf(
-				'[NUVANX] lead-captured relay transport failure; wp_error_code=%s.',
-				sanitize_key( (string) $relay->get_error_code() )
-			)
-		);
+		error_log( sprintf( '[NUVANX] lead-captured relay transport failure; wp_error_code=%s.', sanitize_key( (string) $relay->get_error_code() ) ) );
 		return;
 	}
 	$status = (int) wp_remote_retrieve_response_code( $relay );
@@ -246,14 +224,6 @@ function nvx_lead_captured_log_relay_failure( $relay ): void {
 	}
 }
 
-/**
- * Mirror one successful secure HubSpot submission into the canonical capture ledger.
- *
- * @param mixed  $response HTTP response.
- * @param array  $parsed_args Parsed HTTP args.
- * @param string $url Requested URL.
- * @return mixed
- */
 function nvx_lead_captured_on_http_response( $response, array $parsed_args, string $url ): mixed {
 	if ( $url === nvx_lead_captured_endpoint() || $url === nvx_lead_captured_bootstrap_endpoint() ) {
 		return $response;
