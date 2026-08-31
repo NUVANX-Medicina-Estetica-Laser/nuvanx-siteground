@@ -60,7 +60,7 @@ concurrency:
 env:
   PROD_ROOT: /home/customer/www/nuvanx.com/public_html
   PROD_PARENT: /home/customer/www/nuvanx.com
-  PROD_DB_NAME: ${{ secrets.PROD_DB_NAME }}
+  PROD_DB_NAME: ${{ secrets.PROD_DB_NAME || vars.PROD_DB_NAME || 'db0ecrycwv2tgb' }}
   BASE_URL: https://nuvanx.com
   EXPECTED_HOST: nuvanx.com
   SEARCH_CONSOLE_PROPERTY: https://nuvanx.com/
