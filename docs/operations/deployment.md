@@ -82,7 +82,7 @@ Normal release requirements:
 - normal `release` mode requires candidate == current `master` HEAD;
 - candidate has successful immutable Staging acceptance evidence;
 - release tooling is materialized from the exact candidate;
-- production environment identity/preconditions pass before mutation.
+- production environment identity/preconditions pass before mutation, including `DB_NAME` matching the provisioned Production database (`PROD_DB_NAME` from GitHub secrets or vars; the workflow may fall back to the canonical database name only when both are unset).
 
 Production may also be run with `deploy=false` for verification-only audits, or in SSH connectivity probe mode. Those modes must not perform a cutover.
 
