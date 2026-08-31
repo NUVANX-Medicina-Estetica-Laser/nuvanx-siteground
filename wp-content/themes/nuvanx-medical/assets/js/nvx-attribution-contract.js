@@ -14,9 +14,7 @@
 	}
 
 	function createUuidV4() {
-		if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-			return window.crypto.randomUUID();
-		}
+		if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
 		if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
 			var bytes = new Uint8Array(16);
 			window.crypto.getRandomValues(bytes);
@@ -46,9 +44,7 @@
 		try {
 			var parsed = new URL(url || '', window.location && window.location.href ? window.location.href : undefined);
 			return parsed.searchParams.get(key) || '';
-		} catch (_error) {
-			return '';
-		}
+		} catch (_error) { return ''; }
 	}
 
 	function classifyChannel(utm, referrer, url) {
@@ -79,17 +75,9 @@
 		return false;
 	}
 
-	function lsGet(key) {
-		try { return window.localStorage.getItem(key); } catch (_error) { return null; }
-	}
-
+	function lsGet(key) { try { return window.localStorage.getItem(key); } catch (_error) { return null; } }
 	function lsSet(key, value) {
-		try {
-			window.localStorage.setItem(key, value);
-			return true;
-		} catch (_error) {
-			return false;
-		}
+		try { window.localStorage.setItem(key, value); return true; } catch (_error) { return false; }
 	}
 
 	function readCookie(name) {
@@ -131,9 +119,7 @@
 				return null;
 			}
 			return obj;
-		} catch (_error) {
-			return null;
-		}
+		} catch (_error) { return null; }
 	}
 
 	function buildTouch() {
@@ -152,11 +138,7 @@
 
 		var href = (window.location && window.location.href) || '';
 		var landing = href;
-		try {
-			var parsed = new URL(href);
-			landing = parsed.origin + parsed.pathname;
-		} catch (_error) {}
-
+		try { var parsed = new URL(href); landing = parsed.origin + parsed.pathname; } catch (_error) {}
 		var referrer = (document && document.referrer) || '';
 		var channel = classifyChannel(utm, referrer, href);
 		var now = Date.now();
@@ -164,11 +146,9 @@
 		var inferredMedium = utm.utm_medium || '';
 
 		if (!inferredSource && clicks.fbclid) {
-			inferredSource = 'meta';
-			inferredMedium = 'paid_social';
+			inferredSource = 'meta'; inferredMedium = 'paid_social';
 		} else if (!inferredSource && (clicks.gclid || clicks.gbraid || clicks.wbraid)) {
-			inferredSource = 'google';
-			inferredMedium = 'cpc';
+			inferredSource = 'google'; inferredMedium = 'cpc';
 		} else if (!inferredSource && referrer) {
 			if (referrer.indexOf('google') !== -1) { inferredSource = 'google'; inferredMedium = inferredMedium || 'organic'; }
 			else if (referrer.indexOf('bing') !== -1) { inferredSource = 'bing'; inferredMedium = inferredMedium || 'organic'; }
@@ -199,25 +179,46 @@
 		if (!fbc && touch.fbclid) fbc = buildFbcFromFbclid(touch.fbclid, now);
 		if (fbc) touch.fbc = fbc;
 		if (fbp) touch.fbp = fbp;
-
-		if (referrer) {
-			try { touch.referrer_domain = new URL(referrer).hostname; } catch (_error) {}
-		}
+		if (referrer) { try { touch.referrer_domain = new URL(referrer).hostname; } catch (_error) {} }
 		return touch;
 	}
 
+	function ensureHiddenField(form, name) {
+		var field = form.querySelector('[name="' + name + '"]');
+		if (field) return field;
+		field = document.createElement('input');
+		field.type = 'hidden';
+		field.name = name;
+		field.value = '';
+		form.appendChild(field);
+		return field;
+	}
+
+	function syncDirectFormMetaIdentity() {
+		var form;
+		try { form = document.querySelector('[data-nvx-direct-form]'); } catch (_error) { form = null; }
+		if (!form) return;
+		var first = readTouch(FIRST_TOUCH_KEY) || {};
+		var conversion = readTouch(CONVERSION_TOUCH_KEY) || first;
+		var consent = hasMarketingConsent();
+		var values = consent ? {
+			fbclid: conversion.fbclid || first.fbclid || '',
+			fbc: conversion.fbc || first.fbc || '',
+			fbp: conversion.fbp || first.fbp || '',
+		} : { fbclid: '', fbc: '', fbp: '' };
+		Object.keys(values).forEach(function(name) {
+			ensureHiddenField(form, name).value = values[name];
+		});
+	}
+
 	function captureAttribution() {
-		if (!hasMarketingConsent()) return;
+		if (!hasMarketingConsent()) { syncDirectFormMetaIdentity(); return; }
 		var existingFirst = readTouch(FIRST_TOUCH_KEY);
 		var touch = buildTouch();
-		if (!existingFirst) {
-			lsSet(FIRST_TOUCH_KEY, JSON.stringify(touch));
-		}
-		if (touch.channel !== 'internal' && touch.channel !== 'direct') {
-			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
-		} else if (!readTouch(CONVERSION_TOUCH_KEY)) {
-			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
-		}
+		if (!existingFirst) lsSet(FIRST_TOUCH_KEY, JSON.stringify(touch));
+		if (touch.channel !== 'internal' && touch.channel !== 'direct') lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+		else if (!readTouch(CONVERSION_TOUCH_KEY)) lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+		syncDirectFormMetaIdentity();
 	}
 
 	function buildFormPayload(available) {
@@ -227,60 +228,18 @@
 		var conversion = readTouch(CONVERSION_TOUCH_KEY) || {};
 		var leadId = safeSessionStorage();
 		var fieldMap = {
-			nvx_lead_id: 'nvx_lead_id',
-			nvx_is_test_lead: 'nvx_is_test_lead',
-			nvx_test_run_id: 'nvx_test_run_id',
-			utm_source: 'nvx_utm_source',
-			utm_medium: 'nvx_utm_medium',
-			utm_campaign: 'nvx_utm_campaign',
-			utm_content: 'nvx_utm_content',
-			utm_term: 'nvx_utm_term',
-			gclid: 'nvx_google_click_id',
-			gbraid: 'nvx_google_braid',
-			wbraid: 'nvx_google_wbraid',
-			gclsrc: 'nvx_google_gclsrc',
-			fbclid: 'hs_facebook_click_id',
-			nvx_first_source: 'nvx_first_source',
-			nvx_first_medium: 'nvx_first_medium',
-			nvx_first_campaign_id: 'nvx_first_campaign_id',
-			nvx_first_referrer_domain: 'nvx_first_referrer_domain',
-			nvx_first_landing_url: 'nvx_first_landing_url',
-			nvx_first_timestamp: 'nvx_first_timestamp',
-			nvx_first_channel: 'nvx_first_channel',
-			nvx_conversion_channel: 'nvx_conversion_channel',
-			nvx_conversion_source: 'nvx_conversion_source',
-			nvx_conversion_medium: 'nvx_conversion_medium',
-			nvx_conversion_campaign_id: 'nvx_conversion_campaign_id',
-			nvx_conversion_landing_url: 'nvx_conversion_landing_url',
-			nvx_conversion_timestamp: 'nvx_conversion_timestamp',
+			nvx_lead_id: 'nvx_lead_id', nvx_is_test_lead: 'nvx_is_test_lead', nvx_test_run_id: 'nvx_test_run_id',
+			utm_source: 'nvx_utm_source', utm_medium: 'nvx_utm_medium', utm_campaign: 'nvx_utm_campaign', utm_content: 'nvx_utm_content', utm_term: 'nvx_utm_term',
+			gclid: 'nvx_google_click_id', gbraid: 'nvx_google_braid', wbraid: 'nvx_google_wbraid', gclsrc: 'nvx_google_gclsrc',
+			nvx_first_source: 'nvx_first_source', nvx_first_medium: 'nvx_first_medium', nvx_first_campaign_id: 'nvx_first_campaign_id', nvx_first_referrer_domain: 'nvx_first_referrer_domain', nvx_first_landing_url: 'nvx_first_landing_url', nvx_first_timestamp: 'nvx_first_timestamp', nvx_first_channel: 'nvx_first_channel',
+			nvx_conversion_channel: 'nvx_conversion_channel', nvx_conversion_source: 'nvx_conversion_source', nvx_conversion_medium: 'nvx_conversion_medium', nvx_conversion_campaign_id: 'nvx_conversion_campaign_id', nvx_conversion_landing_url: 'nvx_conversion_landing_url', nvx_conversion_timestamp: 'nvx_conversion_timestamp',
 		};
 		var rawValues = {
-			nvx_lead_id: leadId,
-			nvx_is_test_lead: qa.is_test_lead === true,
-			nvx_test_run_id: qa.test_run_id || '',
-			utm_source: conversion.source || first.source || '',
-			utm_medium: conversion.medium || first.medium || '',
-			utm_campaign: conversion.campaign_id || first.campaign_id || '',
-			utm_content: conversion.utm_content || first.utm_content || '',
-			utm_term: conversion.utm_term || first.utm_term || '',
-			gclid: conversion.gclid || first.gclid || '',
-			gbraid: conversion.gbraid || first.gbraid || '',
-			wbraid: conversion.wbraid || first.wbraid || '',
-			gclsrc: conversion.gclsrc || first.gclsrc || '',
-			fbclid: conversion.fbclid || first.fbclid || '',
-			nvx_first_source: first.source || '',
-			nvx_first_medium: first.medium || '',
-			nvx_first_campaign_id: first.campaign_id || '',
-			nvx_first_referrer_domain: first.referrer_domain || '',
-			nvx_first_landing_url: first.landing_url || '',
-			nvx_first_timestamp: first.timestamp || '',
-			nvx_first_channel: first.channel || '',
-			nvx_conversion_channel: conversion.channel || '',
-			nvx_conversion_source: conversion.source || '',
-			nvx_conversion_medium: conversion.medium || '',
-			nvx_conversion_campaign_id: conversion.campaign_id || '',
-			nvx_conversion_landing_url: conversion.landing_url || '',
-			nvx_conversion_timestamp: conversion.timestamp || '',
+			nvx_lead_id: leadId, nvx_is_test_lead: qa.is_test_lead === true, nvx_test_run_id: qa.test_run_id || '',
+			utm_source: conversion.source || first.source || '', utm_medium: conversion.medium || first.medium || '', utm_campaign: conversion.campaign_id || first.campaign_id || '', utm_content: conversion.utm_content || first.utm_content || '', utm_term: conversion.utm_term || first.utm_term || '',
+			gclid: conversion.gclid || first.gclid || '', gbraid: conversion.gbraid || first.gbraid || '', wbraid: conversion.wbraid || first.wbraid || '', gclsrc: conversion.gclsrc || first.gclsrc || '',
+			nvx_first_source: first.source || '', nvx_first_medium: first.medium || '', nvx_first_campaign_id: first.campaign_id || '', nvx_first_referrer_domain: first.referrer_domain || '', nvx_first_landing_url: first.landing_url || '', nvx_first_timestamp: first.timestamp || '', nvx_first_channel: first.channel || '',
+			nvx_conversion_channel: conversion.channel || '', nvx_conversion_source: conversion.source || '', nvx_conversion_medium: conversion.medium || '', nvx_conversion_campaign_id: conversion.campaign_id || '', nvx_conversion_landing_url: conversion.landing_url || '', nvx_conversion_timestamp: conversion.timestamp || '',
 		};
 
 		var result = {};
@@ -293,11 +252,8 @@
 		return result;
 	}
 
-	if (document.readyState === 'loading') {
-		document.addEventListener('DOMContentLoaded', captureAttribution);
-	} else {
-		captureAttribution();
-	}
+	if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', captureAttribution);
+	else captureAttribution();
 	document.addEventListener('wp_listen_for_consent_change', captureAttribution);
 	document.addEventListener('wp_consent_type_defined', captureAttribution);
 
