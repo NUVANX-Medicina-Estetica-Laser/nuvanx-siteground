@@ -7,7 +7,7 @@ import {
   validGitHubRunId,
   validateDeployIdentity,
 } from './deploy-identity-contract.mjs';
-import { hasLegacyValoracionDirectForm } from './valoracion-form-contract.mjs';
+import { canonicalValoracionFirstPartyIssues } from './valoracion-form-contract.mjs';
 import { hasValidSignatureFrame } from './signature-frame-contract.mjs';
 
 const CANONICAL_PROD_ROOT = '/home/customer/www/nuvanx.com/public_html';
@@ -35,8 +35,6 @@ const routes = [
   '/tratamiento-postparto-abdomen-contorno-corporal-madrid/',
 ];
 const SITEGROUND_CAPTCHA_PATH = '/.well-known/sgcaptcha/';
-// MUST match HUBSPOT_FORM_ID in ../staging2/hubspot-config.mjs
-const HUBSPOT_FORM_ID = '5042522a-0bc5-4381-ac3e-5aee8649b69c';
 const META_BROWSER_FORBIDDEN = [
   ['dedupe marker', 'NVX_META_EVENT_DEDUPE_ACTIVE'],
   ['dedupe prefix', 'nvx-meta-event-dedupe-'],
@@ -91,14 +89,7 @@ function renderedDocumentIssues(html, route) {
   if (route === '/blog/' && !html.includes('nvx-blog-index')) issues.push('Missing canonical blog archive marker nvx-blog-index');
 
   if (route === '/madrid/valoracion/') {
-    if (!html.includes('id="nvx-hubspot-native-form"')) issues.push('Missing canonical HubSpot form host');
-    if (!html.includes('data-nvx-consent="functional"')) issues.push('Missing functional-consent valuation marker');
-    const frameCount = (html.match(/<div\b[^>]*class=["'][^"']*\bhs-form-frame\b[^"']*["'][^>]*>/gi) || []).length;
-    if (frameCount !== 1) issues.push(`Expected exactly one HubSpot form frame, found ${frameCount}`);
-    if (!html.includes(HUBSPOT_FORM_ID)) issues.push('Missing canonical HubSpot form ID');
-    if (hasLegacyValoracionDirectForm(html)) {
-      issues.push('Legacy first-party valoración form still present');
-    }
+    issues.push(...canonicalValoracionFirstPartyIssues(html));
   }
 
   if (['/protocolos-signature/', '/remodelacion-corporal-laser-madrid/', '/tratamiento-postparto-abdomen-contorno-corporal-madrid/'].includes(route)) {
@@ -227,23 +218,52 @@ require_body() {
   }
 }
 
-legacy_valoracion_direct_form_count() {
-  local body="$1"
+validate_valoracion_first_party_form() {
+  local body="$1" route="$2"
   php -r '
     $html = @file_get_contents($argv[1]);
-    if (!is_string($html)) { fwrite(STDERR, "legacy_form_body_unreadable\n"); exit(2); }
-    $html = preg_replace("~<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>~is", "", $html);
-    if (!is_string($html)) { fwrite(STDERR, "legacy_form_strip_failed\n"); exit(2); }
-    preg_match_all("~<form\b[^>]*>~i", $html, $forms);
-    $count = 0;
+    if (!is_string($html) || trim($html) === "") { fwrite(STDERR, "valoracion_body_unreadable\n"); exit(2); }
+    $clean = preg_replace("~<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>~is", "", $html);
+    if (!is_string($clean)) { fwrite(STDERR, "valoracion_strip_failed\n"); exit(2); }
+
+    preg_match_all("~<div\b[^>]*>~i", $clean, $divs);
+    preg_match_all("~<form\b[^>]*>~i", $clean, $forms);
+    preg_match_all("~<iframe\b[^>]*(?:hsforms|hubspot)[^>]*>~i", $clean, $iframes);
+
+    $ownerCount = 0;
+    $legacyHostCount = 0;
+    $hubspotFrameCount = 0;
+    foreach ($divs[0] as $tag) {
+      $isOwner = preg_match("~\\bid=[\"\x27]nvx-valoracion-first-party-form[\"\x27]~i", $tag)
+        && preg_match("~\\bdata-nvx-first-party-owner=[\"\x27]?1[\"\x27]?(?:\\s|/?>)~i", $tag);
+      if ($isOwner) { ++$ownerCount; }
+      if (preg_match("~\\bid=[\"\x27]nvx-hubspot-native-form[\"\x27]~i", $tag)) { ++$legacyHostCount; }
+      if (preg_match("~\\bclass=[\"\x27][^\"\x27]*\\bhs-form-frame\\b[^\"\x27]*[\"\x27]~i", $tag)) { ++$hubspotFrameCount; }
+    }
+
+    $formCount = 0;
     foreach ($forms[0] as $tag) {
       if (preg_match("~(?:^|[^a-z0-9_-])nvx-valoracion-direct-form(?:[^a-z0-9_-]|$)~i", $tag)
-          || preg_match("~\bdata-nvx-direct-form(?:\s*=|\s|/?>)~i", $tag)) {
-        ++$count;
+          || preg_match("~\\bdata-nvx-direct-form(?:\\s*=|\\s|/?>)~i", $tag)) {
+        ++$formCount;
       }
     }
-    echo $count;
-  ' -- "$body"
+
+    if ($ownerCount !== 1 || $formCount !== 1 || $legacyHostCount !== 0 || $hubspotFrameCount !== 0 || count($iframes[0]) !== 0) {
+      fwrite(
+        STDERR,
+        "valoracion_contract owner=".$ownerCount
+          ." form=".$formCount
+          ." legacy_host=".$legacyHostCount
+          ." hubspot_frame=".$hubspotFrameCount
+          ." hubspot_iframe=".count($iframes[0])."\n"
+      );
+      exit(1);
+    }
+  ' -- "$body" || {
+    echo "PRODUCTION_PROBE_FAIL route=$route reason=invalid_first_party_valoracion_contract mode=$probe_mode" >&2
+    return 1
+  }
 }
 
 validate_signature_frame() {
@@ -433,13 +453,7 @@ do
       require_body "$body" "$route" 'nvx-blog-index' || { cleanup; exit 1; }
       ;;
     '/madrid/valoracion/')
-      require_body "$body" "$route" 'id="nvx-hubspot-native-form"' || { cleanup; exit 1; }
-      require_body "$body" "$route" 'data-nvx-consent="functional"' || { cleanup; exit 1; }
-      require_body "$body" "$route" 'hs-form-frame' || { cleanup; exit 1; }
-      require_body "$body" "$route" '${HUBSPOT_FORM_ID}' || { cleanup; exit 1; }
-      legacy_direct_forms="$(legacy_valoracion_direct_form_count "$body")"
-      [[ "$legacy_direct_forms" == '0' ]] \
-        || { echo "PRODUCTION_PROBE_FAIL route=$route reason=legacy_direct_form count=$legacy_direct_forms mode=$probe_mode" >&2; cleanup; exit 1; }
+      validate_valoracion_first_party_form "$body" "$route" || { cleanup; exit 1; }
       ;;
     '/protocolos-signature/')
       validate_signature_frame "$body" "$route" || { cleanup; exit 1; }
@@ -655,10 +669,10 @@ if (!report.pass) {
 const verifiedRunId = report.origin.identity?.DEPLOY_RUN_ID || expectedRunId || '(unknown)';
 if (report.external.pass) {
   console.log(
-    `Production boundary PASS: origin and GitHub-runner external probes agree across ${routes.length} routes; public render, canonical functional HubSpot landing, no-consent Meta boundary, index/follow and exact 4-field identity SHA ${expectedSha} / run ${verifiedRunId} verified.`,
+    `Production boundary PASS: origin and GitHub-runner external probes agree across ${routes.length} routes; public render, canonical first-party valoración landing, no-consent Meta boundary, index/follow and exact 4-field identity SHA ${expectedSha} / run ${verifiedRunId} verified.`,
   );
 } else {
   console.log(
-    `Production boundary PASS: GitHub-runner edge returned only SiteGround 202 challenges across ${routes.length} routes; localhost origin and non-loopback SiteGround public-host probe both verified exact 4-field identity SHA ${expectedSha} / run ${verifiedRunId}, public render, canonical functional HubSpot landing, no-consent Meta boundary and index/follow.`,
+    `Production boundary PASS: GitHub-runner edge returned only SiteGround 202 challenges across ${routes.length} routes; localhost origin and non-loopback SiteGround public-host probe both verified exact 4-field identity SHA ${expectedSha} / run ${verifiedRunId}, public render, canonical first-party valoración landing, no-consent Meta boundary and index/follow.`,
   );
 }
