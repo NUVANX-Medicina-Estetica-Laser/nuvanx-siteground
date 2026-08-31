@@ -87,6 +87,12 @@ function nvx_lead_captured_field_map( array $payload ): array {
 	return $mapped;
 }
 
+/** Authoritative server-side marketing-consent decision for capture relay. */
+function nvx_lead_captured_server_marketing_consent(): bool {
+	return function_exists( 'nvx_valoracion_has_marketing_consent' )
+		&& nvx_valoracion_has_marketing_consent();
+}
+
 /**
  * Return consented Meta browser identity from the first-party request.
  * FBP is never synthesized. FBC may arrive from the consented runtime or the
@@ -96,7 +102,8 @@ function nvx_lead_captured_field_map( array $payload ): array {
  */
 function nvx_lead_captured_meta_identity(): array {
 	$out = array();
-	if ( ! function_exists( 'nvx_hubspot_secure_post_value' ) ) {
+	if ( ! nvx_lead_captured_server_marketing_consent()
+		|| ! function_exists( 'nvx_hubspot_secure_post_value' ) ) {
 		return $out;
 	}
 
@@ -106,12 +113,14 @@ function nvx_lead_captured_meta_identity(): array {
 	}
 
 	foreach ( array( 'fbc' => '_fbc', 'fbp' => '_fbp' ) as $key => $cookie_name ) {
-		$value = nvx_hubspot_secure_post_value( $key, 600 );
+		$value = nvx_hubspot_secure_post_value( $key, 512 );
 		if ( '' === $value && isset( $_COOKIE[ $cookie_name ] ) ) {
 			$value = sanitize_text_field( wp_unslash( (string) $_COOKIE[ $cookie_name ] ) );
 		}
 		$value = trim( $value );
-		if ( '' !== $value && 1 === preg_match( '/^fb\.1\.\d{10,16}\.[A-Za-z0-9._~:+-]{1,512}$/', $value ) ) {
+		if ( '' !== $value
+			&& strlen( $value ) <= 512
+			&& 1 === preg_match( '/^fb\.1\.\d{10,16}\.[A-Za-z0-9._~:+-]+$/', $value ) ) {
 			$out[ $key ] = $value;
 		}
 	}
@@ -263,8 +272,7 @@ function nvx_lead_captured_on_http_response( $response, array $parsed_args, stri
 
 	$is_test           = isset( $fields['nvx_is_test_lead'] ) && 'true' === strtolower( $fields['nvx_is_test_lead'] );
 	$test_run_id       = isset( $fields['nvx_test_run_id'] ) ? $fields['nvx_test_run_id'] : '';
-	$marketing_consent = function_exists( 'nvx_hubspot_secure_post_value' )
-		&& '1' === nvx_hubspot_secure_post_value( 'nvx_marketing_consent', 1 );
+	$marketing_consent = nvx_lead_captured_server_marketing_consent();
 	$email             = isset( $fields['email'] ) ? strtolower( trim( $fields['email'] ) ) : '';
 	$email_hash        = '' !== $email ? hash( 'sha256', $email ) : null;
 	unset( $email );
