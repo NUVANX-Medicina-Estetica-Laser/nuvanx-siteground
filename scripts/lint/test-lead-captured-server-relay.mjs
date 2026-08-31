@@ -60,8 +60,10 @@ const consentAware = /'marketing_consent'\s*=>/.test(payloadBlock);
 if (consentAware) {
   assert.match(consent, /function nvx_marketing_consent_granted\(\): bool/,
     'There must be one shared server-side marketing-consent owner');
-  assert.doesNotMatch(consent, /\$_POST|nvx_marketing_consent/,
+  assert.doesNotMatch(consent, /\$_POST/,
     'Shared authority must not trust a browser POST marker');
+  assert.doesNotMatch(consent, /nvx_hubspot_secure_post_value|'\s*nvx_marketing_consent\s*'/,
+    'Shared authority must not read the hidden POST consent field');
   assert.match(bridge, /\$marketing_consent\s*=\s*nvx_marketing_consent_granted\(\);/,
     'HubSpot bridge must use the shared server decision');
   assert.doesNotMatch(bridge, /\$marketing_consent\s*=\s*'1' === nvx_hubspot_secure_post_value/,

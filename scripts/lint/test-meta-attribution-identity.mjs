@@ -32,8 +32,10 @@ assert.match(direct, /nvx_marketing_consent_granted\(\)/,
 assert.match(consent, /function nvx_marketing_consent_granted\(\): bool/);
 assert.match(consent, /cmplz_has_consent\( 'marketing' \)/);
 assert.match(consent, /\$_COOKIE\['cmplz_marketing'\]/);
-assert.doesNotMatch(consent, /\$_POST|nvx_marketing_consent/,
+assert.doesNotMatch(consent, /\$_POST/,
   'Canonical consent authority must never trust browser POST markers');
+assert.doesNotMatch(consent, /nvx_hubspot_secure_post_value|'\s*nvx_marketing_consent\s*'/,
+  'Canonical consent authority must not read the hidden POST consent field');
 
 assert.match(bridge, /require_once __DIR__ \. '\/nvx-marketing-consent\.php';/);
 assert.match(bridge, /\$marketing_consent = nvx_marketing_consent_granted\(\);/,

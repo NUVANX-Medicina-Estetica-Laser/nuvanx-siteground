@@ -254,8 +254,10 @@ if (!fs.existsSync(runtimePath)) {
     'First-party lead lineage must not be destroyed as a privileged QA field');
   assert.match(bridge, /'nvx_lead_id' === \$name[\s\S]*?nvx_hubspot_secure_is_uuid_v4/,
     'Bridge must preserve only a validated UUID v4 lead lineage');
-  assert.match(bridge, /\$marketing_consent = '1' === nvx_hubspot_secure_post_value\( 'nvx_marketing_consent', 1 \)/,
-    'Bridge must read marketing consent only to filter attribution fields');
+  assert.match(bridge, /\$marketing_consent = nvx_marketing_consent_granted\(\);/,
+    'Bridge must read marketing consent from the shared server authority');
+  assert.doesNotMatch(bridge, /\$marketing_consent\s*=\s*'1' === nvx_hubspot_secure_post_value\( 'nvx_marketing_consent'/,
+    'Bridge must not use the hidden POST consent field as authority');
   assert.doesNotMatch(bridge, /nvx_no_consent|Marketing attribution requires explicit consent/,
     'Missing marketing consent must not block first-party lead creation');
   assert.match(bridge, /nvx_hubspot_secure_filter_fields\( \$fields, \$marketing_consent \)/,
