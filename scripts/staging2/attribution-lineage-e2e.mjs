@@ -2,12 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
-import {
-  assertHubSpotFormDefinitionContract,
-  inspectHubSpotFormDefinition,
-  isHubSpotEmbedDefinitionUrl,
-  waitForHubSpotEmbedDefinition,
-} from './hubspot-form-definition-contract.mjs';
 import { EX_TEMPFAIL, getGitHubEventPath, EXECUTION_PATHS } from './siteground-transient-classifier.mjs';
 
 const BASE_URL = (process.env.BASE_URL || '').replace(/\/+$/, '');
@@ -33,10 +27,6 @@ const query = `utm_source=google&utm_medium=cpc&utm_campaign=nvx_lineage_e2e&gcl
 const managedTarget = `${BASE_URL}/madrid/valoracion/?${query}`;
 const modalTarget = `${BASE_URL}/?${query}`;
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function isTransient(error) {
   if (error?.exitCode === EX_TEMPFAIL) return true;
   if (error instanceof assert.AssertionError) return false;
@@ -53,8 +43,13 @@ async function assertHealthyNavigation(page, target) {
 }
 
 async function enableConsentAndSync(page) {
-  const contractReady = await page.waitForFunction(() => Boolean(window.NUVANXAttributionContract?.getLeadId), null, { timeout: 15_000 }).catch(() => null);
+  const contractReady = await page.waitForFunction(
+    () => Boolean(window.NUVANXAttributionContract?.getLeadId),
+    null,
+    { timeout: 15_000 }
+  ).catch(() => null);
   assert.ok(contractReady, 'CANDIDATE_REGRESSION: NUVANXAttributionContract unavailable in page runtime');
+
   return page.evaluate(() => {
     window.wp_has_consent = (type) => type === 'marketing' || type === 'statistics';
     window.cmplz_has_consent = (type) => type === 'marketing' || type === 'statistics';
@@ -62,7 +57,8 @@ async function enableConsentAndSync(page) {
     document.dispatchEvent(new Event('cmplz_enable_category'));
     window.NUVANXAttributionContract?.getFirstTouch?.();
     document.dispatchEvent(new Event('wp_listen_for_consent_change'));
-    window.NUVANXHubSpotAttributionSync?.syncExistingForms?.();
+    document.dispatchEvent(new Event('wp_consent_type_defined'));
+
     return {
       env: window.nvxConversionEvents?.env || '',
       qa: window.nvxConversionEvents?.qa || {},
@@ -72,84 +68,36 @@ async function enableConsentAndSync(page) {
   });
 }
 
-function isQaTrue(val) {
-  if (Array.isArray(val)) val = val[0];
-  if (val === true || val === 1) return true;
-  const str = String(val ?? '').toLowerCase();
-  return str === 'true' || str === '1';
-}
+async function waitForDirectLineage(page, expectedLeadId, expectedGclid, timeout = 10_000) {
+  const ready = await page.waitForFunction(
+    ({ leadId, clickId }) => {
+      const form = document.querySelector('[data-nvx-direct-form]');
+      if (!form) return false;
+      const value = (name) => String(form.querySelector(`[name="${name}"]`)?.value || '');
+      return value('nvx_lead_id').toLowerCase() === leadId
+        && value('nvx_marketing_consent') === '1'
+        && value('utm_source') === 'google'
+        && value('gclid') === clickId;
+    },
+    { leadId: expectedLeadId, clickId: expectedGclid },
+    { timeout }
+  ).catch(() => null);
 
-async function readNativeFields(page, formId) {
-  return page.evaluate(async (expectedFormId) => {
-    const forms = window.HubSpotFormsV4?.getForms?.() || [];
-    const form = forms.find((candidate) => String(candidate?.getFormId?.() || '').toLowerCase() === expectedFormId);
+  assert.ok(ready, 'CANDIDATE_REGRESSION: first-party form did not synchronize canonical lineage within deadline');
+
+  return page.evaluate(() => {
+    const form = document.querySelector('[data-nvx-direct-form]');
     if (!form) return null;
-    await window.NUVANXHubSpotAttributionSync?.syncForm?.(form);
-    const values = {};
-    for (const field of await form.getFormFieldValues() || []) {
-      const actual = String(field?.name || '');
-      const canonical = actual.replace(/^\d+-\d+\//, '');
-      if (canonical) {
-        let val = field?.value;
-        if (Array.isArray(val) && val.length === 1) val = val[0];
-        values[canonical] = val;
-      }
-    }
-    return values;
-  }, formId);
-}
-
-async function waitForStableHubSpotControls(page, formId, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const status = await page.evaluate((expectedFormId) => {
-      const allDocuments = [document];
-      for (const iframe of document.querySelectorAll('iframe')) {
-        try {
-          if (iframe.contentDocument) allDocuments.push(iframe.contentDocument);
-        } catch {}
-      }
-
-      let foundControls = 0;
-      const visibleFieldNames = [];
-
-      for (const doc of allDocuments) {
-        const form = doc.querySelector('form');
-        if (!form) continue;
-
-        const inputs = Array.from(doc.querySelectorAll('input, select, textarea'));
-        for (const input of inputs) {
-          const style = window.getComputedStyle(input);
-          const rect = input.getBoundingClientRect();
-          const isVisible = style.display !== 'none' &&
-                            style.visibility !== 'hidden' &&
-                            Number.parseFloat(style.opacity || '1') > 0.01 &&
-                            rect.width > 1 &&
-                            rect.height > 1 &&
-                            input.type !== 'hidden';
-
-          if (isVisible) {
-            foundControls += 1;
-            const rawName = input.getAttribute('name') || input.id || '';
-            const canonical = rawName.replace(/^\d+-\d+\//, '').trim();
-            if (canonical) visibleFieldNames.push(canonical);
-          }
-        }
-      }
-
-      return {
-        ready: foundControls >= 1,
-        controlCount: foundControls,
-        visibleFieldNames,
-      };
-    }, formId).catch(() => ({ ready: false, controlCount: 0, visibleFieldNames: [] }));
-
-    if (status.ready) {
-      return status;
-    }
-    await delay(250);
-  }
-  return { ready: false, controlCount: 0, visibleFieldNames: [] };
+    const value = (name) => String(form.querySelector(`[name="${name}"]`)?.value || '');
+    return {
+      leadId: value('nvx_lead_id').toLowerCase(),
+      marketing: value('nvx_marketing_consent'),
+      utmSource: value('utm_source'),
+      utmMedium: value('utm_medium'),
+      gclid: value('gclid'),
+      browserQaFields: form.querySelectorAll('[name="nvx_is_test_lead"],[name="nvx_test_run_id"]').length,
+    };
+  });
 }
 
 await fs.mkdir(new URL('./valoracion-artifacts/', import.meta.url), { recursive: true });
@@ -158,41 +106,34 @@ await fs.rm(ARTIFACT_PATH, { force: true });
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 const page = await context.newPage();
-const hubspotEmbedTracker = {
-  requests: [],
-  failedRequests: [],
-  responses: [],
-};
+const managedHubSpotFormRequests = [];
 
 page.on('request', (request) => {
   const url = request.url();
-  if (isHubSpotEmbedDefinitionUrl(url)) {
-    hubspotEmbedTracker.requests.push({ url, request, timestamp: Date.now() });
-  }
-});
-
-page.on('requestfailed', (request) => {
-  const url = request.url();
-  if (isHubSpotEmbedDefinitionUrl(url)) {
-    const errorText = request.failure()?.errorText || 'network_failure';
-    hubspotEmbedTracker.failedRequests.push({ url, errorText, timestamp: Date.now() });
-  }
-});
-
-page.on('response', (response) => {
-  const url = response.url();
-  if (isHubSpotEmbedDefinitionUrl(url)) {
-    hubspotEmbedTracker.responses.push({ url, response, timestamp: Date.now() });
+  if (/hsforms\.(?:net|com)\/forms\/embed\//i.test(url)) {
+    managedHubSpotFormRequests.push(url);
   }
 });
 
 try {
-  // Surface 1: canonical valoración landing. It intentionally owns only the native HubSpot form.
+  // Surface 1: the managed landing owns exactly one first-party form. It must
+  // not depend on the HubSpot browser iframe to preserve lineage.
   await assertHealthyNavigation(page, managedTarget);
+
   assert.equal(
-    await page.locator('[data-nvx-direct-form]').count(),
+    await page.locator('#nvx-hubspot-form [data-nvx-direct-form]').count(),
+    1,
+    'Canonical /madrid/valoracion/ must render exactly one first-party form'
+  );
+  assert.equal(
+    await page.locator('#nvx-hubspot-form .hs-form-frame[data-form-id], #nvx-hubspot-form iframe[src*="hsforms"]').count(),
     0,
-    'Canonical /madrid/valoracion/ must not render the first-party fallback beside HubSpot'
+    'Canonical /madrid/valoracion/ must not expose a browser-owned HubSpot form'
+  );
+  assert.equal(
+    await page.locator('#nvx-valoracion-first-party-form[data-nvx-first-party-owner="1"]').count(),
+    1,
+    'Canonical first-party output owner marker must be present'
   );
 
   const managedState = await enableConsentAndSync(page);
@@ -200,9 +141,9 @@ try {
   assert.match(
     managedState.formId,
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    'Browser form identity must be a server-provided canonical UUID'
+    'Browser form identity must remain server-provided even though transport is server-side'
   );
-  assert.equal(managedState.qa?.is_test_lead, true, 'Staging2 QA identity must be server-owned and enabled');
+  assert.equal(managedState.qa?.is_test_lead, true, 'Staging2 QA identity must remain server-owned and enabled');
   assert.match(
     String(managedState.qa?.test_run_id || ''),
     /^staging2-sha-[0-9a-f]{12}$/,
@@ -214,182 +155,81 @@ try {
     'Attribution contract must provide one session UUID v4'
   );
 
-  // Inspect the exact public embed definition consumed by HubSpot Forms V4.
-  // Capturing the browser response avoids the authenticated Forms API entirely,
-  // introduces no new credential path, and cannot mutate HubSpot.
-  const capturedDefinition = await waitForHubSpotEmbedDefinition(hubspotEmbedTracker, managedState.formId);
-  const hubspotContract = inspectHubSpotFormDefinition(capturedDefinition.payload, managedState.formId);
-  await fs.writeFile(
-    ARTIFACT_PATH,
-    `${JSON.stringify({
-      schema: 4,
-      environment: 'staging2',
-      mode: 'zero_submit_embed_contract',
-      embed_definition_source: capturedDefinition.source,
-      form_contract: hubspotContract,
-      submission_performed: false,
-      verified_at: new Date().toISOString(),
-    }, null, 2)}\n`,
-    'utf8'
-  );
-  assertHubSpotFormDefinitionContract(hubspotContract);
-  console.log(
-    `HUBSPOT_NATIVE_FORM_CONTRACT=PASS source=embed_v3 form_id=${managedState.formId} required=${hubspotContract.required_fields.length}`
+  const managedDirect = await waitForDirectLineage(page, managedState.leadId, gclid);
+  assert.ok(managedDirect, 'Managed first-party form must remain available');
+  assert.equal(managedDirect.leadId, managedState.leadId);
+  assert.equal(managedDirect.marketing, '1');
+  assert.equal(managedDirect.utmSource, 'google');
+  assert.equal(managedDirect.utmMedium, 'cpc');
+  assert.equal(managedDirect.gclid, gclid);
+  assert.equal(
+    managedDirect.browserQaFields,
+    0,
+    'QA classification must not be browser-submittable; the secure bridge owns QA fields server-side'
   );
 
-  const hubspotFormDiscovered = await page.waitForFunction((formId) => {
-    const api = window.HubSpotFormsV4;
-    if (!api || typeof api.getForms !== 'function') return false;
-    return api.getForms().some((candidate) => String(candidate?.getFormId?.() || '').toLowerCase() === formId);
-  }, managedState.formId, { timeout: 20_000 }).catch(() => null);
-  assert.ok(hubspotFormDiscovered, `CANDIDATE_REGRESSION: HubSpot form ${managedState.formId} not rendered in DOM`);
-
-  let nativeFields = null;
-  const nativeDeadline = Date.now() + 10_000;
-  while (Date.now() < nativeDeadline) {
-    nativeFields = await readNativeFields(page, managedState.formId);
-    const qaReady = isQaTrue(nativeFields?.nvx_is_test_lead);
-    const nativeLineageReady = String(nativeFields?.nvx_lead_id || '').toLowerCase() === managedState.leadId
-      && qaReady
-      && String(nativeFields?.nvx_test_run_id || '') === String(managedState.qa.test_run_id)
-      && String(nativeFields?.nvx_utm_source || '') === 'google'
-      && String(nativeFields?.nvx_google_click_id || '') === gclid;
-    if (nativeLineageReady) break;
-    await delay(250);
-  }
-
-  const stableControls = await waitForStableHubSpotControls(page, managedState.formId);
-  const improperlyVisibleLineage = REQUIRED_NATIVE_LINEAGE_FIELDS.filter((name) =>
-    stableControls.visibleFieldNames.includes(name)
+  // Allow deferred loaders to settle and prove the removed native owner is not
+  // silently recreated after consent is granted.
+  await page.waitForTimeout(1000);
+  assert.equal(
+    await page.locator('#nvx-hubspot-form .hs-form-frame[data-form-id], #nvx-hubspot-form iframe[src*="hsforms"]').count(),
+    0,
+    'Native HubSpot form must remain retired after consent events'
+  );
+  assert.equal(
+    managedHubSpotFormRequests.length,
+    0,
+    `Managed landing unexpectedly requested HubSpot browser form assets: ${managedHubSpotFormRequests.join(',')}`
   );
 
-  const nativeFieldNames = Object.keys(nativeFields || {}).sort();
-  const missingNativeReadbackFields = hubspotContract.required_fields.filter(
-    (name) => !Object.hasOwn(nativeFields || {}, name)
-  );
-
-  await fs.writeFile(
-    ARTIFACT_PATH,
-    `${JSON.stringify({
-      schema: 4,
-      environment: 'staging2',
-      mode: 'zero_submit_native_readback',
-      embed_definition_source: capturedDefinition.source,
-      form_contract: hubspotContract,
-      native_field_names: nativeFieldNames,
-      visible_field_names: stableControls.visibleFieldNames,
-      missing_native_readback_fields: missingNativeReadbackFields,
-      improperly_visible_lineage_fields: improperlyVisibleLineage,
-      native_lineage_presence: {
-        nvx_lead_id: Object.hasOwn(nativeFields || {}, 'nvx_lead_id'),
-        nvx_is_test_lead: Object.hasOwn(nativeFields || {}, 'nvx_is_test_lead'),
-        nvx_test_run_id: Object.hasOwn(nativeFields || {}, 'nvx_test_run_id'),
-        nvx_utm_source: Object.hasOwn(nativeFields || {}, 'nvx_utm_source'),
-        nvx_google_click_id: Object.hasOwn(nativeFields || {}, 'nvx_google_click_id'),
-      },
-      native_qa_value: nativeFields?.nvx_is_test_lead ?? null,
-      submission_performed: false,
-      verified_at: new Date().toISOString(),
-    }, null, 2)}\n`,
-    'utf8'
-  );
-
-  if (missingNativeReadbackFields.length > 0) {
-    console.error(`HUBSPOT_NATIVE_READBACK=FAIL missing=${missingNativeReadbackFields.join(',')}`);
-  } else if (!isQaTrue(nativeFields?.nvx_is_test_lead)) {
-    console.error(`HUBSPOT_NATIVE_READBACK=FAIL qa_value=${JSON.stringify(nativeFields?.nvx_is_test_lead ?? null)}`);
-  }
-
-  assert.deepEqual(
-    improperlyVisibleLineage,
-    [],
-    `CANDIDATE_REGRESSION: HubSpot lineage fields must not be rendered visibly in DOM: ${improperlyVisibleLineage.join(',')}`
-  );
-
-  assert.ok(nativeFields, 'Canonical HubSpot V4 form must be discoverable after marketing consent');
-  assert.equal(String(nativeFields.nvx_lead_id || '').toLowerCase(), managedState.leadId);
-  assert.ok(
-    isQaTrue(nativeFields.nvx_is_test_lead),
-    'Native HubSpot form must contain server-owned QA=true'
-  );
-  assert.equal(String(nativeFields.nvx_test_run_id || ''), String(managedState.qa.test_run_id));
-  assert.equal(String(nativeFields.nvx_utm_source || ''), 'google');
-  assert.equal(String(nativeFields.nvx_google_click_id || ''), gclid);
-
-  // Surface 2: a normal public page owns the site-wide modal with the first-party fallback.
-  // Reuse the same browser context/session to prove one lineage UUID crosses both surfaces.
+  // Surface 2: a normal public page keeps the site-wide modal. Reuse the same
+  // browser context/session and prove the same lineage UUID crosses both surfaces.
   await assertHealthyNavigation(page, modalTarget);
   const directFormAttached = await page.waitForSelector('[data-nvx-direct-form]', { state: 'attached', timeout: 15_000 }).catch(() => null);
-  assert.ok(directFormAttached, 'CANDIDATE_REGRESSION: First-party fallback form [data-nvx-direct-form] missing from public modal page');
+  assert.ok(directFormAttached, 'CANDIDATE_REGRESSION: first-party modal form missing from public page');
+
   const modalState = await enableConsentAndSync(page);
   assert.equal(modalState.env, 'staging2');
   assert.equal(String(modalState.qa?.test_run_id || ''), String(managedState.qa.test_run_id));
+  assert.equal(modalState.leadId, managedState.leadId, 'Managed landing and modal must share one browser lineage UUID');
 
-  await page.evaluate(() => {
-    document.dispatchEvent(new Event('wp_listen_for_consent_change'));
-  });
+  const modalDirect = await waitForDirectLineage(page, managedState.leadId, gclid);
+  assert.ok(modalDirect, 'First-party modal form must remain present');
+  assert.equal(modalDirect.leadId, managedState.leadId);
+  assert.equal(modalDirect.marketing, '1');
+  assert.equal(modalDirect.gclid, gclid);
+  assert.equal(modalDirect.utmSource, 'google');
+  assert.equal(modalDirect.browserQaFields, 0);
 
-  const directStateReady = await page.waitForFunction(
-    ({ expectedLeadId, expectedGclid }) => {
-      const form = document.querySelector('[data-nvx-direct-form]');
-      if (!form) return false;
-      const leadId = String(form.querySelector('[name="nvx_lead_id"]')?.value || '').toLowerCase();
-      const marketing = String(form.querySelector('[name="nvx_marketing_consent"]')?.value || '');
-      const gclidVal = String(form.querySelector('[name="gclid"]')?.value || '');
-      const utmSource = String(form.querySelector('[name="utm_source"]')?.value || '');
-      return leadId === expectedLeadId && marketing === '1' && gclidVal === expectedGclid && utmSource === 'google';
-    },
-    { expectedLeadId: managedState.leadId, expectedGclid: gclid },
-    { timeout: 10_000 }
-  ).catch(() => null);
-
-  assert.ok(
-    directStateReady,
-    'CANDIDATE_REGRESSION: First-party fallback form did not synchronize attribution fields within deadline'
-  );
-
-  const directState = await page.evaluate(() => {
-    const form = document.querySelector('[data-nvx-direct-form]');
-    if (!form) return null;
-    return {
-      leadId: String(form.querySelector('[name="nvx_lead_id"]')?.value || '').toLowerCase(),
-      marketing: String(form.querySelector('[name="nvx_marketing_consent"]')?.value || ''),
-      gclid: String(form.querySelector('[name="gclid"]')?.value || ''),
-      utmSource: String(form.querySelector('[name="utm_source"]')?.value || ''),
-    };
-  });
-
-  assert.ok(directState, 'First-party modal fallback must remain present on eligible public pages');
-  assert.equal(directState.leadId, managedState.leadId,
-    'Native HubSpot and first-party fallback must share exactly one browser lineage UUID');
-  assert.equal(directState.marketing, '1');
-  assert.equal(directState.gclid, gclid);
-  assert.equal(directState.utmSource, 'google');
-
-  // Deliberately zero-submit: acceptance must not create QA contacts in the commercial HubSpot portal
-  // or production attribution rows. Server relay behavior is covered by deterministic contract tests.
+  // Deliberately zero-submit. The secure bridge, QA injection and capture relay
+  // are covered by deterministic source contracts; acceptance must not create a
+  // synthetic patient/contact in the commercial HubSpot portal.
   const evidence = {
-    schema: 4,
+    schema: 5,
     environment: 'staging2',
     source: EVENT_NAME,
-    mode: 'zero_submit',
+    mode: 'zero_submit_first_party_secure_bridge',
     form_id: managedState.formId,
     nvx_lead_id: managedState.leadId,
     gclid,
     test_run_id: String(managedState.qa.test_run_id),
     managed_surface: '/madrid/valoracion/',
-    fallback_surface: '/',
-    embed_definition_source: capturedDefinition.source,
-    hubspot_form_contract: hubspotContract,
-    native_form_lineage: true,
+    modal_surface: '/',
+    first_party_output_owner: true,
+    native_hubspot_browser_owner: false,
+    managed_browser_hubspot_form_requests: managedHubSpotFormRequests.length,
     direct_form_lineage: true,
+    same_session_lineage: true,
+    browser_qa_fields: false,
+    server_qa_owner_expected: true,
     submission_performed: false,
     production_persistence_expected: false,
     verified_at: new Date().toISOString(),
   };
   await fs.writeFile(ARTIFACT_PATH, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+
   console.log(
-    `ATTRIBUTION_LINEAGE_E2E=PASS mode=zero_submit nvx_lead_id=${managedState.leadId} test_run_id=${evidence.test_run_id}`
+    `ATTRIBUTION_LINEAGE_E2E=PASS mode=zero_submit_first_party_secure_bridge nvx_lead_id=${managedState.leadId} test_run_id=${evidence.test_run_id} browser_hubspot_requests=0`
   );
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
