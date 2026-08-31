@@ -149,7 +149,7 @@ See [`../../tools/migrations/README.md`](../../tools/migrations/README.md).
 
 - `deploy-to-staging2.sh` — Staging deployment implementation.
 - `deploy-to-prod.sh` — guarded Production deployment implementation with rollback contract.
-- `flush-prod-cache.sh` — bounded cache helper when explicitly invoked by an approved operational path.
+- `siteground-cache-purge.sh` — canonical SiteGround cache purge owner. Staging post-deploy and post-migration purge must call this helper; do not add a second inline `wp sg purge` in workflow YAML.
 
 `scripts/production/` contains identity, boundary, SEO/origin, SSH and compensating-rollback tooling.
 
