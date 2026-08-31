@@ -85,8 +85,11 @@ function nvx_valoracion_direct_form_markup(): string {
 	$html .= '<input type="hidden" name="nvx_lead_id" value="">';
 	$html .= '<input type="hidden" name="nvx_marketing_consent" value="0">';
 
-	foreach ( array( 'gclid', 'gbraid', 'wbraid', 'gclsrc', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term' ) as $param ) {
+	foreach ( array( 'gclid', 'gbraid', 'wbraid', 'gclsrc', 'fbclid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term' ) as $param ) {
 		$value = isset( $_GET[ $param ] ) ? sanitize_text_field( wp_unslash( (string) $_GET[ $param ] ) ) : '';
+		if ( 'fbclid' === $param && '' !== $value && 1 !== preg_match( '/^[A-Za-z0-9._~:+-]{1,512}$/', $value ) ) {
+			$value = '';
+		}
 		$html .= '<input type="hidden" name="' . esc_attr( $param ) . '" value="' . esc_attr( $value ) . '">';
 	}
 
