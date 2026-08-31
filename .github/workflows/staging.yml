@@ -176,11 +176,14 @@ jobs:
           data='wp-content/themes/nuvanx-medical/inc/data/routes.json'
           if [[ -f "$schema" && -f "$data" ]]; then node scripts/lint/validate-routes-schema.mjs "$schema" "$data"; fi
           bash -n tools/deploy/deploy-to-staging2.sh
+          bash -n tools/deploy/siteground-cache-purge.sh
           bash -n scripts/ci/wait-for-environment-mutation-turn.sh
           bash -n scripts/ci/verify-staging-acceptance.sh
           bash -n scripts/ci/test-mutation-fifo-contract.sh
+          bash -n scripts/ci/test-siteground-cache-owner.sh
           bash -n tools/remote-compare.sh
           bash scripts/ci/test-mutation-fifo-contract.sh
+          bash scripts/ci/test-siteground-cache-owner.sh
           find scripts/staging2 -maxdepth 1 -name '*.mjs' -type f -print0 | xargs -0 -r -n1 node --check
           echo 'STATIC_GATES=PASS'
 
@@ -482,9 +485,10 @@ jobs:
           set -euo pipefail
           REMOTE_RELEASE="$STAGING_ROOT/wp-content/.nuvanx-deployments/${CANDIDATE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-runner-${RUNNER_ATTEMPT_NO}"
           echo "REMOTE_RELEASE=$REMOTE_RELEASE" >> "$GITHUB_ENV"
-          ssh nvx-staging2 "mkdir -p '$REMOTE_RELEASE/theme' '$REMOTE_RELEASE/tools/migrations' '$REMOTE_RELEASE/lib'"
+          ssh nvx-staging2 "mkdir -p '$REMOTE_RELEASE/theme' '$REMOTE_RELEASE/tools/migrations' '$REMOTE_RELEASE/tools/deploy' '$REMOTE_RELEASE/lib'"
           rsync -az --delete --exclude='.git' --exclude='php_errorlog' --exclude='*.log' --exclude='_archive*' --exclude='_disabled*' --exclude='*.bak*' wp-content/themes/nuvanx-medical/ "nvx-staging2:$REMOTE_RELEASE/theme/"
           rsync -az tools/deploy/deploy-to-staging2.sh "nvx-staging2:$REMOTE_RELEASE/deploy-to-staging2.sh"
+          rsync -az tools/deploy/siteground-cache-purge.sh "nvx-staging2:$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh"
           rsync -az lib/ "nvx-staging2:$REMOTE_RELEASE/lib/"
           rsync -az tools/migrations/ "nvx-staging2:$REMOTE_RELEASE/tools/migrations/"
 
@@ -551,18 +555,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh nvx-staging2 "STAGING_ROOT='$STAGING_ROOT' CANDIDATE_SHA='$CANDIDATE_SHA' bash -se" <<'REMOTE'
+          ssh nvx-staging2 "STAGING_ROOT='$STAGING_ROOT' CANDIDATE_SHA='$CANDIDATE_SHA' CACHE_HELPER='$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh' bash -se" <<'REMOTE'
           set -Eeuo pipefail
+          # shellcheck source=/dev/null
+          source "$CACHE_HELPER"
+          siteground_cache_purge "$STAGING_ROOT" active
           cd "$STAGING_ROOT"
-          wp cache flush
-          plugin_slug='sg-cachepress'
-          if ! wp plugin is-active "$plugin_slug"; then wp plugin activate "$plugin_slug" --quiet; fi
-          wp sg purge
-          # Keep Optimizer active: the theme's versioned sitemap exclusions rely
-          # on its response-header integration to prevent stale XML delivery.
-          wp plugin is-active "$plugin_slug"
-          rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-* wp-content/cache/sgo-cache/* wp-content/cache/*
-          wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); }'
           test "$(tr -d '\r\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha)" = "$CANDIDATE_SHA"
           test "$(wp config get DB_NAME)" = 'dbshcocboodiwr'
           test "$(wp option get home)" = 'https://staging2.nuvanx.com'
@@ -579,9 +577,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Fetches the canonical sitemap XML generated directly from the WordPress
-          # runtime at origin via WP-CLI. This is immune to both external Antibot
-          # challenges and closed local HTTP loopback interfaces.
           sitemap_xml=$(ssh nvx-staging2 "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/dump-publication-sitemap-xml.php' --allow-root 2>/dev/null" || true)
           if [[ -z "$sitemap_xml" ]]; then
             sitemap_xml=$(ssh nvx-staging2 "cd '$STAGING_ROOT' && wp eval-file tools/migrations/dump-publication-sitemap-xml.php --allow-root 2>/dev/null" || true)
@@ -589,9 +584,7 @@ jobs:
           if echo "$sitemap_xml" | grep -qE '<sitemapindex|<urlset'; then
             url_count=$(echo "$sitemap_xml" | grep -oE '<loc>[^<]+' | grep -vc '\.xml$' || true)
             echo "SITEMAP_URLS_FROM_SERVER=$url_count"
-            SITEMAP_XML_CONTENT="$sitemap_xml" \
-            EXPECTED_HOST=staging2.nuvanx.com \
-            node scripts/staging2/verify-publication-sitemap-from-xml.mjs
+            SITEMAP_XML_CONTENT="$sitemap_xml" EXPECTED_HOST=staging2.nuvanx.com node scripts/staging2/verify-publication-sitemap-from-xml.mjs
             echo 'STAGING_SITEMAP_MANIFEST_COVERAGE=PASS source=origin-wpcli-runtime'
           else
             echo 'STAGING_SITEMAP_MANIFEST_COVERAGE=FAIL: unable to generate sitemap XML from origin WordPress runtime.' >&2
@@ -620,8 +613,7 @@ jobs:
         run: |
           set -euo pipefail
           set +e
-          STAGING_URL="$STAGING_URL" \
-          node scripts/staging2/test-goya-alias-query.mjs
+          STAGING_URL="$STAGING_URL" node scripts/staging2/test-goya-alias-query.mjs
           result=$?
           set -e
           if [[ "$result" -eq 75 ]]; then
@@ -635,9 +627,7 @@ jobs:
               echo "GOYA_ALIAS_ORIGIN=TRANSIENT status=$origin_result" >&2
               exit 75
             fi
-            STAGING_URL="$STAGING_URL" \
-            GOYA_ALIAS_RESPONSE_FILE="$origin_headers" \
-            node scripts/staging2/test-goya-alias-query.mjs
+            STAGING_URL="$STAGING_URL" GOYA_ALIAS_RESPONSE_FILE="$origin_headers" node scripts/staging2/test-goya-alias-query.mjs
           else
             test "$result" -eq 0
           fi
@@ -673,7 +663,6 @@ jobs:
         run: |
           set -euo pipefail
           cd scripts/staging2
-
           set +e
           timeout --signal=TERM --kill-after=15s 300s npm ci --ignore-scripts
           npm_rc=$?
@@ -684,7 +673,6 @@ jobs:
             exit 0
           fi
           [[ "$npm_rc" -eq 0 ]] || exit "$npm_rc"
-
           set +e
           timeout --signal=TERM --kill-after=15s 300s ./node_modules/.bin/playwright install --with-deps chromium
           playwright_rc=$?
@@ -705,7 +693,6 @@ jobs:
         run: |
           set -Eeuo pipefail
           mkdir -p scripts/staging2/block-c-artifacts scripts/staging2/valoracion-artifacts
-
           set +e
           node scripts/staging2/block-c-entrypoint.mjs
           block_rc=$?
@@ -716,7 +703,6 @@ jobs:
             exit 0
           fi
           [[ "$block_rc" -eq 0 ]] || exit "$block_rc"
-
           set +e
           node scripts/staging2/valoracion-placement.mjs
           valoracion_rc=$?
@@ -740,7 +726,6 @@ jobs:
         run: |
           set -Eeuo pipefail
           mkdir -p scripts/staging2/valoracion-artifacts
-
           set +e
           node scripts/staging2/attribution-lineage-e2e.mjs
           lineage_rc=$?
@@ -779,16 +764,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p scripts/staging2/artifacts
-          jq -n \
-            --arg candidate_sha "$CANDIDATE_SHA" \
-            --arg run_id "$GITHUB_RUN_ID" \
-            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
-            --arg event "$GITHUB_EVENT_NAME" \
-            --arg head_sha "$GITHUB_SHA" \
-            --arg head_branch "$GITHUB_REF_NAME" \
-            --arg workflow_path '.github/workflows/staging.yml' \
-            '{schema:1,candidate_sha:$candidate_sha,run_id:$run_id,run_attempt:$run_attempt,event:$event,head_sha:$head_sha,head_branch:$head_branch,workflow_path:$workflow_path,attribution_lineage:"pass"}' \
-            > scripts/staging2/artifacts/acceptance-manifest.json
+          jq -n --arg candidate_sha "$CANDIDATE_SHA" --arg run_id "$GITHUB_RUN_ID" --arg run_attempt "$GITHUB_RUN_ATTEMPT" --arg event "$GITHUB_EVENT_NAME" --arg head_sha "$GITHUB_SHA" --arg head_branch "$GITHUB_REF_NAME" --arg workflow_path '.github/workflows/staging.yml' '{schema:1,candidate_sha:$candidate_sha,run_id:$run_id,run_attempt:$run_attempt,event:$event,head_sha:$head_sha,head_branch:$head_branch,workflow_path:$workflow_path,attribution_lineage:"pass"}' > scripts/staging2/artifacts/acceptance-manifest.json
           jq -e --arg sha "$CANDIDATE_SHA" --arg run "$GITHUB_RUN_ID" '.schema == 1 and .candidate_sha == $sha and .run_id == $run' scripts/staging2/artifacts/acceptance-manifest.json >/dev/null
           echo "STAGING_ACCEPTANCE_MANIFEST=PASS sha=$CANDIDATE_SHA run_id=$GITHUB_RUN_ID"
 
@@ -811,21 +787,12 @@ jobs:
         run: |
           set -euo pipefail
           marker="$RUNNER_TEMP/staging-deploy-complete.json"
-          # Verify exact SHA is deployed on Staging before creating completion marker
           deployed_sha=$(ssh nvx-staging2 "tr -d '\r\n' < '$STAGING_ROOT/wp-content/themes/nuvanx-medical/.nvx-deploy-sha'" 2>/dev/null || echo "")
           if [[ "$deployed_sha" != "$CANDIDATE_SHA" ]]; then
             echo "STAGING_SHA_MISMATCH expected=$CANDIDATE_SHA deployed=$deployed_sha" >&2
             exit 1
           fi
-          jq -n \
-            --arg candidate_sha "$CANDIDATE_SHA" \
-            --arg run_id "$GITHUB_RUN_ID" \
-            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
-            --arg runner_attempt "$RUNNER_ATTEMPT_NO" \
-            --arg run_acceptance "$RUN_ACCEPTANCE" \
-            --arg deployed_sha "$deployed_sha" \
-            '{schema:1,candidate_sha:$candidate_sha,run_id:$run_id,run_attempt:$run_attempt,runner_attempt:$runner_attempt,run_acceptance:$run_acceptance,deployed_sha:$deployed_sha}' \
-            > "$marker"
+          jq -n --arg candidate_sha "$CANDIDATE_SHA" --arg run_id "$GITHUB_RUN_ID" --arg run_attempt "$GITHUB_RUN_ATTEMPT" --arg runner_attempt "$RUNNER_ATTEMPT_NO" --arg run_acceptance "$RUN_ACCEPTANCE" --arg deployed_sha "$deployed_sha" '{schema:1,candidate_sha:$candidate_sha,run_id:$run_id,run_attempt:$run_attempt,runner_attempt:$runner_attempt,run_acceptance:$run_acceptance,deployed_sha:$deployed_sha}' > "$marker"
           jq -e --arg sha "$CANDIDATE_SHA" '.schema == 1 and .candidate_sha == $sha and .deployed_sha == $sha' "$marker" >/dev/null
           echo "STAGING_COMPLETION_MARKER=$marker" >> "$GITHUB_ENV"
 
@@ -857,7 +824,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh nvx-staging2 "STAGING_ROOT='$STAGING_ROOT' ROLLBACK_DIR='$ROLLBACK_DIR' bash -se" <<'REMOTE'
+          ssh nvx-staging2 "STAGING_ROOT='$STAGING_ROOT' ROLLBACK_DIR='$ROLLBACK_DIR' REMOTE_RELEASE='$REMOTE_RELEASE' bash -se" <<'REMOTE'
           set -Eeuo pipefail
           [[ "$ROLLBACK_DIR" == '/home/customer/www/staging2.nuvanx.com/.nvx-rollback/'* ]]
           test -s "$ROLLBACK_DIR/wp-config.php"; test -s "$ROLLBACK_DIR/theme.tgz"; test -s "$ROLLBACK_DIR/staging-db.sql"
@@ -868,15 +835,9 @@ jobs:
           if [[ -f "$ROLLBACK_DIR/mu-plugins.tgz" ]]; then rm -rf "$STAGING_ROOT/wp-content/mu-plugins"; tar -xzf "$ROLLBACK_DIR/mu-plugins.tgz" -C "$STAGING_ROOT"; fi
           cd "$STAGING_ROOT"
           wp db import "$ROLLBACK_DIR/staging-db.sql"
-          wp cache flush
-          plugin_slug='sg-cachepress'
-          if wp plugin is-installed "$plugin_slug"; then
-            if ! wp plugin is-active "$plugin_slug"; then wp plugin activate "$plugin_slug" --quiet || true; fi
-            wp sg purge || true
-            wp plugin deactivate "$plugin_slug" --quiet || true
-          fi
-          rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-* wp-content/cache/sgo-cache/* wp-content/cache/*
-          wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); }' || true
+          # shellcheck source=/dev/null
+          source "$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh"
+          siteground_cache_purge "$STAGING_ROOT" preserve
           previous="$(cat "$ROLLBACK_DIR/previous-sha.txt" 2>/dev/null || true)"
           if [[ -n "$previous" ]]; then test "$(tr -d '\r\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha)" = "$previous"; fi
           echo 'ROLLBACK_STAGING=PASS'
@@ -1080,9 +1041,6 @@ jobs:
       github.event.pull_request.base.ref == 'master' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    # The acceptance step invokes network-bound npm, Playwright and browser work.
-    # Keep a job-level ceiling as a final guard so a stalled hosted runner cannot
-    # retain the Staging2 mutation lease indefinitely.
     timeout-minutes: 40
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -1206,7 +1164,6 @@ jobs:
           test "$STAGING_ROOT" != "$PROD_ROOT"
           cd "$STAGING_ROOT"
           test "$(wp config get DB_NAME)" = 'dbshcocboodiwr'; test "$(wp option get home)" = 'https://staging2.nuvanx.com'; test "$(wp option get blog_public)" = '0'
-          if wp plugin is-active sg-cachepress; then wp plugin deactivate sg-cachepress --quiet; fi
           umask 077; mkdir -p "$ROLLBACK_DIR"
           tar -czf "$ROLLBACK_DIR/theme.tgz" -C "$STAGING_ROOT" wp-content/themes/nuvanx-medical
           if [[ -d wp-content/mu-plugins ]]; then tar -czf "$ROLLBACK_DIR/mu-plugins.tgz" -C "$STAGING_ROOT" wp-content/mu-plugins; fi
@@ -1215,41 +1172,26 @@ jobs:
           if [[ -f wp-content/themes/nuvanx-medical/.nvx-deploy-sha ]]; then tr -d '\r\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha > "$ROLLBACK_DIR/previous-sha.txt"; else : > "$ROLLBACK_DIR/previous-sha.txt"; fi
           REMOTE
           echo 'STAGING_SNAPSHOT_READY=1' >> "$GITHUB_ENV"
-          ssh nvx-staging2-pr "mkdir -p '$REMOTE_RELEASE/theme' '$REMOTE_RELEASE/tools/migrations' '$REMOTE_RELEASE/lib'"
+          ssh nvx-staging2-pr "mkdir -p '$REMOTE_RELEASE/theme' '$REMOTE_RELEASE/tools/migrations' '$REMOTE_RELEASE/tools/deploy' '$REMOTE_RELEASE/lib'"
           rsync -az --delete --exclude='.git' --exclude='*.log' --exclude='_archive*' --exclude='_disabled*' --exclude='*.bak*' "$CANDIDATE_ROOT/wp-content/themes/nuvanx-medical/" "nvx-staging2-pr:$REMOTE_RELEASE/theme/"
           rsync -az lib/ "nvx-staging2-pr:$REMOTE_RELEASE/lib/"
           rsync -az tools/migrations/ "nvx-staging2-pr:$REMOTE_RELEASE/tools/migrations/"
-          rsync -az tools/deploy/deploy-to-staging2.sh "nvx-staging2-pr:$REMOTE_RELEASE/"
+          rsync -az tools/deploy/deploy-to-staging2.sh "nvx-staging2-pr:$REMOTE_RELEASE/deploy-to-staging2.sh"
+          rsync -az tools/deploy/siteground-cache-purge.sh "nvx-staging2-pr:$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh"
           echo 'STAGING_MUTATION_ARMED=1' >> "$GITHUB_ENV"
           ssh nvx-staging2-pr "NUVANX_CONFIRM=yes bash '$REMOTE_RELEASE/deploy-to-staging2.sh' --wp-root '$STAGING_ROOT' --source-theme '$REMOTE_RELEASE/theme' --sha '$PR_PREVIEW_SHA' --confirm"
 
-          ssh nvx-staging2-pr \
-            "cd '$STAGING_ROOT' && \
-             wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-shared.php' \
-             --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'"
-          ssh nvx-staging2-pr \
-            "grep -q 'Status: MIGRATION_OK' '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'" || exit 1
-
-          ssh nvx-staging2-pr \
-            "cd '$STAGING_ROOT' && \
-             wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-staging-only.php' \
-             --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-staging-only-${{ github.sha }}.log'"
-          ssh nvx-staging2-pr \
-            "grep -q 'Status: MIGRATION_OK' '$REMOTE_RELEASE/migration-staging-only-${{ github.sha }}.log'" || exit 1
-
-          ssh nvx-staging2-pr \
-            "cd '$STAGING_ROOT' && \
-             wp eval-file '$REMOTE_RELEASE/tools/migrations/reconcile-publication-robots.php' \
-             --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-robots-${{ github.sha }}.log'"
+          ssh nvx-staging2-pr "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-shared.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'"
+          ssh nvx-staging2-pr "grep -q 'Status: MIGRATION_OK' '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'" || exit 1
+          ssh nvx-staging2-pr "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-staging-only.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-staging-only-${{ github.sha }}.log'"
+          ssh nvx-staging2-pr "grep -q 'Status: MIGRATION_OK' '$REMOTE_RELEASE/migration-staging-only-${{ github.sha }}.log'" || exit 1
+          ssh nvx-staging2-pr "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/reconcile-publication-robots.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-robots-${{ github.sha }}.log'"
           ssh nvx-staging2-pr "STAGING_ROOT='$STAGING_ROOT' REMOTE_RELEASE='$REMOTE_RELEASE' bash -se" <<'REMOTE'
           set -Eeuo pipefail
           cd "$STAGING_ROOT"
           original_env="$(wp config get WP_ENVIRONMENT_TYPE)"
           [[ "$original_env" == 'staging' ]]
-          restore_environment() {
-            wp config set WP_ENVIRONMENT_TYPE "$original_env"
-            php -l wp-config.php >/dev/null
-          }
+          restore_environment() { wp config set WP_ENVIRONMENT_TYPE "$original_env"; php -l wp-config.php >/dev/null; }
           trap restore_environment EXIT
           grep -q 'PUBLICATION_ROBOTS_RECONCILIATION=PASS' "$REMOTE_RELEASE/migration-robots-${{ github.sha }}.log"
           wp eval-file "$REMOTE_RELEASE/tools/migrations/audit-publication-indexables-runtime.php" --allow-root 2>&1 | tee "$REMOTE_RELEASE/audit-indexables-runtime-${{ github.sha }}.log"
@@ -1266,24 +1208,14 @@ jobs:
           grep -q 'PUBLICATION_SITEMAP_SELECTION=PASS' "$REMOTE_RELEASE/audit-sitemap-selection-${{ github.sha }}.log"
           REMOTE
 
-          ssh nvx-staging2-pr \
-            "cd '$STAGING_ROOT' && \
-             wp eval-file '$REMOTE_RELEASE/tools/migrations/audit-content-divergence.php' \
-             --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'"
-          ssh nvx-staging2-pr \
-            "grep -q 'Status: AUDIT_CLEAN' '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'" || exit 1
-          ssh nvx-staging2-pr "STAGING_ROOT='$STAGING_ROOT' PR_SHA='$PR_SHA' PR_PREVIEW_SHA='$PR_PREVIEW_SHA' bash -se" <<'REMOTE'
+          ssh nvx-staging2-pr "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/audit-content-divergence.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'"
+          ssh nvx-staging2-pr "grep -q 'Status: AUDIT_CLEAN' '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'" || exit 1
+          ssh nvx-staging2-pr "STAGING_ROOT='$STAGING_ROOT' PR_SHA='$PR_SHA' PR_PREVIEW_SHA='$PR_PREVIEW_SHA' CACHE_HELPER='$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh' bash -se" <<'REMOTE'
           set -Eeuo pipefail
+          # shellcheck source=/dev/null
+          source "$CACHE_HELPER"
+          siteground_cache_purge "$STAGING_ROOT" active
           cd "$STAGING_ROOT"
-          wp cache flush
-          plugin_slug='sg-cachepress'
-          if ! wp plugin is-active "$plugin_slug"; then wp plugin activate "$plugin_slug" --quiet; fi
-          wp sg purge
-          # Keep Optimizer active: the theme's versioned sitemap exclusions rely
-          # on its response-header integration to prevent stale XML delivery.
-          wp plugin is-active "$plugin_slug"
-          rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-* wp-content/cache/sgo-cache/* wp-content/cache/*
-          wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); }'
           test "$(tr -d '\r\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha)" = "$PR_PREVIEW_SHA"
           test "$(wp config get DB_NAME)" = 'dbshcocboodiwr'
           test "$(wp option get home)" = 'https://staging2.nuvanx.com'
@@ -1309,26 +1241,16 @@ jobs:
           ssh nvx-staging2-pr "cd '$STAGING_ROOT' && test \"\$(tr -d '\\r\\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha)\" = '$PR_PREVIEW_SHA'"
           pass=0; for attempt in {1..12}; do if node scripts/staging2/verify-staging-boundary.mjs; then pass=1; break; fi; sleep 10; done; test "$pass" = 1
           run_acceptance_component() {
-            local component="$1"
-            local limit="$2"
-            shift 2
-            set +e
-            timeout --signal=TERM --kill-after=30s "$limit" "$@"
-            local rc=$?
-            set -e
-            if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
-              echo "PR_ACCEPTANCE_TIMEOUT component=$component limit=$limit exit=$rc" >&2
-              exit 75
-            fi
+            local component="$1"; local limit="$2"; shift 2
+            set +e; timeout --signal=TERM --kill-after=30s "$limit" "$@"; local rc=$?; set -e
+            if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then echo "PR_ACCEPTANCE_TIMEOUT component=$component limit=$limit exit=$rc" >&2; exit 75; fi
             return "$rc"
           }
-
           cd scripts/staging2
           run_acceptance_component npm-ci 300s npm ci --ignore-scripts
           run_acceptance_component playwright-install 300s ./node_modules/.bin/playwright install --with-deps chromium
           cd ../..
           mkdir -p scripts/staging2/block-c-artifacts scripts/staging2/valoracion-artifacts
-          # Two complete 228-route passes plus clinic-media-runtime need a bounded 20-minute budget when SiteGround antibot forces a transient retry.
           run_acceptance_component block-c 1200s node scripts/staging2/block-c-entrypoint.mjs
           run_acceptance_component valoracion-placement 420s node scripts/staging2/valoracion-placement.mjs
           echo 'PR_BLOCK_C=PASS'
@@ -1356,14 +1278,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh nvx-staging2-pr "STAGING_ROOT='$STAGING_ROOT' ROLLBACK_DIR='$ROLLBACK_DIR' bash -se" <<'REMOTE'
+          ssh nvx-staging2-pr "STAGING_ROOT='$STAGING_ROOT' ROLLBACK_DIR='$ROLLBACK_DIR' REMOTE_RELEASE='$REMOTE_RELEASE' bash -se" <<'REMOTE'
           set -Eeuo pipefail
           [[ "$ROLLBACK_DIR" == '/home/customer/www/staging2.nuvanx.com/.nvx-rollback/'* ]]
           rm -rf "$STAGING_ROOT/wp-content/themes/nuvanx-medical"; tar -xzf "$ROLLBACK_DIR/theme.tgz" -C "$STAGING_ROOT"
           if [[ -f "$ROLLBACK_DIR/mu-plugins.tgz" ]]; then rm -rf "$STAGING_ROOT/wp-content/mu-plugins"; tar -xzf "$ROLLBACK_DIR/mu-plugins.tgz" -C "$STAGING_ROOT"; fi
           if [[ -f "$ROLLBACK_DIR/wp-config.php" ]]; then cp -p "$ROLLBACK_DIR/wp-config.php" "$STAGING_ROOT/wp-config.php"; php -l "$STAGING_ROOT/wp-config.php" >/dev/null; fi
-          cd "$STAGING_ROOT"; wp db import "$ROLLBACK_DIR/staging-db.sql"; wp cache flush
-          if wp plugin is-installed sg-cachepress; then wp plugin activate sg-cachepress --quiet || true; wp sg purge || true; wp plugin deactivate sg-cachepress --quiet || true; fi
+          cd "$STAGING_ROOT"; wp db import "$ROLLBACK_DIR/staging-db.sql"
+          # shellcheck source=/dev/null
+          source "$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh"
+          siteground_cache_purge "$STAGING_ROOT" preserve
           echo 'PR_ROLLBACK_STAGING=PASS'
           REMOTE
 
