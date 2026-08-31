@@ -161,11 +161,9 @@ Production can run reusable optional verification jobs without creating new work
 
 - SEO/GEO + Search Console + IndexNow;
 - Lighthouse performance matrix;
-- HubSpot zero-submit contract verification;
-- final-close redacted inventory;
-- MU-plugin private forensic extraction.
+- HubSpot zero-submit contract verification.
 
-These are retained because they are reusable production controls, not one-time workflows.
+These are retained because they are reusable production controls, not one-time workflows. The reusable redacted scanner `tools/migrations/scan-forensic-source.py` remains a release-regression dependency.
 
 ## 12. Evidence and documentation
 

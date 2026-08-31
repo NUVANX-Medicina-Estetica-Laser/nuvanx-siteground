@@ -175,6 +175,23 @@ pass_assert 'signature-frame-structural-boundary'
 python3 -m py_compile "$FORENSIC_SCANNER" || fail 'forensic_scanner_syntax'
 pass_assert 'forensic-scanner-syntax'
 
+# Historical one-time Production collectors were retired atomically with their
+# workflow inputs/jobs. The reusable redacted scanner stays as a release dependency.
+[[ ! -e "$ROOT/tools/migrations/final-close-wp-inventory.php" ]] \
+  || fail 'retired_final_close_collector_present'
+[[ ! -e "$ROOT/tools/migrations/collect-mu-plugin-forensics.sh" ]] \
+  || fail 'retired_mu_plugin_forensics_collector_present'
+! grep -Fq 'run_final_close_audit' "$WORKFLOW" || fail 'retired_final_close_input_present'
+! grep -Fq 'run_mu_plugin_forensics' "$WORKFLOW" || fail 'retired_mu_forensics_input_present'
+! grep -Eq '^[[:space:]]*final_close_audit:' "$WORKFLOW" || fail 'retired_final_close_job_present'
+! grep -Eq '^[[:space:]]*mu_plugin_forensics:' "$WORKFLOW" || fail 'retired_mu_forensics_job_present'
+if git -C "$ROOT" grep -I -n -E 'run_final_close_audit|run_mu_plugin_forensics|final-close-wp-inventory|collect-mu-plugin-forensics' \
+  -- ':!scripts/ci/test-release-regression-contract.sh' >/tmp/nvx-retired-collector-refs; then
+  cat /tmp/nvx-retired-collector-refs >&2
+  fail 'retired_collector_reference_present'
+fi
+pass_assert 'historical-production-collectors-retired'
+
 EXPECTED_SHA="$(git -C "$ROOT" rev-parse HEAD)" node "$HUBSPOT_ZERO_SUBMIT_CONTRACT" || fail 'hubspot_zero_submit_contract'
 pass_assert 'hubspot-zero-submit-contract'
 
