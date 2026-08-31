@@ -13,13 +13,14 @@ $sitemap_selection_audit = $root . '/tools/migrations/audit-publication-sitemap-
 $sitemap_cache_invalidation = $root . '/tools/migrations/invalidate-publication-sitemap-cache.php';
 $runtime_indexables_audit = $root . '/tools/migrations/audit-publication-indexables-runtime.php';
 $seo_metadata  = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-seo-metadata.php';
-	$seo_retirement = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-seo-legacy-retirement.php';
-	$sitemap_from_xml = $root . '/scripts/staging2/verify-publication-sitemap-from-xml.mjs';
-	$page_hygiene  = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-page-hygiene.php';
+$seo_retirement = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-seo-legacy-retirement.php';
+$sitemap_from_xml = $root . '/scripts/staging2/verify-publication-sitemap-from-xml.mjs';
+$page_hygiene  = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-page-hygiene.php';
 $gracias_behavior = $root . '/scripts/lint/test-gracias-robots-governance.php';
 $staging       = $root . '/.github/workflows/staging.yml';
 $production    = $root . '/.github/workflows/production.yml';
 $deploy        = $root . '/tools/deploy/deploy-to-prod.sh';
+$cache_helper  = $root . '/tools/deploy/siteground-cache-purge.sh';
 
 $manifest_raw = file_get_contents( $manifest_path );
 $manifest     = false === $manifest_raw ? null : json_decode( $manifest_raw, true );
@@ -74,7 +75,7 @@ foreach ( $manifest['routes'] as $route => $config ) {
 	}
 }
 
-foreach ( array( $migration, $indexables_migration, $yoast_rebuild, $sitemap_selection_audit, $sitemap_cache_invalidation, $runtime_indexables_audit, $seo_metadata, $seo_retirement, $sitemap_from_xml, $page_hygiene, $gracias_behavior, $staging, $production, $deploy ) as $path ) {
+foreach ( array( $migration, $indexables_migration, $yoast_rebuild, $sitemap_selection_audit, $sitemap_cache_invalidation, $runtime_indexables_audit, $seo_metadata, $seo_retirement, $sitemap_from_xml, $page_hygiene, $gracias_behavior, $staging, $production, $deploy, $cache_helper ) as $path ) {
 	if ( ! is_file( $path ) || false === file_get_contents( $path ) ) {
 		fwrite( STDERR, "PUBLICATION_ROBOTS_RECONCILIATION_STATIC=FAIL reason=unreadable_dependency\n" );
 		exit( 1 );
@@ -94,6 +95,7 @@ $page_hygiene_raw = file_get_contents( $page_hygiene );
 $staging_raw      = file_get_contents( $staging );
 $production_raw = file_get_contents( $production );
 $deploy_raw     = file_get_contents( $deploy );
+$cache_helper_raw = file_get_contents( $cache_helper );
 
 $required = array(
 	array( $migration_raw, "_yoast_wpseo_meta-robots-noindex" ),
@@ -153,8 +155,11 @@ $required = array(
 	array( $staging_raw, "PUBLICATION_SITEMAP_SELECTION=PASS" ),
 	array( $staging_raw, "verify-publication-sitemap-from-xml.mjs" ),
 	array( $staging_raw, "STAGING_SITEMAP_MANIFEST_COVERAGE=PASS" ),
-	array( $staging_raw, "Keep Optimizer active" ),
-	array( $staging_raw, 'wp plugin is-active "$plugin_slug"' ),
+	array( $staging_raw, 'tools/deploy/siteground-cache-purge.sh' ),
+	array( $staging_raw, 'siteground_cache_purge "$STAGING_ROOT" active' ),
+	array( $cache_helper_raw, 'function_exists' ),
+	array( $cache_helper_raw, 'wp sg purge' ),
+	array( $cache_helper_raw, 'final_state' ),
 	array( $production_raw, "reconcile-publication-robots.php" ),
 	array( $deploy_raw, "ROBOTS_RECONCILIATION_SCRIPT" ),
 	array( $deploy_raw, "INDEXABLES_RECONCILIATION_SCRIPT" ),
