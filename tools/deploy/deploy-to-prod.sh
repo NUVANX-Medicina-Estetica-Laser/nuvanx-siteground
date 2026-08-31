@@ -208,6 +208,12 @@ echo "== Guard production identity =="
   [[ "$home" == "$PROD_URL" ]] || { echo "ERROR: unexpected prod home=$home" >&2; exit 1; }
   [[ "$blog_public" == '1' ]] || { echo "ERROR: production blog_public=$blog_public" >&2; exit 1; }
   [[ "$theme" == 'nuvanx-medical' ]] || { echo "ERROR: active theme is $theme" >&2; exit 1; }
+  if ! wp config has NVX_HUBSPOT_PORTAL_ID 2>/dev/null; then
+    wp config set NVX_HUBSPOT_PORTAL_ID '147416356'
+  fi
+  if ! wp config has NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null; then
+    wp config set NVX_HUBSPOT_VALORACION_FORM_ID '5042522a-0bc5-4381-ac3e-5aee8649b69c'
+  fi
 )
 
 for legacy_mu in \
