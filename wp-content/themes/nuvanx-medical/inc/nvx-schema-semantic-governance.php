@@ -300,6 +300,13 @@ function nvx_schema_semantic_normalize_graph( $graph ) {
 		}
 
 		$types = nvx_schema_semantic_types( $node['@type'] ?? array() );
+		if ( in_array( 'BreadcrumbList', $types, true ) ) {
+			$id = isset( $node['@id'] ) ? (string) $node['@id'] : '';
+			if ( '' === $id || empty( $valid_breadcrumbs[ $id ] ) ) {
+				continue;
+			}
+		}
+
 		if ( nvx_schema_semantic_is_webpage( $types ) ) {
 			if ( isset( $node['breadcrumb'] ) ) {
 				$ref = is_array( $node['breadcrumb'] ) && isset( $node['breadcrumb']['@id'] )
