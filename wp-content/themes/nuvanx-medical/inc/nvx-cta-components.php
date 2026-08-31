@@ -7,10 +7,6 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// The full-page valoración CTA target must register its browser owner before
-// nvx-hero-and-forms.php loads its conditional backward-compatible functions.
-require_once __DIR__ . '/nvx-valoracion-first-party-owner.php';
-
 /** @return string */
 function nvx_cta_valoracion_url(): string {
 	return home_url( '/madrid/valoracion/' );
