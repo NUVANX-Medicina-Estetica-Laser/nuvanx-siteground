@@ -78,6 +78,35 @@ function nvx_hero_find_balanced_div_end( string $content, int $open_pos ): ?int 
 }
 
 /**
+ * Insert a hero media figure after the first hero __copy block, or at section start.
+ */
+function nvx_hero_insert_media_figure( string $content, string $figure ): string {
+	$updated = $content;
+
+	// Locate first hero __copy opening tag.
+	if ( ! preg_match( '/class="[^"]*nvx-(?:brand-hero|editorial-hero|page-hero|hero)__copy[^"]*"/i', $content, $match, PREG_OFFSET_CAPTURE ) ) {
+		// No copy block: place media at the start of the first hero section.
+		$candidate = preg_replace(
+			'/(<section\b[^>]*class="[^"]*nvx-(?:brand-hero|editorial-hero|page-hero|hero)[^"]*"[^>]*>)/i',
+			'$1' . $figure,
+			$content,
+			1
+		);
+		$updated   = is_string( $candidate ) ? $candidate : $content;
+	} else {
+		$class_pos = (int) $match[0][1];
+		$open_pos  = strrpos( substr( $content, 0, $class_pos ), '<div' );
+		// Balance nested <div>…</div> so the figure is inserted AFTER the whole copy.
+		$end = false !== $open_pos ? nvx_hero_find_balanced_div_end( $content, $open_pos ) : null;
+		if ( null !== $end ) {
+			$updated = substr( $content, 0, $end ) . $figure . substr( $content, $end );
+		}
+	}
+
+	return $updated;
+}
+
+/**
 
 /**
  * Ensure content heroes that lack media use the featured image when available.
@@ -290,8 +319,8 @@ add_filter( 'the_content', 'nvx_valoracion_form_stage_class', NVX_HOOK_PRIO_VALO
 
 /*
 ═══════════════════════════════════════════════════════════
-	Valoración conversion mount (absorbed from retired MU plugin)
-	Single canonical first-party form; HubSpot transport remains server-side.
+	Valoración HubSpot mount (absorbed from retired MU plugin)
+	Single canonical lazy frame; no eager hsforms <script>.
 	═══════════════════════════════════════════════════════════ */
 
 /**
@@ -307,23 +336,28 @@ if ( ! function_exists( 'nvx_valoracion_native_hubspot_is_target_page' ) ) {
 }
 
 /**
- * Canonical first-party valoración mount.
- *
- * The visible form is owned by WordPress; successful submissions are forwarded
- * through the authenticated HubSpot bridge and mirrored to the durable Supabase
- * capture ledger only after HubSpot accepts the request.
+ * Lazy HubSpot mount markup (demand-loaded by nvx-runtime-governance.js).
  */
 if ( ! function_exists( 'nvx_valoracion_native_hubspot_mount_markup' ) ) {
 	function nvx_valoracion_native_hubspot_mount_markup(): string {
-		if (
-			! function_exists( 'nvx_hubspot_secure_identity_configured' )
-			|| ! nvx_hubspot_secure_identity_configured()
-			|| ! function_exists( 'nvx_valoracion_direct_form_markup' )
-		) {
-			return '<!-- NVX_VALORACION_FORM_UNAVAILABLE secure_identity_not_configured -->';
+		$portal_id = function_exists( 'nvx_hubspot_secure_portal_id' ) ? nvx_hubspot_secure_portal_id() : '';
+		$form_id   = function_exists( 'nvx_hubspot_secure_form_id' ) ? nvx_hubspot_secure_form_id() : '';
+		$region    = defined( 'NVX_VALORACION_HS_FRAME_REGION' ) ? strtolower( trim( (string) NVX_VALORACION_HS_FRAME_REGION ) ) : 'eu1';
+		if ( 1 !== preg_match( '/^[a-z]{2,4}\d{1,2}$/', $region ) ) {
+			$region = 'eu1';
 		}
 
-		return nvx_valoracion_direct_form_markup();
+		if ( '' === $portal_id || '' === $form_id ) {
+			return '<!-- NVX_HUBSPOT_FORM_UNAVAILABLE identity_not_configured -->';
+		}
+
+		$privacy_url = esc_url( home_url( '/politica-privacidad/' ) );
+
+		// The published HubSpot V4 iframe is the single interactive form on this
+		// route. Rendering the first-party fallback beside it asks visitors for the
+		// same details twice and produces two consent paths.
+		return '<div class="hs-form-frame" data-region="' . esc_attr( $region ) . '" data-form-id="' . esc_attr( $form_id ) . '" data-portal-id="' . esc_attr( $portal_id ) . '" data-nvx-hubspot-lazy="1"></div>'
+			. '<p class="nvx-copy nvx-hubspot-privacy">' . esc_html__( 'Al facilitar tus datos aceptas la', 'nuvanx-medical' ) . ' <a class="nvx-text-link" href="' . $privacy_url . '">' . esc_html__( 'Política de privacidad', 'nuvanx-medical' ) . '</a>.</p>';
 	}
 }
 
@@ -391,12 +425,12 @@ if ( ! function_exists( 'nvx_valoracion_remove_divs_by_class' ) ) {
 }
 
 /**
- * Keep only presentation attributes on the managed conversion host.
+ * Keep only presentation attributes on the managed HubSpot host.
  */
 if ( ! function_exists( 'nvx_valoracion_sanitize_hubspot_host_opening' ) ) {
 	function nvx_valoracion_sanitize_hubspot_host_opening( string $opening ): string {
 		$cleaned = preg_replace(
-			'/\s+(?:data-(?:form-id|portal-id|region|hs-[a-z0-9_-]+|nvx-hubspot-(?:lazy|native|eager))|aria-label)=("([^"]*)"|\'([^\']*)\'|[^\s>]+)/iu',
+			'/\s+(?:data-(?:form-id|portal-id|region|hs-[a-z0-9_-]+|nvx-hubspot-lazy)|aria-label)=("([^"]*)"|\'([^\']*)\'|[^\s>]+)/iu',
 			'',
 			$opening
 		);
@@ -405,7 +439,7 @@ if ( ! function_exists( 'nvx_valoracion_sanitize_hubspot_host_opening' ) ) {
 }
 
 /**
- * Keep one canonical first-party conversion mount on the valoración page output.
+ * Keep a single canonical HubSpot mount on the valoración page output.
  */
 if ( ! function_exists( 'nvx_valoracion_native_hubspot_enforce_single_mount' ) ) {
 	function nvx_valoracion_native_hubspot_enforce_single_mount( string $html ): string {
@@ -434,20 +468,7 @@ if ( ! function_exists( 'nvx_valoracion_native_hubspot_enforce_single_mount' ) )
 		);
 		$first_offset  = (int) $ranges[0]['start'];
 		$first_opening = nvx_valoracion_sanitize_hubspot_host_opening( (string) $ranges[0]['opening'] );
-		$first_opening = preg_replace(
-			'/\bid=(["\'])nvx-hubspot-native-form\1/i',
-			'id="nvx-valoracion-first-party-form"',
-			$first_opening,
-			1
-		);
-		if ( ! is_string( $first_opening ) ) {
-			return $html;
-		}
-		$first_opening = preg_replace( '/>\s*$/', ' data-nvx-first-party-owner="1">', $first_opening, 1 );
-		if ( ! is_string( $first_opening ) ) {
-			return $html;
-		}
-		$marker = '<!-- NVX_VALORACION_CANONICAL_MOUNT -->';
+		$marker        = '<!-- NVX_VALORACION_CANONICAL_MOUNT -->';
 
 		$descending = $ranges;
 		usort(
@@ -461,8 +482,6 @@ if ( ! function_exists( 'nvx_valoracion_native_hubspot_enforce_single_mount' ) )
 		}
 		$html = substr( $html, 0, $first_offset ) . $marker . substr( $html, $first_offset );
 
-		// Retire every browser-owned HubSpot form surface on the managed landing.
-		// HubSpot remains the authoritative destination through the secure server bridge.
 		$stripped = preg_replace( '#<script\b[^>]*\bsrc=["\'][^"\']*hsforms\.net/[^"\']*["\'][^>]*>\s*</script>#iu', '', $html );
 		$html     = is_string( $stripped ) ? $stripped : $html;
 		$stripped = preg_replace( '#<iframe\b[^>]*(?:hsforms|hubspot)[^>]*>[\s\S]*?</iframe>#iu', '', $html );
@@ -470,8 +489,27 @@ if ( ! function_exists( 'nvx_valoracion_native_hubspot_enforce_single_mount' ) )
 		$html     = nvx_valoracion_remove_divs_by_class( $html, 'hs-form-frame' );
 		$html     = nvx_valoracion_remove_divs_by_class( $html, 'hbspt-form' );
 
+		// Enforce single-identity constraint: ensure only one .hs-form-frame with HubSpot attributes
+		// after canonical insertion to prevent duplicate embeds.
 		$canonical = $first_opening . nvx_valoracion_native_hubspot_mount_markup() . '</div>';
-		return str_replace( $marker, $canonical, $html );
+		$html_with_canonical = str_replace( $marker, $canonical, $html );
+
+		// Count .hs-form-frame elements with HubSpot identity attributes
+		$hs_form_frames = [];
+		preg_match_all( '#<div\b[^>]*class=["\'][^"\']*hs-form-frame[^"\']*["\'][^>]*>.*?</div>#is', $html_with_canonical, $hs_form_frames );
+		$identity_count = 0;
+		foreach ( $hs_form_frames[0] as $frame ) {
+			if ( strpos( $frame, 'data-form-id' ) !== false && strpos( $frame, 'data-portal-id' ) !== false ) {
+				$identity_count++;
+			}
+		}
+
+		// Log warning if multiple HubSpot identities detected (development/debug only)
+		if ( $identity_count > 1 && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'NUVANX: Multiple HubSpot form frames with identity attributes detected (' . $identity_count . '). This may cause duplicate embed initialization.' );
+		}
+
+		return $html_with_canonical;
 	}
 }
 
