@@ -25,7 +25,7 @@ $cases_list = array_filter( $cases_list, function( $case ) {
 
 $disclaimer = $cases_data['disclaimer'] ?? __( 'Los resultados y evoluciones mostrados corresponden a casos individuales documentados en consulta médica con consentimiento expreso del paciente. La respuesta biológica, calidad tisular y tiempos de recuperación varían según cada persona. La documentación gráfica no constituye una garantía de resultado idéntico. Todo tratamiento médico requiere valoración anatómica presencial previa.', 'nuvanx-medical' );
 
-$css_relative = '/assets/css/nvx-cases-holding.css';
+$css_relative = '/assets/css/nvx-cases.css';
 $css_path     = get_template_directory() . $css_relative;
 if ( is_readable( $css_path ) ) {
 	$version = function_exists( 'nvx_asset_version' )
@@ -34,7 +34,7 @@ if ( is_readable( $css_path ) ) {
 
 	if ( ! function_exists( 'nvx_theme_public_delivers_inline_styles' ) || ! nvx_theme_public_delivers_inline_styles() ) {
 		wp_enqueue_style(
-			'nvx-cases-holding',
+			'nvx-cases',
 			get_template_directory_uri() . $css_relative,
 			array( 'nvx-components', 'nvx-patterns' ),
 			$version
@@ -44,8 +44,8 @@ if ( is_readable( $css_path ) ) {
 
 get_header();
 ?>
-<div class="nvx-page nvx-brand-page nvx-cases-holding" aria-labelledby="nvx-cases-h1">
-	<section class="nvx-brand-hero nvx-cases-holding__hero" aria-labelledby="nvx-cases-h1">
+<div class="nvx-page nvx-brand-page nvx-cases" aria-labelledby="nvx-cases-h1">
+	<section class="nvx-brand-hero nvx-cases__hero" aria-labelledby="nvx-cases-h1">
 		<div class="nvx-brand-hero__inner">
 			<div class="nvx-brand-hero__copy">
 				<p class="nvx-brand-kicker"><?php esc_html_e( 'EVIDENCIA CLÍNICA · MADRID', 'nuvanx-medical' ); ?></p>
@@ -55,22 +55,22 @@ get_header();
 		</div>
 	</section>
 
-	<section class="nvx-brand-section nvx-cases-holding__intro" aria-labelledby="nvx-cases-intro-title">
+	<section class="nvx-brand-section nvx-cases__intro" aria-labelledby="nvx-cases-intro-title">
 		<div class="nvx-shell nvx-brand-section__inner">
 			<p class="nvx-brand-kicker"><?php esc_html_e( 'PUBLICACIÓN RESPONSABLE', 'nuvanx-medical' ); ?></p>
 			<h2 id="nvx-cases-intro-title" class="nvx-brand-title"><?php esc_html_e( 'Criterios de registro y transparencia clínica', 'nuvanx-medical' ); ?></h2>
-			<p class="nvx-brand-body nvx-cases-holding__lead"><?php esc_html_e( 'Cada caso clínico documentado en NUVANX cumple con criterios rigurosos de consentimiento, estandarización de tomas y contexto técnico para interpretar la respuesta tisular sin falsas expectativas ni promesas de resultado garantizado.', 'nuvanx-medical' ); ?></p>
+			<p class="nvx-brand-body nvx-cases__lead"><?php esc_html_e( 'Cada caso clínico documentado en NUVANX cumple con criterios rigurosos de consentimiento, estandarización de tomas y contexto técnico para interpretar la respuesta tisular sin falsas expectativas ni promesas de resultado garantizado.', 'nuvanx-medical' ); ?></p>
 
-			<ul class="nvx-cases-holding__grid">
-				<li class="nvx-brand-card nvx-cases-holding__card">
+			<ul class="nvx-cases__grid">
+				<li class="nvx-brand-card nvx-cases__card">
 					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Consentimiento y confidencialidad', 'nuvanx-medical' ); ?></h3>
 					<p class="nvx-brand-card__body"><?php esc_html_e( 'Firma previa de consentimiento informado específico para registro clínico fotográfico y divulgación médica disociada.', 'nuvanx-medical' ); ?></p>
 				</li>
-				<li class="nvx-brand-card nvx-cases-holding__card">
+				<li class="nvx-brand-card nvx-cases__card">
 					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Fotografía estandarizada', 'nuvanx-medical' ); ?></h3>
 					<p class="nvx-brand-card__body"><?php esc_html_e( 'Mismo plano anatómico, posición y encuadre comparable, registrando cualquier variación en condiciones lumínicas o posturales.', 'nuvanx-medical' ); ?></p>
 				</li>
-				<li class="nvx-brand-card nvx-cases-holding__card">
+				<li class="nvx-brand-card nvx-cases__card">
 					<h3 class="nvx-brand-card__title"><?php esc_html_e( 'Tiempos biológicos reales', 'nuvanx-medical' ); ?></h3>
 					<p class="nvx-brand-card__body"><?php esc_html_e( 'Seguimiento a 3 y 6 meses en consulta, respetando el intervalo necesario para valorar la maduración de neocolagénesis y retracción dérmica.', 'nuvanx-medical' ); ?></p>
 				</li>
@@ -78,7 +78,7 @@ get_header();
 		</div>
 	</section>
 
-	<section class="nvx-brand-section nvx-cases-holding__scope" aria-labelledby="nvx-cases-scope-title">
+	<section class="nvx-brand-section nvx-cases__scope" aria-labelledby="nvx-cases-scope-title">
 		<div class="nvx-shell nvx-brand-section__inner">
 			<p class="nvx-brand-kicker"><?php esc_html_e( 'EVIDENCIA DOCUMENTADA', 'nuvanx-medical' ); ?></p>
 			<h2 id="nvx-cases-scope-title" class="nvx-brand-title"><?php esc_html_e( 'Casos clínicos documentados', 'nuvanx-medical' ); ?></h2>
@@ -176,11 +176,11 @@ get_header();
 		</div>
 	</section>
 
-	<section class="nvx-brand-section nvx-cases-holding__criteria" aria-labelledby="nvx-cases-criteria-title">
+	<section class="nvx-brand-section nvx-cases__criteria" aria-labelledby="nvx-cases-criteria-title">
 		<div class="nvx-shell nvx-brand-section__inner">
 			<p class="nvx-brand-kicker"><?php esc_html_e( 'VALORACIÓN MÉDICA', 'nuvanx-medical' ); ?></p>
 			<h2 id="nvx-cases-criteria-title" class="nvx-brand-title"><?php esc_html_e( 'Cada caso requiere diagnóstico anatómico individual', 'nuvanx-medical' ); ?></h2>
-			<div class="nvx-cases-holding__criteria-grid">
+			<div class="nvx-cases__criteria-grid">
 				<div>
 					<p class="nvx-brand-body"><?php esc_html_e( 'Una evolución clínica documentada ilustra una respuesta tisular concreta ante una indicación precisa. La idoneidad de cada procedimiento y el plan de tratamiento se determinan tras la exploración anatómica y ecográfica en consulta.', 'nuvanx-medical' ); ?></p>
 				</div>
