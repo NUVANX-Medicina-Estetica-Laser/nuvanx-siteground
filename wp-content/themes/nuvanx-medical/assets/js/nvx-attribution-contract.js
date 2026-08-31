@@ -5,6 +5,7 @@
 	var CLICK_KEYS = ['gclid', 'gbraid', 'wbraid', 'gclsrc'];
 	var META_CLICK_KEYS = ['fbclid'];
 	var ATTR_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+	var META_BROWSER_ID_MAX_LENGTH = 512;
 	var FIRST_TOUCH_KEY = 'nvx_first_touch';
 	var CONVERSION_TOUCH_KEY = 'nvx_conversion_touch';
 	var LEAD_SESSION_KEY = 'nvx_lead_id';
@@ -48,6 +49,11 @@
 		} catch (_error) { return ''; }
 	}
 
+	function cleanFbclid(value) {
+		value = String(value || '').trim();
+		return /^[A-Za-z0-9._~:+-]{1,512}$/.test(value) ? value : '';
+	}
+
 	function classifyChannel(utm, referrer, url) {
 		if (utm.utm_source) {
 			if (utm.utm_source === 'google' && utm.utm_medium === 'cpc') return 'paid_search';
@@ -56,7 +62,7 @@
 			if (utm.utm_medium && utm.utm_medium.indexOf('cpm') !== -1) return 'paid_display';
 			return 'paid_other';
 		}
-		if (urlClickSignal(url, 'fbclid')) return 'paid_social';
+		if (cleanFbclid(urlClickSignal(url, 'fbclid'))) return 'paid_social';
 		if (urlClickSignal(url, 'gclid') || urlClickSignal(url, 'gbraid') || urlClickSignal(url, 'wbraid')) return 'paid_search';
 		if (referrer) {
 			if (referrer.indexOf('google') !== -1 || referrer.indexOf('bing') !== -1) return 'organic_search';
@@ -91,14 +97,10 @@
 		return '';
 	}
 
-	function cleanFbclid(value) {
-		value = String(value || '').trim();
-		return /^[A-Za-z0-9._~:+-]{1,512}$/.test(value) ? value : '';
-	}
-
 	function cleanMetaBrowserId(value) {
 		value = String(value || '').trim();
-		return /^fb\.1\.\d{10,16}\.[A-Za-z0-9._~:+-]{1,512}$/.test(value) ? value : '';
+		if (!value || value.length > META_BROWSER_ID_MAX_LENGTH) return '';
+		return /^fb\.1\.\d{10,16}\.[A-Za-z0-9._~:+-]+$/.test(value) ? value : '';
 	}
 
 	function buildFbcFromFbclid(fbclid, capturedAtMs) {
@@ -135,6 +137,10 @@
 			var clickValue = params.get(allClickKeys[i]);
 			if (clickValue) clicks[allClickKeys[i]] = clickValue;
 		}
+		if (clicks.fbclid) {
+			clicks.fbclid = cleanFbclid(clicks.fbclid);
+			if (!clicks.fbclid) delete clicks.fbclid;
+		}
 
 		var href = (window.location && window.location.href) || '';
 		var landing = href;
@@ -163,7 +169,7 @@
 		if (clicks.gbraid) touch.gbraid = clicks.gbraid;
 		if (clicks.wbraid) touch.wbraid = clicks.wbraid;
 		if (clicks.gclsrc) touch.gclsrc = clicks.gclsrc;
-		if (clicks.fbclid) touch.fbclid = cleanFbclid(clicks.fbclid);
+		if (clicks.fbclid) touch.fbclid = clicks.fbclid;
 		var fbc = cleanMetaBrowserId(readCookie('_fbc'));
 		var fbp = cleanMetaBrowserId(readCookie('_fbp'));
 		if (!fbc && touch.fbclid) fbc = buildFbcFromFbclid(touch.fbclid, now);
