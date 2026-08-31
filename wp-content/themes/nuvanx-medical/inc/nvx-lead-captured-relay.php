@@ -119,8 +119,8 @@ function nvx_lead_captured_field_map( array $payload ): array {
  * Read consented Meta browser identity from the original first-party request.
  *
  * Values are rejected, never truncated, when the complete identifier exceeds
- * 512 characters. FBP is accepted only from the posted browser value or the
- * real _fbp cookie and is never synthesized.
+ * 512 characters. `_fbc`/`_fbp` cookies are preferred over posted hidden
+ * fields. FBP is never synthesized.
  *
  * @return array<string,string>
  */
@@ -137,10 +137,12 @@ function nvx_lead_captured_meta_identity( bool $marketing_consent ): array {
 	}
 
 	foreach ( array( 'fbc' => '_fbc', 'fbp' => '_fbp' ) as $key => $cookie_name ) {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- same validated request boundary as above.
-		$value = isset( $_POST[ $key ] ) ? trim( (string) wp_unslash( $_POST[ $key ] ) ) : '';
-		if ( '' === $value && isset( $_COOKIE[ $cookie_name ] ) ) {
+		$value = '';
+		if ( isset( $_COOKIE[ $cookie_name ] ) ) {
 			$value = trim( (string) wp_unslash( $_COOKIE[ $cookie_name ] ) );
+		} else {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- same validated request boundary as above.
+			$value = isset( $_POST[ $key ] ) ? trim( (string) wp_unslash( $_POST[ $key ] ) ) : '';
 		}
 		if ( '' !== $value
 			&& strlen( $value ) <= 512

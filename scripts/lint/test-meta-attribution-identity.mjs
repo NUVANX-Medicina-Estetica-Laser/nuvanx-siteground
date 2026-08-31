@@ -49,7 +49,12 @@ assert.match(relay, /function nvx_lead_captured_meta_identity\( bool \$marketing
 assert.match(relay, /if \( ! \$marketing_consent \) \{\s*return array\(\);/);
 assert.match(relay, /strlen\( \$fbclid \) <= 512/);
 assert.match(relay, /strlen\( \$value \) <= 512/);
-assert.match(relay, /\$_COOKIE\[ \$cookie_name \]/);
+assert.match(relay, /if \( isset\( \$_COOKIE\[ \$cookie_name \] \) \) \{\s*\$value = trim/);
+assert.match(relay, /isset\( \$_POST\[ \$key \] \)/);
+const cookieFirst = relay.indexOf('if ( isset( $_COOKIE[ $cookie_name ] ) )');
+const postedFallback = relay.indexOf('isset( $_POST[ $key ] )', cookieFirst);
+assert.ok(cookieFirst >= 0 && postedFallback > cookieFirst,
+  'Real _fbc/_fbp cookies must be preferred over posted hidden fields');
 assert.match(relay, /foreach \( nvx_lead_captured_meta_identity\( true \) as \$key => \$value \)/);
 assert.doesNotMatch(relay, /nvx_meta_fbc|nvx_meta_fbp/);
 
