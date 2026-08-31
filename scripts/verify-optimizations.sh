@@ -45,7 +45,7 @@ fi
 
 # ── 2. Hero <img> sin lazy ────────────────────────────────
 echo -e "\n[2] Hero img attributes"
-if echo "$HTML" | grep -qP 'class="[^"]*hero[^"]*"[^>]*loading="lazy"'; then
+if echo "$HTML" | grep -qE 'class="[^"]*hero[^"]*"[^>]*loading="lazy"'; then
     fail "Hero img tiene loading=\"lazy\" — debería ser eager"
 else
     ok "Hero img no tiene loading lazy (probablemente eager)"
