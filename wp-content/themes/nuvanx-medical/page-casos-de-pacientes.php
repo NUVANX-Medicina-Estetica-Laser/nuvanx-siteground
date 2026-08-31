@@ -2,9 +2,10 @@
 /**
  * Canonical patient-cases page.
  *
- * While real evidence is pending explicit editorial approval, this slug-specific
- * template renders a responsible holding state owned by the theme. Once
- * `_nvx_cases_publication_ready=1`, control returns to the ordinary page shell.
+ * Renders repository-governed clinical cases whose publication consent and
+ * editorial indexing policy are owned by the canonical data/manifest layer.
+ * This template owns presentation only and does not maintain a parallel
+ * publication-readiness switch.
  *
  * @package nuvanx-medical
  */
