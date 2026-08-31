@@ -5,6 +5,7 @@ declare(strict_types=1);
  *
  * Opens from opted-in CTAs outside /contacto/, the full valoración landing and
  * post-conversion pages. Contacto remains a form-free NAP and routing page.
+ * The visible form is first-party; HubSpot transport remains server-side.
  *
  * @package nuvanx-medical
  */
@@ -15,15 +16,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Determines whether the valuation modal is enabled for the current request.
- *
- * @return bool True if the modal is enabled for the request, false otherwise.
  */
 function nvx_valoracion_modal_enabled(): bool {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || is_feed() ) {
 		return false;
 	}
 
-	// Contacto is contractually form-free: direct links route to the full landing.
 	if (
 		is_page( 'contacto' )
 		|| ( function_exists( 'nvx_is_contacto_page_request' ) && nvx_is_contacto_page_request() )
@@ -31,7 +29,6 @@ function nvx_valoracion_modal_enabled(): bool {
 		return false;
 	}
 
-	// Already on the form landing: keep full-page UX.
 	if ( function_exists( 'nvx_theme_is_valoracion_form_page' ) && nvx_theme_is_valoracion_form_page() ) {
 		return false;
 	}
@@ -42,41 +39,21 @@ function nvx_valoracion_modal_enabled(): bool {
 		return false;
 	}
 
-	// The modal must never render an unconfigured account/form identity.
-	if ( ! function_exists( 'nvx_hubspot_secure_identity_configured' ) || ! nvx_hubspot_secure_identity_configured() ) {
+	// The first-party form must not render without authenticated HubSpot transport.
+	if (
+		! function_exists( 'nvx_hubspot_secure_identity_configured' )
+		|| ! nvx_hubspot_secure_identity_configured()
+		|| ! function_exists( 'nvx_valoracion_direct_form_markup' )
+	) {
 		return false;
 	}
 
 	return (bool) apply_filters( 'nvx_valoracion_modal_enabled', true );
 }
 
-/**
- * HubSpot portal / form / region for the modal.
- *
- * @return array{portal_id:string,form_id:string,region:string,script_url:string}
- */
-function nvx_valoracion_modal_hubspot_config(): array {
-	$portal = function_exists( 'nvx_hubspot_secure_portal_id' ) ? nvx_hubspot_secure_portal_id() : '';
-	$form   = function_exists( 'nvx_hubspot_secure_form_id' ) ? nvx_hubspot_secure_form_id() : '';
-	$region = defined( 'NVX_VALORACION_HS_FRAME_REGION' ) ? strtolower( trim( (string) NVX_VALORACION_HS_FRAME_REGION ) ) : 'eu1';
-	if ( 1 !== preg_match( '/^[a-z]{2,4}\d{1,2}$/', $region ) ) {
-		$region = 'eu1';
-	}
-
-	return array(
-		'portal_id'  => $portal,
-		'form_id'    => $form,
-		'region'     => $region,
-		'script_url' => '' !== $portal ? 'https://js-' . $region . '.hsforms.net/forms/embed/' . rawurlencode( $portal ) . '.js' : '',
-	);
-}
-
-/**
- * Modal dialog markup.
- */
+/** Modal dialog markup. */
 function nvx_valoracion_modal_markup(): string {
-	$cfg = nvx_valoracion_modal_hubspot_config();
-	if ( '' === $cfg['portal_id'] || '' === $cfg['form_id'] ) {
+	if ( ! nvx_valoracion_modal_enabled() ) {
 		return '';
 	}
 
@@ -92,13 +69,8 @@ function nvx_valoracion_modal_markup(): string {
 	$html .= '<p class="nvx-eyebrow nvx-valoracion-modal__kicker">' . esc_html__( 'Valoración médica', 'nuvanx-medical' ) . '</p>';
 	$html .= '<h2 id="nvx-valoracion-modal-title" class="nvx-valoracion-modal__title">' . esc_html__( 'Solicita una valoración médica', 'nuvanx-medical' ) . '</h2>';
 	$html .= '<p class="nvx-valoracion-modal__lead">' . esc_html__( 'Normalmente, un miembro del equipo te contactará durante el siguiente día laborable para confirmar la fecha de valoración.', 'nuvanx-medical' ) . '</p>';
-	$html .= '<div id="nvx-valoracion-modal-form" class="nvx-valoracion-modal__form nvx-hubspot-form-section" data-nvx-valoracion-modal-form>';
-	// Presentation host only: runtime governance inserts the canonical .hs-form-frame with identity.
-	// Repeating data-form-id/data-portal-id here would cause duplicate HubSpot embed initialization.
-	$html .= '<div class="hs-form-frame"></div>';
-	if ( function_exists( 'nvx_valoracion_direct_form_markup' ) ) {
-		$html .= nvx_valoracion_direct_form_markup();
-	}
+	$html .= '<div id="nvx-valoracion-modal-form" class="nvx-valoracion-modal__form" data-nvx-valoracion-modal-form data-nvx-first-party-owner="1">';
+	$html .= nvx_valoracion_direct_form_markup();
 	$html .= '</div>';
 	$html .= '<p class="nvx-valoracion-modal__legal">' . sprintf(
 		/* translators: %s: Enlace a la política de privacidad */
@@ -111,12 +83,7 @@ function nvx_valoracion_modal_markup(): string {
 	return $html;
 }
 
-/**
- * Boot config for nvx-main.js (must run before the main handle).
- *
- * Historically only window.nvxRuntimeGovernance was emitted (after nvx-main), so
- * initValoracionModal always saw cfg as undefined and never bound open handlers.
- */
+/** Boot config for nvx-main.js / runtime modal controls. */
 function nvx_valoracion_modal_enqueue_boot_config(): void {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || is_feed() ) {
 		return;
@@ -130,15 +97,10 @@ function nvx_valoracion_modal_enqueue_boot_config(): void {
 		? nvx_cta_valoracion_url()
 		: home_url( '/madrid/valoracion/' );
 
-	$cfg = nvx_valoracion_modal_hubspot_config();
-
 	$config = array(
-		'enabled'         => nvx_valoracion_modal_enabled(),
-		'pageUrl'         => $page_url,
-		'modalId'         => 'nvx-valoracion-modal',
-		'hubspotPortalId' => $cfg['portal_id'],
-		'hubspotFormId'   => $cfg['form_id'],
-		'hubspotRegion'   => $cfg['region'],
+		'enabled' => nvx_valoracion_modal_enabled(),
+		'pageUrl' => $page_url,
+		'modalId' => 'nvx-valoracion-modal',
 	);
 
 	$encoded = wp_json_encode( $config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
@@ -154,16 +116,12 @@ function nvx_valoracion_modal_enqueue_boot_config(): void {
 }
 add_action( 'wp_enqueue_scripts', 'nvx_valoracion_modal_enqueue_boot_config', 30 );
 
-/**
- * Print modal shell in footer on eligible public pages.
- */
+/** Print modal shell in footer on eligible public pages. */
 function nvx_valoracion_modal_render(): void {
 	if ( ! nvx_valoracion_modal_enabled() ) {
 		return;
 	}
 
-	// Modal HTML is built with esc_attr / esc_html / esc_url / wp_kses only.
 	echo nvx_valoracion_modal_markup(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in nvx_valoracion_modal_markup().
 }
-// Before wp_print_footer_scripts (20) so nvx-main can bind to #nvx-valoracion-modal.
 add_action( 'wp_footer', 'nvx_valoracion_modal_render', 5 );
