@@ -113,6 +113,23 @@ grep -Fq "\$issues[] = 'missing-jsonld'" "$SEO_GEO_AUDIT" || fail 'jsonld_issue_
 grep -Fq 'exit($issues ? 1 : 0);' "$SEO_GEO_AUDIT" || fail 'html_issue_exit_no_longer_blocking'
 grep -Fq 'fail "URL_SEO url=$url detail=$detail"' "$SEO_GEO_AUDIT" || fail 'url_seo_failure_no_longer_blocking'
 
+# Origin schema probes must target published canonical routes, not retired aliases.
+schema_probe_block="$(awk '
+  /treatment_procedure_paths=\(/ { capture=1 }
+  capture { print }
+  /for path in "\$\{treatment_faq_paths\[@\]\}"/ { exit }
+' "$SEO_GEO_AUDIT")"
+[[ -n "$schema_probe_block" ]] || fail 'seo_geo_schema_probe_block_missing'
+for retired in '/laser-co2-madrid/' '/btl-exion-madrid/' '/acido-hialuronico-madrid/' '/profhilo-madrid/'; do
+  if grep -Fq "$retired" <<<"$schema_probe_block"; then
+    fail "seo_geo_retired_schema_path:$retired"
+  fi
+done
+grep -Fq '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/' "$SEO_GEO_AUDIT" || fail 'seo_geo_missing_canonical_co2_path'
+grep -Fq '/exion-btl/' "$SEO_GEO_AUDIT" || fail 'seo_geo_missing_canonical_exion_path'
+grep -Fq '/acido-hialuronico-relleno-madrid/' "$SEO_GEO_AUDIT" || fail 'seo_geo_missing_canonical_ha_path'
+pass_assert 'seo-geo-canonical-schema-paths'
+
 # Production identity is a hard boundary before the audit can report PASS.
 grep -Fq "[[ \"\$release_sha\" =~ ^[0-9a-f]{40}\$ ]] || { echo 'Invalid production deploy marker.' >&2; exit 1; }" "$SEO_GEO_AUDIT" || fail 'deploy_sha_identity_no_longer_blocking'
 grep -Fq '[[ "$(wp config get DB_NAME)" == "$PROD_DB_NAME" ]]' "$SEO_GEO_AUDIT" || fail 'production_db_identity_guard_missing'

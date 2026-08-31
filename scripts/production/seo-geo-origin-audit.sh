@@ -295,12 +295,16 @@ if fetch_url "$BASE_URL/" schema-home && grep -Fq 'MedicalOrganization' "$BODY";
 if fetch_url "$BASE_URL/clinicas-de-medicina-estetica-nuvanx/" schema-clinics && grep -Fq 'MedicalClinic' "$BODY"; then pass 'SCHEMA_MEDICAL_CLINIC'; else fail 'SCHEMA_MEDICAL_CLINIC'; fi
 if fetch_url "$BASE_URL/equipo-medico/" schema-physicians && grep -Fq 'Physician' "$BODY"; then pass 'SCHEMA_PHYSICIAN'; else fail 'SCHEMA_PHYSICIAN'; fi
 
+# Canonical published treatment URLs from routes.json / publication-manifest.
+# Retired short aliases and unpublished Profhilo must not be probed as current
+# origin pages. The signature hub has no visible FAQ, so FAQPage is checked on
+# a published signature phase page instead.
 treatment_procedure_paths=(
   '/endolift-facial-papada-mandibula/'
   '/endolaser-corporal-grasa-localizada/'
-  '/laser-co2-madrid/'
-  '/btl-exion-madrid/'
-  '/acido-hialuronico-madrid/'
+  '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/'
+  '/exion-btl/'
+  '/acido-hialuronico-relleno-madrid/'
 )
 for path in "${treatment_procedure_paths[@]}"; do
   tag="schema-proc-${path//\//-}"
@@ -314,10 +318,10 @@ done
 treatment_faq_paths=(
   '/endolift-facial-papada-mandibula/'
   '/endolaser-corporal-grasa-localizada/'
-  '/laser-co2-madrid/'
-  '/btl-exion-madrid/'
-  '/profhilo-madrid/'
-  '/protocolos-signature/'
+  '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/'
+  '/exion-btl/'
+  '/acido-hialuronico-relleno-madrid/'
+  '/papada-definicion-mandibular-madrid/'
 )
 for path in "${treatment_faq_paths[@]}"; do
   tag="schema-faq-${path//\//-}"
