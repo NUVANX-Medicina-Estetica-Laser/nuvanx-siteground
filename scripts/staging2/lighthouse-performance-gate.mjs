@@ -18,7 +18,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import {
   isSiteGroundTransientResponse,
 } from './siteground-transient-classifier.mjs';
@@ -131,6 +131,9 @@ function classifyLighthouseError(error) {
     || isSiteGroundTransientResponse(503, {}, message)
     || /timeout|timed out/i.test(message)
     || /ECONNREFUSED|ECONNRESET|ENOTFOUND/i.test(message)
+    || /LanternError:\s*missing metric scores for specified navigation/i.test(message)
+    || /Protocol error.*Inspected target navigated or closed/i.test(message)
+    || /TargetCloseError|Target closed|Page crashed/i.test(message)
   ) {
     return 'transient_infrastructure';
   }
@@ -148,25 +151,41 @@ async function runLighthouseCell(page, mode, outputDir) {
     const outFile = path.join(rawDir, `${baseName}-run${attempt}.json`);
     const extra = mode === 'desktop' ? ['--preset=desktop'] : [];
 
-    try {
-      const stdout = execFileSync(
-        './node_modules/.bin/lighthouse',
-        [
-          url,
-          '--output=json',
-          `--output-path=${outFile}`,
-          '--only-categories=performance',
-          '--quiet',
-          '--chrome-flags=--headless --disable-dev-shm-usage',
-          ...extra,
-        ],
-        {
-          encoding: 'utf8',
-          timeout: requestTimeoutMs,
-          maxBuffer: 20 * 1024 * 1024,
-        }
-      );
+    const child = spawnSync(
+      './node_modules/.bin/lighthouse',
+      [
+        url,
+        '--output=json',
+        `--output-path=${outFile}`,
+        '--only-categories=performance',
+        '--quiet',
+        '--chrome-flags=--headless --disable-dev-shm-usage',
+        ...extra,
+      ],
+      {
+        encoding: 'utf8',
+        timeout: requestTimeoutMs,
+        maxBuffer: 20 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
 
+    const diagnostic = [
+      child.error?.message || '',
+      child.stderr || '',
+      child.stdout || '',
+      child.signal ? `signal=${child.signal}` : '',
+      child.status !== null ? `exit=${child.status}` : '',
+    ].filter(Boolean).join('\n').trim();
+
+    if (child.error || child.status !== 0) {
+      const classification = classifyLighthouseError(diagnostic);
+      if (classification === 'transient_infrastructure') transientCount++;
+      runs.push({ attempt, status: classification, metrics: null });
+      continue;
+    }
+
+    try {
       const rawJson = await fs.readFile(outFile, 'utf8');
       const metrics = extractMetrics(rawJson);
       if (!isValidMetrics(metrics)) {
