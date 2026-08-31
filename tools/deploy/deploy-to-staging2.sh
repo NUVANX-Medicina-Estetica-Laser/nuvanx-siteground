@@ -106,51 +106,54 @@ provision_staging_hubspot_identity() {
 
 verify_staging_hubspot_embed_contract() {
   local secure_file="$SOURCE_THEME/inc/nvx-hubspot-secure-attribution.php"
+  local direct_form_file="$SOURCE_THEME/inc/nvx-valoracion-direct-form.php"
+  local managed_file="$SOURCE_THEME/inc/nvx-valoracion-managed-page.php"
   local modal_file="$SOURCE_THEME/inc/nvx-valoracion-modal.php"
   local portal=''
   local form=''
-  local source=''
+  local source='canonical_wp_config'
 
-  # Source contract: account/form identity belongs to the validated resolver,
-  # never to a theme-owned Production fallback in the modal or embed markup.
+  # Source contract: form identity is server-side only. The browser surfaces
+  # must render the canonical first-party owner and must never carry a HubSpot
+  # form frame/embed loader as a compatibility fallback.
   [[ -f "$secure_file" ]] || fail 'HubSpot secure identity resolver is missing from the immutable theme payload'
-  [[ -f "$modal_file" ]] || fail 'HubSpot modal source is missing from the immutable theme payload'
+  [[ -f "$direct_form_file" ]] || fail 'canonical first-party valoración form is missing from the immutable theme payload'
+  [[ -f "$managed_file" ]] || fail 'managed valoración landing is missing from the immutable theme payload'
+  [[ -f "$modal_file" ]] || fail 'valoración modal source is missing from the immutable theme payload'
   grep -Fq 'function nvx_hubspot_secure_identity' "$secure_file" || fail 'HubSpot canonical identity resolver contract is missing'
-  grep -Fq 'nvx_hubspot_secure_identity_configured' "$modal_file" || fail 'HubSpot modal does not enforce the canonical configured-identity contract'
-  grep -Fq 'nvx_hubspot_secure_portal_id' "$modal_file" || fail 'HubSpot modal does not consume the canonical portal resolver'
-  grep -Fq 'nvx_hubspot_secure_form_id' "$modal_file" || fail 'HubSpot modal does not consume the canonical form resolver'
+  grep -Fq 'function nvx_hubspot_secure_identity_configured' "$secure_file" || fail 'HubSpot configured-identity contract is missing'
+  grep -Fq 'function nvx_valoracion_direct_form_markup' "$direct_form_file" || fail 'canonical first-party valoración form renderer is missing'
+  grep -Fq 'nvx_valoracion_direct_form_markup()' "$managed_file" || fail 'managed valoración landing does not render the canonical first-party form'
+  grep -Fq 'data-nvx-first-party-owner="1"' "$managed_file" || fail 'managed valoración landing is missing its first-party owner marker'
+  grep -Fq 'nvx_hubspot_secure_identity_configured' "$modal_file" || fail 'valoración modal does not enforce the canonical configured-identity contract'
+  grep -Fq 'nvx_hubspot_secure_portal_id' "$modal_file" || fail 'valoración modal does not expose the canonical analytics portal resolver'
+  grep -Fq 'nvx_valoracion_direct_form_markup()' "$modal_file" || fail 'valoración modal does not render the canonical first-party form'
+  grep -Fq 'data-nvx-first-party-owner="1"' "$modal_file" || fail 'valoración modal is missing its first-party owner marker'
+  ! grep -Eq 'hs-form-frame|forms/embed/' "$managed_file" || fail 'managed valoración landing still contains a retired HubSpot browser embed'
+  ! grep -Eq 'hs-form-frame|forms/embed/' "$modal_file" || fail 'valoración modal still contains a retired HubSpot browser embed'
 
-  # Runtime precondition: Staging2 must provision one complete identity pair in
-  # wp-config.php. wp config get intentionally inspects environment configuration
-  # rather than loading the active theme, so a theme fallback cannot satisfy it.
+  # Runtime precondition: provisioning immediately above writes the canonical
+  # pair. Legacy frame-era wp-config aliases are not valid Staging identity.
   (
     cd "$WP_ROOT"
-    if wp config has NVX_HUBSPOT_PORTAL_ID 2>/dev/null || \
-       wp config has NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null; then
-      source='canonical_wp_config'
-      portal="$(wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
-      form="$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
-    elif wp config has NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || \
-         wp config has NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null; then
-      source='legacy_wp_config'
-      portal="$(wp config get NVX_VALORACION_HS_FRAME_PORTAL_ID 2>/dev/null || true)"
-      form="$(wp config get NVX_VALORACION_HS_FRAME_FORM_ID 2>/dev/null || true)"
-    fi
+    wp config has NVX_HUBSPOT_PORTAL_ID 2>/dev/null \
+      || fail_config 'Staging2 canonical HubSpot portal identity is not provisioned in wp-config.php'
+    wp config has NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null \
+      || fail_config 'Staging2 canonical HubSpot form identity is not provisioned in wp-config.php'
+    portal="$(wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
+    form="$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
 
-    [[ -n "$source" ]] || fail_config 'Staging2 HubSpot portal/form identity is not provisioned in wp-config.php'
     [[ "$portal" =~ ^[0-9]{1,20}$ ]] || fail_config "Staging2 HubSpot portal identity is malformed source=$source"
     [[ "$form" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$ ]] || fail_config "Staging2 HubSpot form identity is malformed source=$source"
-    echo "STAGING_HUBSPOT_CONFIG=PASS source=$source runtime_fallback=disabled"
+    echo "STAGING_HUBSPOT_CONFIG=PASS source=$source runtime_fallback=disabled browser_embed=0 first_party_owner=1"
   )
 }
 
 purge_siteground_cache_if_available() {
   local plugin_slug='sg-cachepress'
-  local was_active=0
   local purge_ok=0
 
   if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-    was_active=1
     wp sg purge
     echo 'siteground_wp_cli_purge=PASS mode=already-active'
     return 0
@@ -190,7 +193,6 @@ purge_siteground_cache_if_available() {
     return 1
   }
 
-  [[ "$was_active" -eq 0 ]] || return 0
   echo 'siteground_wp_cli_purge=PASS mode=transient-activation-restored-inactive'
 }
 
@@ -285,6 +287,8 @@ SOURCE_REQUIRED_FILES=(
   inc/nvx-solutions-page.php
   inc/nvx-clinics-hub.php
   inc/nvx-hubspot-secure-attribution.php
+  inc/nvx-valoracion-direct-form.php
+  inc/nvx-valoracion-managed-page.php
   inc/nvx-valoracion-modal.php
   inc/data/publication-manifest.json
 )
@@ -365,7 +369,7 @@ cp -p "$WP_ROOT/wp-config.php" "$CONFIG_BACKUP"
 echo '== Provision Staging2 HubSpot public identity from governed manifest =='
 provision_staging_hubspot_identity
 
-echo '== Verify Staging2 HubSpot fail-closed identity contract =='
+echo '== Verify Staging2 HubSpot fail-closed first-party identity contract =='
 verify_staging_hubspot_embed_contract
 
 echo '== Validate source PHP =='
@@ -417,6 +421,10 @@ grep -Fq 'nvx-patterns-editorial.css' "$LIVE_THEME/functions.php" || fail 'funct
 grep -Fq 'nvx-document-governance.php' "$LIVE_THEME/functions.php" || fail 'functions.php does not load document governance'
 grep -Fq 'nvx_document_governance_print_head_contract' "$LIVE_THEME/inc/nvx-document-governance.php" || fail 'document governance missing head contract emitter'
 grep -Fq 'window.nvxValoracionModal' "$LIVE_THEME/inc/nvx-valoracion-modal.php" || fail 'valoracion modal boot config is missing'
+grep -Fq 'nvx_valoracion_direct_form_markup()' "$LIVE_THEME/inc/nvx-valoracion-modal.php" || fail 'deployed valoración modal is not first-party owned'
+grep -Fq 'nvx_valoracion_direct_form_markup()' "$LIVE_THEME/inc/nvx-valoracion-managed-page.php" || fail 'deployed valoración landing is not first-party owned'
+! grep -Eq 'hs-form-frame|forms/embed/' "$LIVE_THEME/inc/nvx-valoracion-modal.php" || fail 'deployed valoración modal contains a retired HubSpot embed'
+! grep -Eq 'hs-form-frame|forms/embed/' "$LIVE_THEME/inc/nvx-valoracion-managed-page.php" || fail 'deployed valoración landing contains a retired HubSpot embed'
 
 sync_publication_topology
 
