@@ -19,12 +19,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Markup for the consent-independent valoración form.
  */
 function nvx_valoracion_direct_form_markup(): string {
-	// Disabled on valoracion landing page to avoid legacy marker conflicts.
-	// The landing page uses the canonical HubSpot native form.
-	if ( function_exists( 'nvx_is_valoracion_page_request' ) && nvx_is_valoracion_page_request() ) {
-		return '';
-	}
-
 	$privacy_url = esc_url( home_url( '/politica-privacidad/' ) );
 	$action      = esc_url( home_url( '/madrid/valoracion/' ) );
 	$nonce       = wp_nonce_field( 'nvx_valoracion_submit', 'nvx_valoracion_nonce', true, false );
