@@ -15,6 +15,11 @@ siteground_cache_purge() {
 
   (
     set -Eeuo pipefail
+    # The helper may be called from deployment code that already owns an ERR
+    # trap. ERR traps are inherited when errtrace (-E) is enabled and could
+    # abort the caller before this helper's EXIT cleanup restores a transient
+    # Speed Optimizer activation. Cache-state restoration is owned here.
+    trap - ERR
     local activation_performed=0
 
     cd "$wp_root"
