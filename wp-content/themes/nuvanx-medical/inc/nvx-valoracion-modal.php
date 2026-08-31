@@ -5,7 +5,8 @@ declare(strict_types=1);
  *
  * Opens from opted-in CTAs outside /contacto/, the full valoración landing and
  * post-conversion pages. Contacto remains a form-free NAP and routing page.
- * The visible form is first-party; HubSpot transport remains server-side.
+ * The visible form is first-party; HubSpot form transport remains server-side.
+ * Only the public portal ID is exposed to the browser for consented analytics.
  *
  * @package nuvanx-medical
  */
@@ -14,9 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * Determines whether the valuation modal is enabled for the current request.
- */
+/** Determines whether the valuation modal is enabled for the current request. */
 function nvx_valoracion_modal_enabled(): bool {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || is_feed() ) {
 		return false;
@@ -39,7 +38,6 @@ function nvx_valoracion_modal_enabled(): bool {
 		return false;
 	}
 
-	// The first-party form must not render without authenticated HubSpot transport.
 	if (
 		! function_exists( 'nvx_hubspot_secure_identity_configured' )
 		|| ! nvx_hubspot_secure_identity_configured()
@@ -83,7 +81,7 @@ function nvx_valoracion_modal_markup(): string {
 	return $html;
 }
 
-/** Boot config for nvx-main.js / runtime modal controls. */
+/** Boot config for nvx-main.js and consented global HubSpot analytics. */
 function nvx_valoracion_modal_enqueue_boot_config(): void {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || is_feed() ) {
 		return;
@@ -96,11 +94,15 @@ function nvx_valoracion_modal_enqueue_boot_config(): void {
 	$page_url = function_exists( 'nvx_cta_valoracion_url' )
 		? nvx_cta_valoracion_url()
 		: home_url( '/madrid/valoracion/' );
+	$portal_id = function_exists( 'nvx_hubspot_secure_portal_id' )
+		? nvx_hubspot_secure_portal_id()
+		: '';
 
 	$config = array(
-		'enabled' => nvx_valoracion_modal_enabled(),
-		'pageUrl' => $page_url,
-		'modalId' => 'nvx-valoracion-modal',
+		'enabled'         => nvx_valoracion_modal_enabled(),
+		'pageUrl'         => $page_url,
+		'modalId'         => 'nvx-valoracion-modal',
+		'hubspotPortalId' => $portal_id,
 	);
 
 	$encoded = wp_json_encode( $config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
