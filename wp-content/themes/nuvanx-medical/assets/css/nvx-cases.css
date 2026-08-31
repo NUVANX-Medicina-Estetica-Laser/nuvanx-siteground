@@ -91,16 +91,16 @@
   background: var(--nvx-surface-soft);
   color: var(--nvx-charcoal);
   font-family: var(--nvx-font-family-sans, sans-serif);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   font-size: 0.8125rem;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--nvx-track-data-label);
   text-transform: uppercase;
 }
 
 .nvx-case-card__title {
   margin: 0;
   font-family: var(--nvx-font-family-serif, serif);
-  font-weight: 500;
+  font-weight: var(--nvx-fw-heading);
 }
 
 .nvx-case-card__visual {
@@ -213,13 +213,13 @@
 
 .nvx-case-card__meta-label {
   color: var(--nvx-text-muted);
-  font-weight: 500;
+  font-weight: var(--nvx-fw-heading);
   font-size: 0.8125rem;
 }
 
 .nvx-case-card__meta-value {
   color: var(--nvx-text-body);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   font-size: 0.9375rem;
 }
 
@@ -231,14 +231,14 @@
 .nvx-case-card__notes-title {
   margin: 0 0 var(--nvx-space-1);
   color: var(--nvx-charcoal);
-  font-weight: 600;
+  font-weight: var(--nvx-fw-medium);
   font-size: 0.9375rem;
 }
 
 .nvx-case-card__notes-body {
   margin: 0 0 var(--nvx-space-2);
   color: var(--nvx-text-muted);
-  line-height: 1.6;
+  line-height: var(--nvx-lh-body);
 }
 
 .nvx-case-card__photo-note {
@@ -259,7 +259,7 @@
   margin: 0;
   color: var(--nvx-text-muted);
   font-size: 0.875rem;
-  line-height: 1.6;
+  line-height: var(--nvx-lh-body);
 }
 
 @media (max-width: 768px) {
