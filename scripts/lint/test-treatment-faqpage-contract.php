@@ -57,6 +57,8 @@ $required_keys = array(
 	'lips_ha',
 	'rhinomodeling_ha',
 	'rinomodelacion',
+	'facial_ha',
+	'acido_hialuronico',
 );
 
 foreach ( $required_keys as $key ) {
@@ -87,6 +89,36 @@ $co2_faqs = json_encode( $catalog['laser_co2'], JSON_UNESCAPED_UNICODE );
 if ( ! str_contains( $co2_faqs, 'cuántas sesiones' ) && ! str_contains( $co2_faqs, 'Cuántas sesiones' ) ) {
 	fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL CO2 missing sessions question\n" );
 	exit( 1 );
+}
+
+$aesthetic_pages = nvx_catalog_json_resolved( 'aesthetic-treatment-pages.json' );
+$routes          = nvx_catalog_json_resolved( 'routes.json' );
+if ( ! is_array( $aesthetic_pages ) || ! is_array( $routes ) ) {
+	fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL missing aesthetic or routes catalog\n" );
+	exit( 1 );
+}
+foreach ( $aesthetic_pages as $json_key => $entry ) {
+	if ( ! is_string( $json_key ) || ! is_array( $entry ) || empty( $entry['faqs'] ) || ! is_array( $entry['faqs'] ) ) {
+		continue;
+	}
+	if ( empty( $catalog[ $json_key ] ) || ! is_array( $catalog[ $json_key ] ) ) {
+		fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL missing aesthetic JSON key: {$json_key}\n" );
+		exit( 1 );
+	}
+	$slug = trim( (string) ( $entry['slug'] ?? '' ), '/' );
+	if ( '' === $slug ) {
+		continue;
+	}
+	$path      = '/' . $slug . '/';
+	$schema_id = (string) ( $routes[ $path ]['schema_id'] ?? '' );
+	if ( '' === $schema_id ) {
+		fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL missing routes schema_id for {$path}\n" );
+		exit( 1 );
+	}
+	if ( empty( $catalog[ $schema_id ] ) || ! is_array( $catalog[ $schema_id ] ) ) {
+		fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL missing routes schema_id alias: {$json_key} -> {$schema_id}\n" );
+		exit( 1 );
+	}
 }
 
 echo "TREATMENT_FAQPAGE_CONTRACT=PASS verified_keys=" . count( $required_keys ) . "\n";

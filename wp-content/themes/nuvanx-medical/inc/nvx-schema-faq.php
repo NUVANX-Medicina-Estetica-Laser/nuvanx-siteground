@@ -153,10 +153,32 @@ function nvx_schema_faq_catalog() {
 			'tear_trough_ha'   => 'dark_circles_ha',
 			'biostimulators'   => 'collagen_bio',
 			'neuromodulators'  => 'neuromodulador',
+			'facial_ha'        => 'acido_hialuronico',
 		);
 		foreach ( $alias_map as $json_key => $schema_key ) {
 			if ( ! empty( $aesthetic_faqs[ $json_key ] ) ) {
 				$aesthetic_faqs[ $schema_key ] = $aesthetic_faqs[ $json_key ];
+			}
+		}
+		// routes.json schema_id is what nvx_schema_resolve_treatment_key() returns.
+		// Derive remaining aliases from slug → path so FAQPage is not stripped on
+		// published pages whose JSON key differs from schema_id.
+		$aesthetic_source = nvx_catalog_json_resolved( 'aesthetic-treatment-pages.json' );
+		$routes           = nvx_catalog_json_resolved( 'routes.json' );
+		if ( is_array( $aesthetic_source ) && is_array( $routes ) ) {
+			foreach ( $aesthetic_source as $json_key => $entry ) {
+				if ( ! is_string( $json_key ) || ! is_array( $entry ) || empty( $aesthetic_faqs[ $json_key ] ) ) {
+					continue;
+				}
+				$slug = trim( (string) ( $entry['slug'] ?? '' ), '/' );
+				if ( '' === $slug ) {
+					continue;
+				}
+				$path      = '/' . $slug . '/';
+				$schema_id = (string) ( $routes[ $path ]['schema_id'] ?? '' );
+				if ( '' !== $schema_id && $schema_id !== $json_key ) {
+					$aesthetic_faqs[ $schema_id ] = $aesthetic_faqs[ $json_key ];
+				}
 			}
 		}
 		$catalog = array_merge( $catalog, $aesthetic_faqs );
