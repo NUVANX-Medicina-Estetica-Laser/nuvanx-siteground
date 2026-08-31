@@ -42,8 +42,10 @@ grep -Fq 'restore_transient_activation_on_failure' "$HELPER" \
   || fail 'helper_failure_restore_trap_missing'
 grep -Fq 'SITEGROUND_CACHE_PURGE_RESTORE=PASS' "$HELPER" \
   || fail 'helper_failure_restore_evidence_missing'
+grep -Fq 'trap - ERR' "$HELPER" \
+  || fail 'helper_must_clear_inherited_err_trap_before_failure_cleanup'
 
 bash -n "$HELPER"
 bash -n "$DEPLOY"
 
-echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count workflow_inline=0 deploy_inline=0 rollback_state=snapshot"
+echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count workflow_inline=0 deploy_inline=0 rollback_state=snapshot inherited_err_trap=isolated"
