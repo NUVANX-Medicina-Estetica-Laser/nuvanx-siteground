@@ -65,6 +65,6 @@ assert.doesNotMatch(placementOrchestrator, /h1-hubspot-a11y-safe\.mjs|test-hubsp
 assert.match(firstPartyA11y, /form\[data-nvx-direct-form\]/, 'First-party accessibility QA must audit the direct form');
 assert.match(firstPartyA11y, /requestSubmit\(submit\)/, 'First-party accessibility QA must exercise native blank-submit validation without creating a lead');
 assert.match(firstPartyA11y, /postRequests !== 0/, 'First-party accessibility QA must fail closed if blank validation emits a POST');
-assert.doesNotMatch(firstPartyA11y, /HUBSPOT_FORM_ID|embedded-form-|contentFrame\(/, 'First-party accessibility QA must not depend on a HubSpot iframe');
+assert.doesNotMatch(firstPartyA11y, /HUBSPOT_FORM_ID|HUBSPOT_PORTAL_ID|contentFrame\(/, 'First-party accessibility QA must not depend on HubSpot browser-form identity or frame APIs');
 
 console.log('HUBSPOT_SINGLE_MOUNT_STATIC=PASS landing_first_party=1 modal_first_party=1 browser_frames=0 embeds=0 analytics_portal_single_owner=1 retired_browser_config=0 runtime_qa_first_party=1 hero_helper=preserved secure_hubspot_transport=1 capture_after_2xx=1 qa_server_owned=1');
