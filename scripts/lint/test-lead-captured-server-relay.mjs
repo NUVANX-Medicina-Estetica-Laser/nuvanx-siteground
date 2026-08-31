@@ -84,11 +84,16 @@ assert.doesNotMatch(payloadBlock, /['"](?:email|phone|phone_number|name|first_na
 
 const consentAware = /'marketing_consent'\s*=>/.test(payloadBlock);
 if (consentAware) {
-  assert.match(relay,
-    /\$marketing_consent\s*=\s*function_exists\( 'nvx_hubspot_secure_post_value' \)[\s\S]{0,180}'1' === nvx_hubspot_secure_post_value\( 'nvx_marketing_consent', 1 \)/,
-    'Capture consent must be re-derived server-side from the validated first-party request');
+  assert.match(relay, /function nvx_lead_captured_server_marketing_consent\(\): bool/,
+    'Capture relay must define one authoritative server-side marketing-consent owner');
+  assert.match(relay, /nvx_valoracion_has_marketing_consent\(\)/,
+    'Capture consent must be re-derived from the server-verifiable Complianz contract');
+  assert.match(relay, /\$marketing_consent\s*=\s*nvx_lead_captured_server_marketing_consent\(\);/,
+    'Canonical capture must use the authoritative server consent decision');
+  assert.doesNotMatch(relay, /'1' === nvx_hubspot_secure_post_value\( 'nvx_marketing_consent'/,
+    'Browser POST must not be the consent authority for attribution relay');
   assert.match(payloadBlock, /'marketing_consent'\s*=>\s*\$marketing_consent/,
-    'Explicit marketing consent must reach the canonical capture ledger');
+    'Explicit server-derived marketing consent must reach the canonical capture ledger');
   assert.match(payloadBlock, /'first_attribution'\s*=>\s*\$marketing_consent \? nvx_lead_captured_attribution/,
     'First-touch attribution must be stripped when marketing consent is absent');
   assert.match(payloadBlock, /'conversion_attribution'\s*=>\s*\$marketing_consent \? nvx_lead_captured_attribution/,
@@ -127,4 +132,4 @@ assert.match(relay, /'nvx_lead_id'\s*=>\s*\$lead_id/,
 assert.doesNotMatch(relay, /graph\.facebook\.com|functions\/v1\/web-events|googleads\.|crm\/v3\/objects\/deals/i,
   'Capture relay must not contain executable downstream advertising or Deal endpoints');
 
-console.log(`LEAD_CAPTURED_SERVER_RELAY=PASS auth=${hmacAware ? 'hubspot-hmac' : 'legacy-secret'} consent=${consentAware ? 'server-derived' : 'legacy'}`);
+console.log(`LEAD_CAPTURED_SERVER_RELAY=PASS auth=${hmacAware ? 'hubspot-hmac' : 'legacy-secret'} consent=${consentAware ? 'server-authoritative' : 'legacy'}`);
