@@ -121,6 +121,10 @@ $graph = array(
 		'breadcrumb' => array( '@id' => 'https://example.test/valid/#breadcrumb' ),
 	),
 	array(
+		'@type' => 'BreadcrumbList',
+		'@id'   => 'https://example.test/orphan/#breadcrumb',
+	),
+	array(
 		'@type'           => 'BreadcrumbList',
 		'@id'             => 'https://example.test/valid/#breadcrumb',
 		'itemListElement' => array(
@@ -154,6 +158,7 @@ nvx_test_assert( isset( $result[8]['recognizingAuthority'] ), 'recognizingAuthor
 nvx_test_assert( ! isset( $result[9]['breadcrumb'] ), 'orphan breadcrumb reference on WebPage must be pruned' );
 nvx_test_assert( isset( $result[10]['breadcrumb'] ), 'valid breadcrumb reference on WebPage with matching BreadcrumbList must survive' );
 nvx_test_assert( isset( $result[11]['itemListElement'] ), 'valid BreadcrumbList with items must survive' );
+nvx_test_assert( 12 === count( $result ), 'empty BreadcrumbList node must be entirely removed from graph' );
 
 $endolift_source_file = $repo_root . '/wp-content/themes/nuvanx-medical/inc/nvx-endolift-page.php';
 $endolift_source      = is_file( $endolift_source_file ) ? (string) file_get_contents( $endolift_source_file ) : '';
