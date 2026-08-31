@@ -141,7 +141,7 @@ grep -Fq 'failure.issues.length === 1' "$BOUNDARY" || fail 'siteground_challenge
 grep -Fq 'HTTP 202 .*sg-captcha=challenge' "$BOUNDARY" || fail 'siteground_exact_challenge_signature_missing'
 grep -Fq -- "--proto '=https' --proto-redir '=https'" "$BOUNDARY" || fail 'siteground_public_edge_https_only_missing'
 grep -Fq 'reason=public_edge_loopback' "$BOUNDARY" || fail 'siteground_public_edge_loopback_guard_missing'
-grep -Fq 'data-nvx-consent="functional"' "$BOUNDARY" || fail 'siteground_public_edge_functional_form_contract_missing'
+grep -Fq 'canonicalValoracionFirstPartyIssues' "$BOUNDARY" || fail 'siteground_public_edge_first_party_form_contract_missing'
 grep -Fq 'report.external.inconclusiveAntiBot && report.sitegroundPublicEdge.pass' "$BOUNDARY" || fail 'siteground_public_edge_quorum_missing'
 ! grep -Fq 'report.external.pass || report.external.inconclusiveAntiBot' "$BOUNDARY" || fail 'siteground_challenge_direct_pass_forbidden'
 pass_assert 'siteground-antibot-public-edge-fallback'
