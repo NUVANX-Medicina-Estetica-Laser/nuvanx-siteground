@@ -60,9 +60,6 @@ command -v php >/dev/null 2>&1 || { echo "php required" >&2; exit 2; }
 command -v tar >/dev/null 2>&1 || { echo "tar required" >&2; exit 2; }
 require_confirm
 
-# Production identity is owned by the canonical GitHub Actions release. A
-# host-level invocation without a numeric run ID would create a stamp that the
-# T04 verifiers intentionally reject, so fail before staging or mutation.
 DEPLOY_RUN_ID="${GITHUB_RUN_ID:-}"
 [[ "$DEPLOY_RUN_ID" =~ ^[0-9]+$ ]] || {
   echo 'ERROR: GITHUB_RUN_ID must be a numeric GitHub Actions run ID for production deployment' >&2
@@ -70,9 +67,6 @@ DEPLOY_RUN_ID="${GITHUB_RUN_ID:-}"
 }
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
-# Resolve the migration tooling for both the flattened CI payload layout
-# ($SCRIPT_DIR/tools/migrations, script at the release root) and a repository
-# checkout ($SCRIPT_DIR/../migrations, script at tools/deploy/).
 MIGRATION_SCRIPT=""
 AUDIT_SCRIPT=""
 BLOG_HYGIENE_SCRIPT=""
@@ -109,7 +103,6 @@ done
 [[ -f "$RULES_LIB" ]] || { echo "ERROR: shared content hygiene rules library missing at $RULES_LIB" >&2; exit 1; }
 
 PROD_URL='https://nuvanx.com'
-
 THEMES_ROOT="$PROD_ROOT/wp-content/themes"
 LIVE_THEME="$THEMES_ROOT/nuvanx-medical"
 [[ -d "$LIVE_THEME" ]] || { echo "ERROR: production theme missing at $LIVE_THEME" >&2; exit 1; }
@@ -128,8 +121,6 @@ FAILED_THEME="$THEMES_ROOT/.nvx-prod-failed-${RUN_TOKEN}"
 PROD_PARENT="$(dirname "$PROD_ROOT")"
 BACKUP_ROOT="$PROD_PARENT/.nvx-backups"
 BACKUP_DIR="$BACKUP_ROOT/pre-prod-${RUN_TOKEN}-${SHA:0:12}"
-# The rollback snapshot and migration evidence live outside public_html so the
-# database dump is not HTTP-addressable by construction.
 MIGRATION_LOG="$BACKUP_DIR/migration-production.log"
 AUDIT_LOG="$BACKUP_DIR/migration-audit-production.log"
 ROBOTS_LOG="$BACKUP_DIR/migration-robots-production.log"
@@ -235,24 +226,6 @@ done
   exit 1
 }
 
-# Clean up legacy MU plugins if they reappear (removed from source but may linger in production)
-# This provides a remediation path without requiring manual intervention
-for legacy_mu in \
-  nuvanx-valoracion-native-hubspot-form.php \
-  nuvanx-contacto-hubspot-form.php \
-  nvx-disable-public-facebook-pixel.php \
-  nuvanx-google-attribution.php
-do
-  [[ -e "$PROD_ROOT/wp-content/mu-plugins/$legacy_mu" ]] && {
-    echo "Cleaning up legacy MU plugin: $legacy_mu" >&2
-    rm -f "$PROD_ROOT/wp-content/mu-plugins/$legacy_mu"
-  }
-done
-[[ -d "$PROD_ROOT/wp-content/mu-plugins/nuvanx-google-attribution" ]] && {
-  echo "Cleaning up legacy attribution MU package" >&2
-  rm -rf "$PROD_ROOT/wp-content/mu-plugins/nuvanx-google-attribution"
-}
-
 echo "== Guard obsolete production redirect drift =="
 obsolete_marker='# NVX_REDIRECT_3334_TO_3310'
 obsolete_redirect='Redirect 301 /matriz-diagnostico-facial-estructura-piel-musculo-grasa/ https://nuvanx.com/tratamientos-faciales-sin-cirugia-guia-medica-diagnostico/'
@@ -279,7 +252,6 @@ rsync -a --delete \
 printf '%s\n' "$SHA" > "$STAGED_THEME/.nvx-deploy-sha"
 [[ "$(tr -d '\r\n' < "$STAGED_THEME/.nvx-deploy-sha")" == "$SHA" ]]
 
-# Generate the immutable production stamp from the GitHub Actions release ID.
 DEPLOY_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 RELEASE_ID="${RELEASE_ID:-${SHA:0:12}}"
 [[ "$RELEASE_ID" =~ ^[A-Za-z0-9_-]+$ ]] || {
@@ -318,8 +290,6 @@ find "$STAGED_THEME/assets/css" -maxdepth 1 -type f -name 'nvx-*.min.css' -delet
 echo "== Mandatory pre-deploy rollback snapshot =="
 umask 077
 mkdir -p "$BACKUP_DIR"
-# Defense in depth: BACKUP_DIR is already outside public_html. Keep a deny rule
-# in case host document-root mapping changes in the future.
 cat > "$BACKUP_DIR/.htaccess" <<'HTACCESS'
 <IfModule mod_authz_core.c>
   Require all denied
@@ -351,33 +321,22 @@ echo "ROLLBACK_SNAPSHOT=PASS path=$BACKUP_DIR"
 
 ROLLBACK_IN_PROGRESS=0
 
-rollback_on_int() {
-  rollback_after_swap 130
-}
-rollback_on_term() {
-  rollback_after_swap 143
-}
-rollback_on_hup() {
-  rollback_after_swap 129
-}
+rollback_on_int() { rollback_after_swap 130; }
+rollback_on_term() { rollback_after_swap 143; }
+rollback_on_hup() { rollback_after_swap 129; }
 rollback_after_swap() {
   local rc="${1:-$?}"
   local rollback_ok=1
   local identity_rc=0
   ROLLBACK_OK=0
   trap - ERR INT TERM HUP
-  if [[ "$ROLLBACK_IN_PROGRESS" -eq 1 ]]; then
-    return
-  fi
+  if [[ "$ROLLBACK_IN_PROGRESS" -eq 1 ]]; then return; fi
   ROLLBACK_IN_PROGRESS=1
   set +e
 
-  # Recover every incomplete-cutover state without ever moving PREVIOUS_THEME
-  # into an already-existing LIVE_THEME directory.
   if [[ "$PREVIOUS_MOVED" -eq 1 && "$SWAPPED" -eq 0 ]]; then
     echo "ROLLBACK_TRIGGERED rc=$rc recovering from incomplete cutover" >&2
     if [[ -d "$LIVE_THEME" && ! -d "$PREVIOUS_THEME" ]]; then
-      # The first move failed; production was never disturbed.
       PREVIOUS_MOVED=0
     elif [[ -d "$PREVIOUS_THEME" ]]; then
       if [[ -d "$LIVE_THEME" ]]; then
@@ -400,9 +359,7 @@ rollback_after_swap() {
     echo "ROLLBACK_TRIGGERED rc=$rc previous=$PREVIOUS_THEME backup=$BACKUP_DIR" >&2
     rm -rf "$FAILED_THEME"
 
-    if [[ -d "$LIVE_THEME" ]]; then
-      mv "$LIVE_THEME" "$FAILED_THEME" || rollback_ok=0
-    fi
+    if [[ -d "$LIVE_THEME" ]]; then mv "$LIVE_THEME" "$FAILED_THEME" || rollback_ok=0; fi
     if [[ -d "$PREVIOUS_THEME" ]]; then
       mv "$PREVIOUS_THEME" "$LIVE_THEME" || rollback_ok=0
     else
@@ -413,10 +370,7 @@ rollback_after_swap() {
     if [[ -f "$MIGRATION_WRITE_MARKER" ]]; then
       echo "ROLLBACK_DB=RESTORED reason=write-marker-detected-db-was-modified" >&2
       if [[ -s "$BACKUP_DIR/db.sql" ]]; then
-        (
-          cd "$PROD_ROOT" || exit 1
-          wp db import "$BACKUP_DIR/db.sql" --allow-root
-        ) || rollback_ok=0
+        ( cd "$PROD_ROOT" || exit 1; wp db import "$BACKUP_DIR/db.sql" --allow-root ) || rollback_ok=0
       else
         echo "ERROR: production DB backup is unavailable during rollback" >&2
         rollback_ok=0
@@ -448,8 +402,6 @@ rollback_after_swap() {
       fi
     fi
 
-    # Re-check restored DB/site identity and propagate the result back to the
-    # parent shell rather than assigning rollback_ok inside a subshell.
     (
       cd "$PROD_ROOT" || exit 1
       db="$(wp config get DB_NAME)"
@@ -474,12 +426,8 @@ rollback_after_swap() {
     fi
   fi
 
-  if [[ "$rc" -eq 0 ]]; then
-    rc=1
-  fi
-  if [[ "$rollback_ok" -ne 1 ]]; then
-    rc=2
-  fi
+  if [[ "$rc" -eq 0 ]]; then rc=1; fi
+  if [[ "$rollback_ok" -ne 1 ]]; then rc=2; fi
   if [[ "$SWAPPED" -eq 1 ]]; then
     if [[ "$rollback_ok" -eq 1 ]]; then
       rm -rf "$FAILED_THEME" 2>/dev/null || true
@@ -545,9 +493,6 @@ echo 'PRODUCTION_ROBOTS_RECONCILIATION=PASS'
 
 [[ "$(tr -d '\r\n' < "$LIVE_THEME/.nvx-deploy-sha")" == "$SHA" ]]
 
-# Migration and exact-SHA checks have committed. Cache maintenance is deliberately
-# non-transactional so a cache-only failure cannot roll the DB back to an older
-# snapshot and discard valid writes made during the release window.
 trap - ERR INT TERM HUP
 
 echo "== Purge production caches =="

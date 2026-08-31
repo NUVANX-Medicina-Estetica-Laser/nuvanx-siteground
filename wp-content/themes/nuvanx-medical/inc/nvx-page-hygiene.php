@@ -353,15 +353,6 @@ function nvx_noindex_but_navigable_page_ids(): array {
 }
 
 /**
- * Backward compatibility alias for nvx_noindex_but_navigable_page_ids.
- *
- * @return int[]
- */
-function nvx_navigable_noindex_page_ids(): array {
-	return nvx_noindex_but_navigable_page_ids();
-}
-
-/**
  * Collects page and post IDs that should be excluded from public indexing.
  *
  * Patient cases are no longer part of this collection: the five repository-
@@ -376,7 +367,7 @@ function nvx_noindex_page_ids() {
 		$ids,
 		nvx_quarantined_comparison_post_ids(),
 		nvx_superseded_legal_page_ids(),
-		nvx_navigable_noindex_page_ids()
+		nvx_noindex_but_navigable_page_ids()
 	);
 
 	// Retired strategy pages: exclude from sitemaps since they only redirect.
@@ -714,78 +705,6 @@ function nvx_sanitize_complianz_banner_html( string $html ): string {
 }
 add_filter( 'cmplz_banner_html', 'nvx_sanitize_complianz_banner_html', 20 );
 add_filter( 'cmplz_template', 'nvx_sanitize_complianz_banner_html', 20 );
-
-/**
- * HubSpot form embed tokens that must stay functional.
- *
- * Tracking pixels (hs-analytics, js.hs-scripts.com) remain marketing-gated.
- *
- * @return string[]
- */
-function nvx_complianz_hubspot_form_tokens(): array {
-	return array(
-		'hsforms.net',
-		'hsforms.com',
-		'js-eu1.hsforms.net',
-		'forms-eu1.hsforms.com',
-		'forms-eu1.hsforms.net',
-	);
-}
-
-/**
- * Tell Complianz not to block the HubSpot form embed.
- *
- * @param mixed $tags Existing whitelist entries.
- * @return array<int,string>
- */
-function nvx_complianz_whitelist_hubspot_forms( $tags ): array {
-	$tags = is_array( $tags ) ? $tags : array();
-	foreach ( nvx_complianz_hubspot_form_tokens() as $token ) {
-		$tags[] = $token;
-	}
-	return $tags;
-}
-add_filter( 'cmplz_whitelisted_script_tags', 'nvx_complianz_whitelist_hubspot_forms' );
-add_filter( 'cmplz_whitelisted_iframe_tags', 'nvx_complianz_whitelist_hubspot_forms' );
-
-/**
- * Remove HubSpot form hosts from Complianz blocked-script lists.
- *
- * @param mixed $tags Known script or iframe tags.
- * @return mixed
- */
-function nvx_complianz_unblock_hubspot_form_tags( $tags ) {
-	if ( ! is_array( $tags ) ) {
-		return $tags;
-	}
-
-	return array_values(
-		array_filter(
-			$tags,
-			static function ( $tag ): bool {
-				$hay = strtolower( is_array( $tag ) ? (string) wp_json_encode( $tag ) : (string) $tag );
-				return false === strpos( $hay, 'hsforms' );
-			}
-		)
-	);
-}
-add_filter( 'cmplz_known_script_tags', 'nvx_complianz_unblock_hubspot_form_tags' );
-add_filter( 'cmplz_known_iframe_tags', 'nvx_complianz_unblock_hubspot_form_tags' );
-
-/**
- * Keep dynamically injected HubSpot form sources out of the marketing blocker.
- *
- * @param bool   $whitelisted Whether Complianz already treats the src as allowed.
- * @param string $src         Script or iframe source.
- */
-function nvx_complianz_whitelist_hubspot_form_src( $whitelisted, $src ): bool {
-	$src = strtolower( (string) $src );
-	if ( false !== strpos( $src, 'hsforms.net' ) || false !== strpos( $src, 'hsforms.com' ) ) {
-		return true;
-	}
-	return (bool) $whitelisted;
-}
-add_filter( 'cmplz_src_whitelisted', 'nvx_complianz_whitelist_hubspot_form_src', 10, 2 );
 
 /**
  * Checks if the current page has a standard wrapper to avoid duplicate regex matching.

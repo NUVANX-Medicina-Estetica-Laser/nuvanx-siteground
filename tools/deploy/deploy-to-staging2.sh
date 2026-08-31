@@ -19,6 +19,7 @@ CONFIG_BACKUP=''
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR=''
 PUBLIC_INTEGRATION_CONFIG=''
+CACHE_HELPER=''
 
 if [[ -d "$SCRIPT_DIR/tools/migrations" ]]; then
   # Immutable GitHub Actions release layout: deploy script copied to release root.
@@ -34,6 +35,12 @@ if [[ -f "$SCRIPT_DIR/lib/staging-public-integration-identities.json" ]]; then
 elif [[ -f "$SCRIPT_DIR/../../lib/staging-public-integration-identities.json" ]]; then
   # Repository/operator layout: tools/deploy/deploy-to-staging2.sh.
   PUBLIC_INTEGRATION_CONFIG="$(cd "$SCRIPT_DIR/../.." && pwd)/lib/staging-public-integration-identities.json"
+fi
+
+if [[ -f "$SCRIPT_DIR/tools/deploy/siteground-cache-purge.sh" ]]; then
+  CACHE_HELPER="$SCRIPT_DIR/tools/deploy/siteground-cache-purge.sh"
+elif [[ -f "$SCRIPT_DIR/siteground-cache-purge.sh" ]]; then
+  CACHE_HELPER="$SCRIPT_DIR/siteground-cache-purge.sh"
 fi
 
 usage() {
@@ -149,53 +156,6 @@ verify_staging_hubspot_embed_contract() {
   )
 }
 
-purge_siteground_cache_if_available() {
-  local plugin_slug='sg-cachepress'
-  local purge_ok=0
-
-  if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-    wp sg purge
-    echo 'siteground_wp_cli_purge=PASS mode=already-active'
-    return 0
-  fi
-
-  if ! wp plugin is-installed "$plugin_slug" >/dev/null 2>&1; then
-    echo 'ERROR: SiteGround Speed Optimizer is not installed; cannot purge Dynamic Cache reproducibly.' >&2
-    return 1
-  fi
-
-  # Loading the inactive plugin with --require exposes the command but does not
-  # invalidate the host Dynamic Cache. SiteGround only performs the real purge
-  # while Speed Optimizer is active. Activate it only for the purge, then return
-  # staging to its original inactive state.
-  wp plugin activate "$plugin_slug" --quiet
-  if ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-    echo 'ERROR: Speed Optimizer did not become active for the transient purge.' >&2
-    return 1
-  fi
-
-  if wp sg purge; then
-    purge_ok=1
-  fi
-
-  wp plugin deactivate "$plugin_slug" --quiet || {
-    echo 'ERROR: failed to restore Speed Optimizer to its original inactive state.' >&2
-    return 1
-  }
-
-  if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-    echo 'ERROR: Speed Optimizer remained active after transient purge.' >&2
-    return 1
-  fi
-
-  [[ "$purge_ok" -eq 1 ]] || {
-    echo 'ERROR: SiteGround Dynamic Cache purge command failed.' >&2
-    return 1
-  }
-
-  echo 'siteground_wp_cli_purge=PASS mode=transient-activation-restored-inactive'
-}
-
 sync_publication_topology() {
   local snapshot report
   snapshot="$(mktemp)"
@@ -251,6 +211,10 @@ done
 [[ "$SOURCE_THEME" == "$WP_ROOT"/wp-content/.nuvanx-deployments/*/theme ]] || fail 'source theme must be inside the staging2 deployment area'
 [[ -n "$MIGRATIONS_DIR" && -d "$MIGRATIONS_DIR" ]] || fail 'migration directory cannot be resolved from repository or immutable release layout'
 [[ -n "$PUBLIC_INTEGRATION_CONFIG" && -f "$PUBLIC_INTEGRATION_CONFIG" ]] || fail_config 'public Staging integration identity manifest cannot be resolved from repository or immutable release layout'
+[[ -n "$CACHE_HELPER" && -f "$CACHE_HELPER" ]] || fail 'canonical SiteGround cache purge helper cannot be resolved from repository or immutable release layout'
+# shellcheck source=/dev/null
+source "$CACHE_HELPER"
+declare -F siteground_cache_purge >/dev/null || fail 'canonical SiteGround cache purge function is unavailable'
 
 for command_name in wp rsync tar php find mktemp sha256sum awk jq; do
   command -v "$command_name" >/dev/null 2>&1 || fail "required command is unavailable: $command_name"
@@ -310,11 +274,9 @@ rollback() {
       echo 'SAFETY_RESTORE: restoring the pre-deploy staging2 theme after rejected deployment' >&2
       rm -rf "$LIVE_THEME"
       tar -xzf "$BACKUP_DIR/theme.tgz" -C "$WP_ROOT"
-      (
-        cd "$WP_ROOT"
-        wp cache flush || true
-        purge_siteground_cache_if_available || true
-      )
+      if ! siteground_cache_purge "$WP_ROOT" preserve; then
+        echo 'SAFETY_RESTORE_CACHE=FAIL' >&2
+      fi
       echo "SAFETY_RESTORE_COMPLETE backup=$BACKUP_DIR" >&2
     fi
     if [[ -n "$CONFIG_BACKUP" && -f "$CONFIG_BACKUP" ]]; then
@@ -443,16 +405,8 @@ trap 'rm -f "$PROD_POST_JSON"' RETURN
 rm -f "$PROD_POST_JSON"
 trap - RETURN
 
-echo '== Purge staging2 caches =='
-(
-  cd "$WP_ROOT"
-  wp cache flush
-  purge_siteground_cache_if_available
-  rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-*
-  rm -rf wp-content/cache/sgo-cache/*
-  rm -rf wp-content/cache/*
-  wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); echo "opcache=ok\n"; }'
-)
+echo '== Purge staging2 caches through canonical owner =='
+siteground_cache_purge "$WP_ROOT" preserve
 
 DEPLOY_SUCCESS=1
 rm -f "$CONFIG_BACKUP"

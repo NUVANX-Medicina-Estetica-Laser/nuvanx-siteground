@@ -88,7 +88,7 @@ assert.match(
 );
 assert.match(
   governance,
-  /assets\/css\/nvx-cases-holding\.css/,
+  /assets\/css\/nvx-cases\.css/,
   'patient-cases CSS must be included on its route',
 );
 assert.match(
