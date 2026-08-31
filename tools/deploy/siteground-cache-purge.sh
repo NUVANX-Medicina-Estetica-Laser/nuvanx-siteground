@@ -15,6 +15,8 @@ siteground_cache_purge() {
 
   (
     set -Eeuo pipefail
+    local activation_performed=0
+
     cd "$wp_root"
     command -v wp >/dev/null 2>&1
     wp plugin is-installed "$plugin_slug" >/dev/null 2>&1 \
@@ -24,10 +26,30 @@ siteground_cache_purge() {
       initial_state='active'
     fi
 
+    restore_transient_activation_on_failure() {
+      local rc=$?
+      local restore_rc=0
+      if [[ "$rc" -ne 0 && "$activation_performed" -eq 1 ]] && wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
+        set +e
+        wp plugin deactivate "$plugin_slug" --quiet
+        restore_rc=$?
+        set -e
+        if [[ "$restore_rc" -ne 0 ]] || wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
+          echo "SITEGROUND_CACHE_PURGE_RESTORE=FAIL original_rc=$rc restore_rc=$restore_rc expected=inactive" >&2
+        else
+          echo "SITEGROUND_CACHE_PURGE_RESTORE=PASS original_rc=$rc restored=inactive" >&2
+        fi
+      fi
+      trap - EXIT
+      exit "$rc"
+    }
+    trap restore_transient_activation_on_failure EXIT
+
     wp cache flush
 
     if [[ "$initial_state" != 'active' ]]; then
       wp plugin activate "$plugin_slug" --quiet
+      activation_performed=1
     fi
     wp plugin is-active "$plugin_slug" >/dev/null 2>&1 \
       || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_activation_failed' >&2; exit 1; }
@@ -61,6 +83,7 @@ siteground_cache_purge() {
         ;;
     esac
 
+    trap - EXIT
     echo "SITEGROUND_CACHE_PURGE=PASS initial=$initial_state final=$final_state capability=wp-sg-purge"
   )
 }
