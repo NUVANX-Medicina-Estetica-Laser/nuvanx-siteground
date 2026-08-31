@@ -22,7 +22,6 @@ on:
     branches: [master]
     types: [labeled]
   schedule:
-    # Weekly audit on Sundays at 00:00 UTC (runs quality & full-history secret scan only)
     - cron: '0 0 * * 0'
   workflow_dispatch:
     inputs:
@@ -56,9 +55,6 @@ on:
 
 permissions: {}
 
-# GitHub concurrency groups retain at most one pending run and may replace an
-# older pending SHA. Every mutating run therefore gets its own group; the FIFO
-# lease below provides the cross-workflow serialization without cancelling SHAs.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('nuvanx-quality-{0}', github.event.pull_request.number) || format('nuvanx-mutation-run-{0}', github.run_id) }}
   cancel-in-progress: false
@@ -103,13 +99,11 @@ jobs:
             printf 'Transient files are forbidden:\n%s\n' "${transient[*]}" >&2
             exit 1
           fi
-
           offenders=()
           while IFS= read -r file; do
             grep -Eq '(^|[[:space:]])git[[:space:]]+push([[:space:]]|$)' "$file" && offenders+=("$file") || true
           done < <(find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -print | sort)
           (( ${#offenders[@]} == 0 )) || { printf 'Workflow self-mutation forbidden: %s\n' "${offenders[*]}" >&2; exit 1; }
-
           forbidden=(DEPLOY_TRIGGER.txt composer.phar wp-content/themes/nuvanx-medical/composer.phar)
           for file in "${forbidden[@]}"; do
             ! git ls-files --error-unmatch "$file" >/dev/null 2>&1 || { echo "Tracked generated file: $file" >&2; exit 1; }
@@ -117,12 +111,10 @@ jobs:
           for prefix in .vscode/ audit/ .github/audit/ wp-content/themes/nuvanx-medical/vendor/; do
             ! git ls-files | grep -Fq "$prefix" || { echo "Tracked generated prefix: $prefix" >&2; exit 1; }
           done
-
           while IFS= read -r file; do
             [[ -f "$file" && -s "$file" ]] || { echo "Empty tracked file: $file" >&2; exit 1; }
             case "$file" in *.orig|*.rej|*.bak|*.tmp|*.swp|*~|*/.DS_Store|.DS_Store) echo "Editor residue: $file" >&2; exit 1 ;; esac
           done < <(git ls-files)
-
           mapfile -t workflows < <(find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -printf '%f\n' | sort)
           if [[ "${workflows[*]}" != 'production.yml staging.yml' ]]; then
             printf 'Exactly two canonical workflows are required; found: %s\n' "${workflows[*]}" >&2
@@ -209,7 +201,6 @@ jobs:
           echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$GITLEAKS_TAR" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$GITLEAKS_TAR" -C "$RUNNER_TEMP" gitleaks
           chmod +x "$RUNNER_TEMP/gitleaks"
-
           log_opts=""
           if [[ "${{ github.event_name }}" == 'pull_request' ]]; then
             log_opts="--diff-merges=first-parent origin/master..HEAD"
@@ -221,7 +212,6 @@ jobs:
               echo "Base commit $before_sha is unreachable (e.g. after force-push/rewrite); falling back to full history scan."
             fi
           fi
-
           if [[ -n "$log_opts" ]]; then
             echo "Scanning commit range: $log_opts"
             "$RUNNER_TEMP/gitleaks" detect --source . --config .gitleaks.toml --gitleaks-ignore-path .gitleaksignore --log-opts="$log_opts" --redact --verbose
@@ -344,14 +334,12 @@ jobs:
             ServerAliveCountMax 2
           EOF
           chmod 600 "$HOME/.ssh/config"
-
           ssh_err="$RUNNER_TEMP/staging-ssh-preflight.err"
           : > "$ssh_err"
           set +e
           ssh -n nvx-staging2 "test -d '$STAGING_ROOT' && test -d '$PROD_ROOT' && command -v wp >/dev/null && command -v rsync >/dev/null && command -v php >/dev/null" 2>"$ssh_err"
           ssh_rc=$?
           set -e
-
           if [[ "$ssh_rc" -eq 0 ]]; then
             echo 'connected=true' >> "$GITHUB_OUTPUT"
             echo 'transport_retry=false' >> "$GITHUB_OUTPUT"
@@ -359,7 +347,6 @@ jobs:
             echo 'STAGING_SSH=PASS'
             exit 0
           fi
-
           cat "$ssh_err" >&2 || true
           status='ssh_other'
           transport_retry='false'
@@ -373,7 +360,6 @@ jobs:
           elif grep -Eqi 'Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|No .* host key is known' "$ssh_err"; then
             status='hostkey'
           fi
-
           echo 'connected=false' >> "$GITHUB_OUTPUT"
           echo "transport_retry=$transport_retry" >> "$GITHUB_OUTPUT"
           echo "status=$status" >> "$GITHUB_OUTPUT"
@@ -393,22 +379,10 @@ jobs:
               echo "STAGING_SSH=RETRY_FRESH_RUNNER current=$RUNNER_ATTEMPT_NO/3 no_snapshot=1 no_mutation=1"
               exit 0
               ;;
-            auth)
-              echo 'STAGING_SSH=FAIL_AUTH; fresh-runner retry forbidden.' >&2
-              exit 1
-              ;;
-            hostkey)
-              echo 'STAGING_SSH=FAIL_HOSTKEY; fresh-runner retry forbidden.' >&2
-              exit 1
-              ;;
-            remote_env)
-              echo 'STAGING_SSH=FAIL_REMOTE_ENV; transport succeeded but remote prerequisites failed.' >&2
-              exit 1
-              ;;
-            *)
-              echo "STAGING_SSH=FAIL_OTHER status=${SSH_STATUS:-missing}; unclassified SSH failure is not retryable." >&2
-              exit 1
-              ;;
+            auth) echo 'STAGING_SSH=FAIL_AUTH; fresh-runner retry forbidden.' >&2; exit 1 ;;
+            hostkey) echo 'STAGING_SSH=FAIL_HOSTKEY; fresh-runner retry forbidden.' >&2; exit 1 ;;
+            remote_env) echo 'STAGING_SSH=FAIL_REMOTE_ENV; transport succeeded but remote prerequisites failed.' >&2; exit 1 ;;
+            *) echo "STAGING_SSH=FAIL_OTHER status=${SSH_STATUS:-missing}; unclassified SSH failure is not retryable." >&2; exit 1 ;;
           esac
 
       - name: Create full rollback snapshot before any runtime mutation
@@ -440,10 +414,13 @@ jobs:
           tar -czf "$ROLLBACK_DIR/theme.tgz" -C "$STAGING_ROOT" wp-content/themes/nuvanx-medical
           if [[ -d "$STAGING_ROOT/wp-content/mu-plugins" ]]; then tar -czf "$ROLLBACK_DIR/mu-plugins.tgz" -C "$STAGING_ROOT" wp-content/mu-plugins; fi
           wp db export "$ROLLBACK_DIR/staging-db.sql" --quiet
-          test -s "$ROLLBACK_DIR/wp-config.php"; test -s "$ROLLBACK_DIR/theme.tgz"; test -s "$ROLLBACK_DIR/staging-db.sql"
+          if wp plugin is-active sg-cachepress >/dev/null 2>&1; then printf '%s\n' active > "$ROLLBACK_DIR/optimizer-state.txt"; else printf '%s\n' inactive > "$ROLLBACK_DIR/optimizer-state.txt"; fi
+          test -s "$ROLLBACK_DIR/wp-config.php"; test -s "$ROLLBACK_DIR/theme.tgz"; test -s "$ROLLBACK_DIR/staging-db.sql"; test -s "$ROLLBACK_DIR/optimizer-state.txt"
           if [[ -f wp-content/themes/nuvanx-medical/.nvx-deploy-sha ]]; then tr -d '\r\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha > "$ROLLBACK_DIR/previous-sha.txt"; else : > "$ROLLBACK_DIR/previous-sha.txt"; fi
-          echo "ROLLBACK_SNAPSHOT=PASS path=$ROLLBACK_DIR"
+          echo "ROLLBACK_SNAPSHOT=PASS path=$ROLLBACK_DIR optimizer=$(cat "$ROLLBACK_DIR/optimizer-state.txt")"
           REMOTE
+          rsync -az tools/deploy/siteground-cache-purge.sh "nvx-staging2:$ROLLBACK_DIR/siteground-cache-purge.sh"
+          ssh nvx-staging2 "test -s '$ROLLBACK_DIR/siteground-cache-purge.sh' && bash -n '$ROLLBACK_DIR/siteground-cache-purge.sh'"
           echo 'STAGING_SNAPSHOT_READY=1' >> "$GITHUB_ENV"
 
       - name: Verify environment isolation and normalize runtime
@@ -498,34 +475,17 @@ jobs:
         run: |
           set -euo pipefail
           ssh nvx-staging2 "NUVANX_CONFIRM=yes bash '$REMOTE_RELEASE/deploy-to-staging2.sh' --wp-root '$STAGING_ROOT' --source-theme '$REMOTE_RELEASE/theme' --sha '$CANDIDATE_SHA' --confirm"
-
-          ssh nvx-staging2 \
-            "cd '$STAGING_ROOT' && \
-             wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-shared.php' \
-             --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'"
-          ssh nvx-staging2 \
-            "grep -q 'Status: MIGRATION_OK' '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'" || exit 1
-
-          ssh nvx-staging2 \
-            "cd '$STAGING_ROOT' && \
-             wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-staging-only.php' \
-             --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-staging-only-${{ github.sha }}.log'"
-          ssh nvx-staging2 \
-            "grep -q 'Status: MIGRATION_OK' '$REMOTE_RELEASE/migration-staging-only-${{ github.sha }}.log'" || exit 1
-
-          ssh nvx-staging2 \
-            "cd '$STAGING_ROOT' && \
-             wp eval-file '$REMOTE_RELEASE/tools/migrations/reconcile-publication-robots.php' \
-             --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-robots-${{ github.sha }}.log'"
+          ssh nvx-staging2 "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-shared.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'"
+          ssh nvx-staging2 "grep -q 'Status: MIGRATION_OK' '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'" || exit 1
+          ssh nvx-staging2 "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-staging-only.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-staging-only-${{ github.sha }}.log'"
+          ssh nvx-staging2 "grep -q 'Status: MIGRATION_OK' '$REMOTE_RELEASE/migration-staging-only-${{ github.sha }}.log'" || exit 1
+          ssh nvx-staging2 "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/reconcile-publication-robots.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-robots-${{ github.sha }}.log'"
           ssh nvx-staging2 "STAGING_ROOT='$STAGING_ROOT' REMOTE_RELEASE='$REMOTE_RELEASE' bash -se" <<'REMOTE'
           set -Eeuo pipefail
           cd "$STAGING_ROOT"
           original_env="$(wp config get WP_ENVIRONMENT_TYPE)"
           [[ "$original_env" == 'staging' ]]
-          restore_environment() {
-            wp config set WP_ENVIRONMENT_TYPE "$original_env"
-            php -l wp-config.php >/dev/null
-          }
+          restore_environment() { wp config set WP_ENVIRONMENT_TYPE "$original_env"; php -l wp-config.php >/dev/null; }
           trap restore_environment EXIT
           grep -q 'PUBLICATION_ROBOTS_RECONCILIATION=PASS' "$REMOTE_RELEASE/migration-robots-${{ github.sha }}.log"
           wp eval-file "$REMOTE_RELEASE/tools/migrations/audit-publication-indexables-runtime.php" --allow-root 2>&1 | tee "$REMOTE_RELEASE/audit-indexables-runtime-${{ github.sha }}.log"
@@ -541,13 +501,8 @@ jobs:
           wp eval-file "$REMOTE_RELEASE/tools/migrations/audit-publication-sitemap-selection.php" --allow-root 2>&1 | tee "$REMOTE_RELEASE/audit-sitemap-selection-${{ github.sha }}.log"
           grep -q 'PUBLICATION_SITEMAP_SELECTION=PASS' "$REMOTE_RELEASE/audit-sitemap-selection-${{ github.sha }}.log"
           REMOTE
-
-          ssh nvx-staging2 \
-            "cd '$STAGING_ROOT' && \
-             wp eval-file '$REMOTE_RELEASE/tools/migrations/audit-content-divergence.php' \
-             --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'"
-          ssh nvx-staging2 \
-            "grep -q 'Status: AUDIT_CLEAN' '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'" || exit 1
+          ssh nvx-staging2 "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/audit-content-divergence.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'"
+          ssh nvx-staging2 "grep -q 'Status: AUDIT_CLEAN' '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'" || exit 1
           echo 'STAGING_CONTENT_MIGRATION=PASS audit=clean'
 
       - name: Purge caches and verify exact Staging2 identity
@@ -557,7 +512,6 @@ jobs:
           set -euo pipefail
           ssh nvx-staging2 "STAGING_ROOT='$STAGING_ROOT' CANDIDATE_SHA='$CANDIDATE_SHA' CACHE_HELPER='$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh' bash -se" <<'REMOTE'
           set -Eeuo pipefail
-          # shellcheck source=/dev/null
           source "$CACHE_HELPER"
           siteground_cache_purge "$STAGING_ROOT" active
           cd "$STAGING_ROOT"
@@ -824,10 +778,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh nvx-staging2 "STAGING_ROOT='$STAGING_ROOT' ROLLBACK_DIR='$ROLLBACK_DIR' REMOTE_RELEASE='$REMOTE_RELEASE' bash -se" <<'REMOTE'
+          ssh nvx-staging2 "STAGING_ROOT='$STAGING_ROOT' ROLLBACK_DIR='$ROLLBACK_DIR' bash -se" <<'REMOTE'
           set -Eeuo pipefail
           [[ "$ROLLBACK_DIR" == '/home/customer/www/staging2.nuvanx.com/.nvx-rollback/'* ]]
-          test -s "$ROLLBACK_DIR/wp-config.php"; test -s "$ROLLBACK_DIR/theme.tgz"; test -s "$ROLLBACK_DIR/staging-db.sql"
+          test -s "$ROLLBACK_DIR/wp-config.php"; test -s "$ROLLBACK_DIR/theme.tgz"; test -s "$ROLLBACK_DIR/staging-db.sql"; test -s "$ROLLBACK_DIR/optimizer-state.txt"; test -s "$ROLLBACK_DIR/siteground-cache-purge.sh"
           cp -p "$ROLLBACK_DIR/wp-config.php" "$STAGING_ROOT/wp-config.php"
           php -l "$STAGING_ROOT/wp-config.php" >/dev/null
           rm -rf "$STAGING_ROOT/wp-content/themes/nuvanx-medical"
@@ -835,12 +789,13 @@ jobs:
           if [[ -f "$ROLLBACK_DIR/mu-plugins.tgz" ]]; then rm -rf "$STAGING_ROOT/wp-content/mu-plugins"; tar -xzf "$ROLLBACK_DIR/mu-plugins.tgz" -C "$STAGING_ROOT"; fi
           cd "$STAGING_ROOT"
           wp db import "$ROLLBACK_DIR/staging-db.sql"
-          # shellcheck source=/dev/null
-          source "$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh"
-          siteground_cache_purge "$STAGING_ROOT" preserve
+          optimizer_state="$(tr -d '\r\n' < "$ROLLBACK_DIR/optimizer-state.txt")"
+          [[ "$optimizer_state" == active || "$optimizer_state" == inactive ]]
+          source "$ROLLBACK_DIR/siteground-cache-purge.sh"
+          siteground_cache_purge "$STAGING_ROOT" "$optimizer_state"
           previous="$(cat "$ROLLBACK_DIR/previous-sha.txt" 2>/dev/null || true)"
           if [[ -n "$previous" ]]; then test "$(tr -d '\r\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha)" = "$previous"; fi
-          echo 'ROLLBACK_STAGING=PASS'
+          echo "ROLLBACK_STAGING=PASS optimizer=$optimizer_state"
           REMOTE
 
       - name: Clean remote payload, snapshot and SSH identity
@@ -1022,7 +977,7 @@ jobs:
 
       - name: Upload performance evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: staging2-performance-${{ env.CANDIDATE_SHA }}
           path: scripts/staging2/performance-artifacts/
@@ -1169,8 +1124,12 @@ jobs:
           if [[ -d wp-content/mu-plugins ]]; then tar -czf "$ROLLBACK_DIR/mu-plugins.tgz" -C "$STAGING_ROOT" wp-content/mu-plugins; fi
           cp -p "$STAGING_ROOT/wp-config.php" "$ROLLBACK_DIR/wp-config.php"
           wp db export "$ROLLBACK_DIR/staging-db.sql" --quiet
+          if wp plugin is-active sg-cachepress >/dev/null 2>&1; then printf '%s\n' active > "$ROLLBACK_DIR/optimizer-state.txt"; else printf '%s\n' inactive > "$ROLLBACK_DIR/optimizer-state.txt"; fi
           if [[ -f wp-content/themes/nuvanx-medical/.nvx-deploy-sha ]]; then tr -d '\r\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha > "$ROLLBACK_DIR/previous-sha.txt"; else : > "$ROLLBACK_DIR/previous-sha.txt"; fi
+          test -s "$ROLLBACK_DIR/wp-config.php"; test -s "$ROLLBACK_DIR/theme.tgz"; test -s "$ROLLBACK_DIR/staging-db.sql"; test -s "$ROLLBACK_DIR/optimizer-state.txt"
           REMOTE
+          rsync -az tools/deploy/siteground-cache-purge.sh "nvx-staging2-pr:$ROLLBACK_DIR/siteground-cache-purge.sh"
+          ssh nvx-staging2-pr "test -s '$ROLLBACK_DIR/siteground-cache-purge.sh' && bash -n '$ROLLBACK_DIR/siteground-cache-purge.sh'"
           echo 'STAGING_SNAPSHOT_READY=1' >> "$GITHUB_ENV"
           ssh nvx-staging2-pr "mkdir -p '$REMOTE_RELEASE/theme' '$REMOTE_RELEASE/tools/migrations' '$REMOTE_RELEASE/tools/deploy' '$REMOTE_RELEASE/lib'"
           rsync -az --delete --exclude='.git' --exclude='*.log' --exclude='_archive*' --exclude='_disabled*' --exclude='*.bak*' "$CANDIDATE_ROOT/wp-content/themes/nuvanx-medical/" "nvx-staging2-pr:$REMOTE_RELEASE/theme/"
@@ -1180,7 +1139,6 @@ jobs:
           rsync -az tools/deploy/siteground-cache-purge.sh "nvx-staging2-pr:$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh"
           echo 'STAGING_MUTATION_ARMED=1' >> "$GITHUB_ENV"
           ssh nvx-staging2-pr "NUVANX_CONFIRM=yes bash '$REMOTE_RELEASE/deploy-to-staging2.sh' --wp-root '$STAGING_ROOT' --source-theme '$REMOTE_RELEASE/theme' --sha '$PR_PREVIEW_SHA' --confirm"
-
           ssh nvx-staging2-pr "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-shared.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'"
           ssh nvx-staging2-pr "grep -q 'Status: MIGRATION_OK' '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'" || exit 1
           ssh nvx-staging2-pr "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-staging-only.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-staging-only-${{ github.sha }}.log'"
@@ -1207,12 +1165,10 @@ jobs:
           wp eval-file "$REMOTE_RELEASE/tools/migrations/audit-publication-sitemap-selection.php" --allow-root 2>&1 | tee "$REMOTE_RELEASE/audit-sitemap-selection-${{ github.sha }}.log"
           grep -q 'PUBLICATION_SITEMAP_SELECTION=PASS' "$REMOTE_RELEASE/audit-sitemap-selection-${{ github.sha }}.log"
           REMOTE
-
           ssh nvx-staging2-pr "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/audit-content-divergence.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'"
           ssh nvx-staging2-pr "grep -q 'Status: AUDIT_CLEAN' '$REMOTE_RELEASE/migration-audit-${{ github.sha }}.log'" || exit 1
           ssh nvx-staging2-pr "STAGING_ROOT='$STAGING_ROOT' PR_SHA='$PR_SHA' PR_PREVIEW_SHA='$PR_PREVIEW_SHA' CACHE_HELPER='$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh' bash -se" <<'REMOTE'
           set -Eeuo pipefail
-          # shellcheck source=/dev/null
           source "$CACHE_HELPER"
           siteground_cache_purge "$STAGING_ROOT" active
           cd "$STAGING_ROOT"
@@ -1278,17 +1234,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh nvx-staging2-pr "STAGING_ROOT='$STAGING_ROOT' ROLLBACK_DIR='$ROLLBACK_DIR' REMOTE_RELEASE='$REMOTE_RELEASE' bash -se" <<'REMOTE'
+          ssh nvx-staging2-pr "STAGING_ROOT='$STAGING_ROOT' ROLLBACK_DIR='$ROLLBACK_DIR' bash -se" <<'REMOTE'
           set -Eeuo pipefail
           [[ "$ROLLBACK_DIR" == '/home/customer/www/staging2.nuvanx.com/.nvx-rollback/'* ]]
+          test -s "$ROLLBACK_DIR/optimizer-state.txt"; test -s "$ROLLBACK_DIR/siteground-cache-purge.sh"
           rm -rf "$STAGING_ROOT/wp-content/themes/nuvanx-medical"; tar -xzf "$ROLLBACK_DIR/theme.tgz" -C "$STAGING_ROOT"
           if [[ -f "$ROLLBACK_DIR/mu-plugins.tgz" ]]; then rm -rf "$STAGING_ROOT/wp-content/mu-plugins"; tar -xzf "$ROLLBACK_DIR/mu-plugins.tgz" -C "$STAGING_ROOT"; fi
           if [[ -f "$ROLLBACK_DIR/wp-config.php" ]]; then cp -p "$ROLLBACK_DIR/wp-config.php" "$STAGING_ROOT/wp-config.php"; php -l "$STAGING_ROOT/wp-config.php" >/dev/null; fi
           cd "$STAGING_ROOT"; wp db import "$ROLLBACK_DIR/staging-db.sql"
-          # shellcheck source=/dev/null
-          source "$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh"
-          siteground_cache_purge "$STAGING_ROOT" preserve
-          echo 'PR_ROLLBACK_STAGING=PASS'
+          optimizer_state="$(tr -d '\r\n' < "$ROLLBACK_DIR/optimizer-state.txt")"
+          [[ "$optimizer_state" == active || "$optimizer_state" == inactive ]]
+          source "$ROLLBACK_DIR/siteground-cache-purge.sh"
+          siteground_cache_purge "$STAGING_ROOT" "$optimizer_state"
+          echo "PR_ROLLBACK_STAGING=PASS optimizer=$optimizer_state"
           REMOTE
 
       - name: Cleanup PR preview
