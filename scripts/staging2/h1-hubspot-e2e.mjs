@@ -17,8 +17,16 @@ const managedPageUrl = new URL(
   '../../wp-content/themes/nuvanx-medical/inc/nvx-valoracion-managed-page.php',
   import.meta.url
 );
+const firstPartyOwnerUrl = new URL(
+  '../../wp-content/themes/nuvanx-medical/inc/nvx-valoracion-first-party-owner.php',
+  import.meta.url
+);
 const heroAndFormsUrl = new URL(
   '../../wp-content/themes/nuvanx-medical/inc/nvx-hero-and-forms.php',
+  import.meta.url
+);
+const ctaBootstrapUrl = new URL(
+  '../../wp-content/themes/nuvanx-medical/inc/nvx-cta-components.php',
   import.meta.url
 );
 const valoracionModalUrl = new URL(
@@ -48,7 +56,9 @@ const pageHygieneUrl = new URL(
 
 const [
   managedPage,
+  firstPartyOwner,
   heroAndForms,
+  ctaBootstrap,
   valoracionModal,
   directForm,
   secureBridge,
@@ -57,7 +67,9 @@ const [
   pageHygiene,
 ] = await Promise.all([
   fs.readFile(managedPageUrl, 'utf8'),
+  fs.readFile(firstPartyOwnerUrl, 'utf8'),
   fs.readFile(heroAndFormsUrl, 'utf8'),
+  fs.readFile(ctaBootstrapUrl, 'utf8'),
   fs.readFile(valoracionModalUrl, 'utf8'),
   fs.readFile(directFormUrl, 'utf8'),
   fs.readFile(secureBridgeUrl, 'utf8'),
@@ -78,39 +90,59 @@ assert.match(
 );
 
 assert.match(
+  ctaBootstrap,
+  /require_once __DIR__ \. '\/nvx-valoracion-first-party-owner\.php';/,
+  'first-party owner must register before the hero compatibility layer'
+);
+assert.match(
   heroAndForms,
+  /function nvx_hero_insert_media_figure\( string \$content, string \$figure \): string/,
+  'unrelated hero media governance must remain intact'
+);
+assert.match(
+  heroAndForms,
+  /if \( ! function_exists\( 'nvx_valoracion_native_hubspot_enforce_single_mount' \) \)/,
+  'hero form governance must remain a conditional compatibility layer'
+);
+assert.match(
+  firstPartyOwner,
   /function nvx_valoracion_native_hubspot_enforce_single_mount\( string \$html \): string/,
-  'valoración output governor must remain the single final owner'
+  'explicit valoración output owner must govern the final managed response'
 );
 assert.match(
-  heroAndForms,
+  firstPartyOwner,
   /id="nvx-valoracion-first-party-form"/,
-  'output governor must rename the legacy browser mount to the canonical first-party host'
+  'output owner must rename the legacy browser mount to the canonical first-party host'
 );
 assert.match(
-  heroAndForms,
+  firstPartyOwner,
   /data-nvx-first-party-owner="1"/,
   'canonical first-party host must identify its ownership contract'
 );
 assert.match(
-  heroAndForms,
+  firstPartyOwner,
   /nvx-hubspot-\(\?:lazy\|native\|eager\)/,
-  'output governor must strip native HubSpot runtime ownership markers'
+  'output owner must strip native HubSpot runtime ownership markers'
 );
 assert.match(
-  heroAndForms,
+  firstPartyOwner,
   /return nvx_valoracion_direct_form_markup\(\);/,
   'canonical landing mount must render the first-party form'
 );
 assert.match(
-  heroAndForms,
-  /Retire every browser-owned HubSpot form surface on the managed landing/,
+  firstPartyOwner,
+  /Retire every browser-owned HubSpot form surface on this managed route/,
   'managed landing must explicitly retire browser-owned HubSpot form surfaces'
 );
 assert.match(
-  heroAndForms,
+  firstPartyOwner,
   /nvx_valoracion_remove_divs_by_class\( \$html, 'hs-form-frame' \)/,
-  'output governor must remove HubSpot iframe mounts before emitting the first-party owner'
+  'output owner must remove HubSpot iframe mounts before returning the managed response'
+);
+assert.match(
+  firstPartyOwner,
+  /\$replacement = \(int\) \$range\['start'\] === \$first_start \? \$canonical : '';/,
+  'canonical mount must replace the original range in place without a stale offset'
 );
 
 assert.doesNotMatch(
@@ -150,6 +182,6 @@ console.log(`EXPECTED_SHA=${expectedSha}`);
 console.log(`HUBSPOT_FORM_ID=${formId}`);
 console.log(`HUBSPOT_PORTAL_ID=${portalId}`);
 console.log('HUBSPOT_PRODUCTION_CONTRACT_MODE=ZERO_SUBMIT');
-console.log('HUBSPOT_VALORACION_FIRST_PARTY_OWNER=PASS browser_iframe=retired secure_bridge=required capture_relay=after_2xx');
+console.log('HUBSPOT_VALORACION_FIRST_PARTY_OWNER=PASS browser_iframe=retired secure_bridge=required capture_relay=after_2xx hero_governance=preserved');
 console.log('H1_BROWSER_E2E=PASS mode=zero-submit-static-contract');
 console.log('PRODUCTION_HUBSPOT_CONTRACT=PASS zero_submit=1 javascript_executed=0 contact_created=0');
