@@ -2,7 +2,8 @@
 	'use strict';
 
 	var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
-	var CLICK_KEYS = ['gclid', 'gbraid', 'wbraid', 'gclsrc', 'fbclid'];
+	var CLICK_KEYS = ['gclid', 'gbraid', 'wbraid', 'gclsrc'];
+	var META_CLICK_KEYS = ['fbclid'];
 	var ATTR_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 	var FIRST_TOUCH_KEY = 'nvx_first_touch';
 	var CONVERSION_TOUCH_KEY = 'nvx_conversion_touch';
@@ -76,9 +77,7 @@
 	}
 
 	function lsGet(key) { try { return window.localStorage.getItem(key); } catch (_error) { return null; } }
-	function lsSet(key, value) {
-		try { window.localStorage.setItem(key, value); return true; } catch (_error) { return false; }
-	}
+	function lsSet(key, value) { try { window.localStorage.setItem(key, value); return true; } catch (_error) { return false; } }
 
 	function readCookie(name) {
 		try {
@@ -126,14 +125,15 @@
 		var params = new URLSearchParams((window.location && window.location.search) || '');
 		var utm = {};
 		var clicks = {};
+		var allClickKeys = CLICK_KEYS.concat(META_CLICK_KEYS);
 		var i;
 		for (i = 0; i < UTM_KEYS.length; i++) {
 			var utmValue = params.get(UTM_KEYS[i]);
 			if (utmValue) utm[UTM_KEYS[i]] = utmValue;
 		}
-		for (i = 0; i < CLICK_KEYS.length; i++) {
-			var clickValue = params.get(CLICK_KEYS[i]);
-			if (clickValue) clicks[CLICK_KEYS[i]] = clickValue;
+		for (i = 0; i < allClickKeys.length; i++) {
+			var clickValue = params.get(allClickKeys[i]);
+			if (clickValue) clicks[allClickKeys[i]] = clickValue;
 		}
 
 		var href = (window.location && window.location.href) || '';
@@ -145,11 +145,9 @@
 		var inferredSource = utm.utm_source || '';
 		var inferredMedium = utm.utm_medium || '';
 
-		if (!inferredSource && clicks.fbclid) {
-			inferredSource = 'meta'; inferredMedium = 'paid_social';
-		} else if (!inferredSource && (clicks.gclid || clicks.gbraid || clicks.wbraid)) {
-			inferredSource = 'google'; inferredMedium = 'cpc';
-		} else if (!inferredSource && referrer) {
+		if (!inferredSource && clicks.fbclid) { inferredSource = 'meta'; inferredMedium = 'paid_social'; }
+		else if (!inferredSource && (clicks.gclid || clicks.gbraid || clicks.wbraid)) { inferredSource = 'google'; inferredMedium = 'cpc'; }
+		else if (!inferredSource && referrer) {
 			if (referrer.indexOf('google') !== -1) { inferredSource = 'google'; inferredMedium = inferredMedium || 'organic'; }
 			else if (referrer.indexOf('bing') !== -1) { inferredSource = 'bing'; inferredMedium = inferredMedium || 'organic'; }
 			else if (referrer.indexOf('facebook') !== -1) { inferredSource = 'facebook'; inferredMedium = inferredMedium || 'organic'; }
@@ -157,23 +155,15 @@
 		}
 
 		var touch = {
-			channel: channel,
-			source: inferredSource,
-			medium: inferredMedium,
-			campaign_id: utm.utm_campaign || '',
-			utm_content: utm.utm_content || '',
-			utm_term: utm.utm_term || '',
-			landing_url: landing,
-			referrer_domain: '',
-			timestamp: new Date(now).toISOString(),
-			expires_at: now + ATTR_TTL_MS,
+			channel: channel, source: inferredSource, medium: inferredMedium,
+			campaign_id: utm.utm_campaign || '', utm_content: utm.utm_content || '', utm_term: utm.utm_term || '',
+			landing_url: landing, referrer_domain: '', timestamp: new Date(now).toISOString(), expires_at: now + ATTR_TTL_MS,
 		};
 		if (clicks.gclid) touch.gclid = clicks.gclid;
 		if (clicks.gbraid) touch.gbraid = clicks.gbraid;
 		if (clicks.wbraid) touch.wbraid = clicks.wbraid;
 		if (clicks.gclsrc) touch.gclsrc = clicks.gclsrc;
 		if (clicks.fbclid) touch.fbclid = cleanFbclid(clicks.fbclid);
-
 		var fbc = cleanMetaBrowserId(readCookie('_fbc'));
 		var fbp = cleanMetaBrowserId(readCookie('_fbp'));
 		if (!fbc && touch.fbclid) fbc = buildFbcFromFbclid(touch.fbclid, now);
@@ -187,9 +177,7 @@
 		var field = form.querySelector('[name="' + name + '"]');
 		if (field) return field;
 		field = document.createElement('input');
-		field.type = 'hidden';
-		field.name = name;
-		field.value = '';
+		field.type = 'hidden'; field.name = name; field.value = '';
 		form.appendChild(field);
 		return field;
 	}
@@ -206,9 +194,7 @@
 			fbc: conversion.fbc || first.fbc || '',
 			fbp: conversion.fbp || first.fbp || '',
 		} : { fbclid: '', fbc: '', fbp: '' };
-		Object.keys(values).forEach(function(name) {
-			ensureHiddenField(form, name).value = values[name];
-		});
+		Object.keys(values).forEach(function(name) { ensureHiddenField(form, name).value = values[name]; });
 	}
 
 	function captureAttribution() {
@@ -241,7 +227,6 @@
 			nvx_first_source: first.source || '', nvx_first_medium: first.medium || '', nvx_first_campaign_id: first.campaign_id || '', nvx_first_referrer_domain: first.referrer_domain || '', nvx_first_landing_url: first.landing_url || '', nvx_first_timestamp: first.timestamp || '', nvx_first_channel: first.channel || '',
 			nvx_conversion_channel: conversion.channel || '', nvx_conversion_source: conversion.source || '', nvx_conversion_medium: conversion.medium || '', nvx_conversion_campaign_id: conversion.campaign_id || '', nvx_conversion_landing_url: conversion.landing_url || '', nvx_conversion_timestamp: conversion.timestamp || '',
 		};
-
 		var result = {};
 		Object.keys(fieldMap).forEach(function(key) {
 			var fieldName = fieldMap[key];
@@ -260,22 +245,13 @@
 	window.NUVANXAttributionContract = {
 		getFirstTouch: function() { captureAttribution(); return readTouch(FIRST_TOUCH_KEY); },
 		getConversionTouch: function() { captureAttribution(); return readTouch(CONVERSION_TOUCH_KEY); },
-		getLeadId: safeSessionStorage,
-		buildFormPayload: buildFormPayload,
-		classifyChannel: classifyChannel,
-		FIRST_TOUCH_KEY: FIRST_TOUCH_KEY,
-		CONVERSION_TOUCH_KEY: CONVERSION_TOUCH_KEY,
-		UTM_KEYS: UTM_KEYS,
-		CLICK_KEYS: CLICK_KEYS,
-		ATTR_TTL_MS: ATTR_TTL_MS,
+		getLeadId: safeSessionStorage, buildFormPayload: buildFormPayload, classifyChannel: classifyChannel,
+		FIRST_TOUCH_KEY: FIRST_TOUCH_KEY, CONVERSION_TOUCH_KEY: CONVERSION_TOUCH_KEY,
+		UTM_KEYS: UTM_KEYS, CLICK_KEYS: CLICK_KEYS, META_CLICK_KEYS: META_CLICK_KEYS, ATTR_TTL_MS: ATTR_TTL_MS,
 	};
-
 	window.nvxAttribution = {
 		getLeadId: safeSessionStorage,
 		getFirstTouch: function() { return readTouch(FIRST_TOUCH_KEY) || {}; },
-		classifyChannel: classifyChannel,
-		UTM_KEYS: UTM_KEYS,
-		CLICK_KEYS: CLICK_KEYS,
-		ATTR_TTL_MS: ATTR_TTL_MS,
+		classifyChannel: classifyChannel, UTM_KEYS: UTM_KEYS, CLICK_KEYS: CLICK_KEYS, META_CLICK_KEYS: META_CLICK_KEYS, ATTR_TTL_MS: ATTR_TTL_MS,
 	};
 })();
