@@ -6,8 +6,16 @@ const managedPage = fs.readFileSync(
   'wp-content/themes/nuvanx-medical/inc/nvx-valoracion-managed-page.php',
   'utf8',
 );
-const mountGovernance = fs.readFileSync(
+const owner = fs.readFileSync(
+  'wp-content/themes/nuvanx-medical/inc/nvx-valoracion-first-party-owner.php',
+  'utf8',
+);
+const heroGovernance = fs.readFileSync(
   'wp-content/themes/nuvanx-medical/inc/nvx-hero-and-forms.php',
+  'utf8',
+);
+const ctaBootstrap = fs.readFileSync(
+  'wp-content/themes/nuvanx-medical/inc/nvx-cta-components.php',
   'utf8',
 );
 const directForm = fs.readFileSync(
@@ -27,8 +35,6 @@ const runtimeConfig = fs.readFileSync(
   'utf8',
 );
 
-// The managed PHP page keeps one deterministic server-side placeholder. The
-// final output governor rewrites it before the response reaches the browser.
 const managedHosts = managedPage.match(/<div id="nvx-hubspot-native-form"[^>]*>/g) || [];
 assert.equal(managedHosts.length, 1, 'Managed valoración page must define exactly one server-side replacement host');
 assert.doesNotMatch(
@@ -38,46 +44,57 @@ assert.doesNotMatch(
 );
 
 assert.match(
-  mountGovernance,
+  ctaBootstrap,
+  /require_once __DIR__ \. '\/nvx-valoracion-first-party-owner\.php';/,
+  'First-party owner must load before the hero compatibility layer',
+);
+assert.match(
+  heroGovernance,
+  /if \( ! function_exists\( 'nvx_valoracion_native_hubspot_enforce_single_mount' \) \)/,
+  'Hero compatibility layer must remain conditional so the explicit owner can replace it cleanly',
+);
+assert.match(
+  owner,
   /function nvx_valoracion_native_hubspot_enforce_single_mount\( string \$html \): string/,
-  'Final valoración output must remain governed by one canonical output owner',
+  'Final valoración output must be governed by the explicit first-party owner',
 );
+assert.match(owner, /id="nvx-valoracion-first-party-form"/, 'Output owner must rename the browser mount');
+assert.match(owner, /data-nvx-first-party-owner="1"/, 'First-party output host must identify its owner');
 assert.match(
-  mountGovernance,
-  /id="nvx-valoracion-first-party-form"/,
-  'Output governance must rename the legacy browser mount to the first-party owner host',
-);
-assert.match(
-  mountGovernance,
-  /data-nvx-first-party-owner="1"/,
-  'First-party output owner must be explicitly marked',
-);
-assert.match(
-  mountGovernance,
+  owner,
   /nvx-hubspot-\(\?:lazy\|native\|eager\)/,
-  'Output governance must strip browser-native HubSpot ownership attributes',
+  'Output owner must strip browser-native HubSpot ownership attributes',
 );
 assert.match(
-  mountGovernance,
+  owner,
   /nvx_valoracion_remove_divs_by_class\( \$html, 'hs-form-frame' \)/,
-  'Output governance must remove declarative HubSpot browser frames from the managed landing',
+  'Output owner must remove declarative HubSpot browser frames',
 );
 assert.match(
-  mountGovernance,
+  owner,
   /nvx_valoracion_remove_divs_by_class\( \$html, 'hbspt-form' \)/,
-  'Output governance must remove legacy HubSpot browser mounts from the managed landing',
+  'Output owner must remove legacy HubSpot browser mounts',
 );
+assert.match(owner, /return nvx_valoracion_direct_form_markup\(\);/, 'Landing mount must render the first-party form');
 assert.match(
-  mountGovernance,
-  /return nvx_valoracion_direct_form_markup\(\);/,
-  'The canonical landing mount must render the first-party form',
+  owner,
+  /\$replacement = \(int\) \$range\['start'\] === \$first_start \? \$canonical : '';/,
+  'Canonical first-party mount must replace the original range in place rather than use a stale offset',
 );
 
-const declarativeMounts = mountGovernance.match(/class="hs-form-frame"/g) || [];
-assert.equal(
-  declarativeMounts.length,
-  0,
-  'Managed landing governance must define zero declarative HubSpot browser frames',
+const ownerDeclarativeMounts = owner.match(/class="hs-form-frame"/g) || [];
+assert.equal(ownerDeclarativeMounts.length, 0, 'First-party owner must define zero HubSpot browser frames');
+
+// Preserve unrelated hero behavior exactly rather than duplicating or deleting it.
+assert.match(
+  heroGovernance,
+  /function nvx_hero_insert_media_figure\( string \$content, string \$figure \): string/,
+  'Canonical hero media helper must remain present',
+);
+assert.match(
+  heroGovernance,
+  /return nvx_hero_insert_media_figure\( \$content, \$figure \);/,
+  'Hero media injection must continue to call its canonical helper',
 );
 
 assert.match(directForm, /data-nvx-direct-form/, 'First-party form marker must exist');
@@ -99,8 +116,6 @@ assert.match(captureRelay, /add_filter\( 'http_response'/, 'Durable capture rela
 assert.match(captureRelay, /status < 200 \|\| \$status >= 300/, 'Supabase capture must be suppressed unless HubSpot returned 2xx');
 assert.match(captureRelay, /valid nvx_lead_id missing/, 'Durable relay must fail closed without canonical lineage');
 
-// Account/form identity remains server-configured for transport and analytics;
-// the browser no longer owns the visible form lifecycle on this route.
 assert.match(
   runtimeConfig,
   /'hubspotPortalId'\s*=>\s*\(string\) \$hubspot_config\['portal_id'\]/,
@@ -112,4 +127,4 @@ assert.match(
   'Runtime configuration must continue to expose the validated HubSpot form identity',
 );
 
-console.log('HUBSPOT_SINGLE_MOUNT_STATIC=PASS managed_hosts=1 browser_frames=0 first_party_owner=1 secure_hubspot_transport=1 capture_after_2xx=1 qa_server_owned=1');
+console.log('HUBSPOT_SINGLE_MOUNT_STATIC=PASS managed_hosts=1 browser_frames=0 first_party_owner=1 hero_helper=preserved secure_hubspot_transport=1 capture_after_2xx=1 qa_server_owned=1');
