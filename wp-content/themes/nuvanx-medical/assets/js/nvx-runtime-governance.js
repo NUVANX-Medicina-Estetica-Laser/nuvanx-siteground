@@ -171,10 +171,10 @@
 
   /** Govern the first-party valoración modal and CTA routing. */
   function initValoracionModalGovernance() {
-    const modal = document.getElementById(config.modalId || modalConfig.modalId || 'nvx-valoracion-modal');
+    const modal = document.getElementById(modalConfig.modalId || 'nvx-valoracion-modal');
     let lastFocus = null;
     const DEFAULT_VALORACION_PATH = '/madrid/valoracion/';
-    const pageUrl = (config.pageUrl || modalConfig.pageUrl || DEFAULT_VALORACION_PATH).replace(/\/?$/, '/');
+    const pageUrl = (modalConfig.pageUrl || DEFAULT_VALORACION_PATH).replace(/\/?$/, '/');
 
     let pagePath;
     try {
