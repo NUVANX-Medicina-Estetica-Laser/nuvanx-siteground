@@ -15,14 +15,14 @@ siteground_cache_purge() {
 
   (
     set -Eeuo pipefail
-    # The helper may be called from deployment code that already owns an ERR
-    # trap. ERR traps are inherited when errtrace (-E) is enabled and could
-    # abort the caller before this helper's EXIT cleanup restores the requested
-    # Speed Optimizer state. Cache-state restoration is owned here.
+    # Callers may themselves run under errtrace or invoke this function from a
+    # conditional shell context. Clear inherited ERR handlers and propagate
+    # critical command failures explicitly instead of relying on errexit alone.
     trap - ERR
 
-    cd "$wp_root"
-    command -v wp >/dev/null 2>&1
+    cd "$wp_root" || exit $?
+    command -v wp >/dev/null 2>&1 \
+      || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=wp_cli_missing' >&2; exit 1; }
     wp plugin is-installed "$plugin_slug" >/dev/null 2>&1 \
       || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_not_installed' >&2; exit 1; }
 
@@ -74,40 +74,44 @@ siteground_cache_purge() {
     }
     trap restore_requested_state_on_failure EXIT
 
-    wp cache flush
+    wp cache flush || exit $?
 
     if [[ "$initial_state" != 'active' ]]; then
-      wp plugin activate "$plugin_slug" --quiet
+      wp plugin activate "$plugin_slug" --quiet || exit $?
     fi
     wp plugin is-active "$plugin_slug" >/dev/null 2>&1 \
       || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_activation_failed' >&2; exit 1; }
 
     # A fresh WP-CLI process is required after activation so the plugin can
     # register the `sg` command. This invocation is deliberately fail-closed.
-    wp sg purge
+    wp sg purge || exit $?
 
-    rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-*
-    rm -rf wp-content/cache/sgo-cache/*
-    rm -rf wp-content/cache/*
-    wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); }'
+    rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-* || exit $?
+    rm -rf wp-content/cache/sgo-cache/* || exit $?
+    rm -rf wp-content/cache/* || exit $?
+    wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); }' || exit $?
 
     case "$final_state" in
       preserve)
         if [[ "$initial_state" == 'active' ]]; then
-          wp plugin is-active "$plugin_slug" >/dev/null 2>&1
+          wp plugin is-active "$plugin_slug" >/dev/null 2>&1 || exit $?
         else
-          wp plugin deactivate "$plugin_slug" --quiet
-          ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1
+          wp plugin deactivate "$plugin_slug" --quiet || exit $?
+          if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
+            exit 1
+          fi
         fi
         ;;
       active)
-        wp plugin is-active "$plugin_slug" >/dev/null 2>&1
+        wp plugin is-active "$plugin_slug" >/dev/null 2>&1 || exit $?
         ;;
       inactive)
         if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-          wp plugin deactivate "$plugin_slug" --quiet
+          wp plugin deactivate "$plugin_slug" --quiet || exit $?
         fi
-        ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1
+        if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
+          exit 1
+        fi
         ;;
     esac
 
