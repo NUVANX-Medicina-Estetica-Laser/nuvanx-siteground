@@ -22,6 +22,10 @@ const runtime = fs.readFileSync(
   'wp-content/themes/nuvanx-medical/assets/js/nvx-runtime-governance.js',
   'utf8',
 );
+const documentGovernance = fs.readFileSync(
+  'wp-content/themes/nuvanx-medical/inc/nvx-document-governance.php',
+  'utf8',
+);
 const directForm = fs.readFileSync(
   'wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php',
   'utf8',
@@ -57,8 +61,21 @@ assert.doesNotMatch(modal, /hs-form-frame/, 'Modal must define zero HubSpot brow
 assert.doesNotMatch(modal, /forms\/embed\//, 'Modal must define zero HubSpot form embed loaders');
 assert.match(modal, /'hubspotPortalId'\s*=>\s*\$portal_id/, 'Browser config may expose only the public portal ID for consented analytics');
 assert.doesNotMatch(modal, /hubspotFormId|hubspotRegion/, 'Browser modal config must not expose HubSpot form identity or frame region');
+
 assert.match(runtime, /js\.hs-scripts\.com/, 'Consented global HubSpot analytics loader must remain available');
+assert.match(runtime, /modalConfig\.hubspotPortalId/, 'HubSpot analytics must consume the single modal-owned public portal ID');
+assert.doesNotMatch(runtime, /config\.hubspotPortalId/, 'Runtime governance must not retain a duplicate HubSpot portal config owner');
 assert.doesNotMatch(runtime, /forms\/embed\/|forms\/v2\.js|hs-form-frame|hbspt\.forms/, 'Runtime must not contain a browser HubSpot forms engine');
+assert.doesNotMatch(
+  documentGovernance,
+  /hubspotScriptId|hubspotPageMount|hubspotPortalId|hubspotFormId|hubspotRegion|nvx_valoracion_modal_hubspot_config/,
+  'Document governance must not serialize retired or duplicate HubSpot browser-form configuration',
+);
+assert.doesNotMatch(
+  documentGovernance,
+  /modalEnabled|['"]modalId['"]|['"]pageUrl['"]/,
+  'Document governance must not duplicate modal configuration owned by nvx-valoracion-modal.php',
+);
 
 assert.match(directForm, /data-nvx-direct-form/, 'First-party form marker must exist');
 assert.doesNotMatch(directForm, /Disabled on valoracion landing page/, 'First-party form must remain available on the full valoración landing');
@@ -75,4 +92,4 @@ assert.match(captureRelay, /add_filter\( 'http_response'/, 'Durable capture rela
 assert.match(captureRelay, /status < 200 \|\| \$status >= 300/, 'Supabase capture must be suppressed unless HubSpot returned 2xx');
 assert.match(captureRelay, /valid nvx_lead_id missing/, 'Durable relay must fail closed without canonical lineage');
 
-console.log('HUBSPOT_SINGLE_MOUNT_STATIC=PASS landing_first_party=1 modal_first_party=1 browser_frames=0 embeds=0 analytics_portal_only=1 hero_helper=preserved secure_hubspot_transport=1 capture_after_2xx=1 qa_server_owned=1');
+console.log('HUBSPOT_SINGLE_MOUNT_STATIC=PASS landing_first_party=1 modal_first_party=1 browser_frames=0 embeds=0 analytics_portal_single_owner=1 retired_browser_config=0 hero_helper=preserved secure_hubspot_transport=1 capture_after_2xx=1 qa_server_owned=1');
