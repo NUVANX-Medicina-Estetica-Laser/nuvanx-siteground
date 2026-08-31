@@ -18,6 +18,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/nvx-marketing-consent.php';
+
 /**
  * Resolve the canonical HubSpot identity (portal ID and form ID) as a validated pair.
  *
@@ -351,7 +353,7 @@ function nvx_hubspot_secure_pre_http_request( $preempt, array $args, string $url
 		$payload = array();
 	}
 
-	$marketing_consent = '1' === nvx_hubspot_secure_post_value( 'nvx_marketing_consent', 1 );
+	$marketing_consent = nvx_marketing_consent_granted();
 	$fields            = isset( $payload['fields'] ) && is_array( $payload['fields'] ) ? $payload['fields'] : array();
 	$fields            = nvx_hubspot_secure_filter_fields( $fields, $marketing_consent );
 	$fields            = nvx_hubspot_secure_append_qa( $fields );

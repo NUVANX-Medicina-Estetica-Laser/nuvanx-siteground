@@ -15,6 +15,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/nvx-marketing-consent.php';
+
 /**
  * Markup for the consent-independent valoración form.
  */
@@ -85,8 +87,11 @@ function nvx_valoracion_direct_form_markup(): string {
 	$html .= '<input type="hidden" name="nvx_lead_id" value="">';
 	$html .= '<input type="hidden" name="nvx_marketing_consent" value="0">';
 
-	foreach ( array( 'gclid', 'gbraid', 'wbraid', 'gclsrc', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term' ) as $param ) {
+	foreach ( array( 'gclid', 'gbraid', 'wbraid', 'gclsrc', 'fbclid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term' ) as $param ) {
 		$value = isset( $_GET[ $param ] ) ? sanitize_text_field( wp_unslash( (string) $_GET[ $param ] ) ) : '';
+		if ( 'fbclid' === $param && '' !== $value && 1 !== preg_match( '/^[A-Za-z0-9._~:+-]{1,512}$/', $value ) ) {
+			$value = '';
+		}
 		$html .= '<input type="hidden" name="' . esc_attr( $param ) . '" value="' . esc_attr( $value ) . '">';
 	}
 
@@ -185,14 +190,7 @@ function nvx_valoracion_append_field( array &$fields, string $name, string $valu
  * the server-side consent management system.
  */
 function nvx_valoracion_has_marketing_consent(): bool {
-	// Check Complianz consent state server-side
-	if ( function_exists( 'cmplz_has_consent' ) ) {
-		return cmplz_has_consent( 'marketing' ) === true;
-	}
-
-	// Fallback: check if consent cookie exists and is granted
-	$consent_cookie = isset( $_COOKIE['cmplz_marketing'] ) ? sanitize_text_field( wp_unslash( (string) $_COOKIE['cmplz_marketing'] ) ) : '';
-	return 'allow' === $consent_cookie;
+	return nvx_marketing_consent_granted();
 }
 
 /**

@@ -116,6 +116,45 @@ function nvx_lead_captured_field_map( array $payload ): array {
 }
 
 /**
+ * Read consented Meta browser identity from the original first-party request.
+ *
+ * Values are rejected, never truncated, when the complete identifier exceeds
+ * 512 characters. `_fbc`/`_fbp` cookies are preferred over posted hidden
+ * fields. FBP is never synthesized.
+ *
+ * @return array<string,string>
+ */
+function nvx_lead_captured_meta_identity( bool $marketing_consent ): array {
+	if ( ! $marketing_consent ) {
+		return array();
+	}
+
+	$out = array();
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- relay runs only inside the already-validated direct-form request.
+	$fbclid = isset( $_POST['fbclid'] ) ? trim( (string) wp_unslash( $_POST['fbclid'] ) ) : '';
+	if ( '' !== $fbclid && strlen( $fbclid ) <= 512 && 1 === preg_match( '/^[A-Za-z0-9._~:+-]+$/', $fbclid ) ) {
+		$out['fbclid'] = $fbclid;
+	}
+
+	foreach ( array( 'fbc' => '_fbc', 'fbp' => '_fbp' ) as $key => $cookie_name ) {
+		$value = '';
+		if ( isset( $_COOKIE[ $cookie_name ] ) ) {
+			$value = trim( (string) wp_unslash( $_COOKIE[ $cookie_name ] ) );
+		} else {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- same validated request boundary as above.
+			$value = isset( $_POST[ $key ] ) ? trim( (string) wp_unslash( $_POST[ $key ] ) ) : '';
+		}
+		if ( '' !== $value
+			&& strlen( $value ) <= 512
+			&& 1 === preg_match( '/^fb\.1\.\d{10,16}\.[A-Za-z0-9._~:+-]+$/', $value ) ) {
+			$out[ $key ] = $value;
+		}
+	}
+
+	return $out;
+}
+
+/**
  * Build a non-clinical attribution snapshot from already-consent-filtered fields.
  *
  * @param array<string, string> $fields HubSpot field map.
@@ -293,12 +332,19 @@ function nvx_lead_captured_on_http_response( $response, array $parsed_args, stri
 
 	$is_test           = isset( $fields['nvx_is_test_lead'] ) && 'true' === strtolower( $fields['nvx_is_test_lead'] );
 	$test_run_id       = isset( $fields['nvx_test_run_id'] ) ? $fields['nvx_test_run_id'] : '';
-	$marketing_consent = function_exists( 'nvx_hubspot_secure_post_value' )
-		&& '1' === nvx_hubspot_secure_post_value( 'nvx_marketing_consent', 1 );
+	$marketing_consent = function_exists( 'nvx_marketing_consent_granted' ) && nvx_marketing_consent_granted();
 	$email             = isset( $fields['email'] ) ? strtolower( trim( $fields['email'] ) ) : '';
 	$email_hash        = '' !== $email ? hash( 'sha256', $email ) : null;
 	unset( $email );
 	$ids = nvx_lead_captured_hubspot_ids( $response );
+
+	$first_attribution      = $marketing_consent ? nvx_lead_captured_attribution( $fields, 'nvx_first_' ) : array();
+	$conversion_attribution = $marketing_consent ? nvx_lead_captured_attribution( $fields, 'nvx_conversion_' ) : array();
+	if ( $marketing_consent ) {
+		foreach ( nvx_lead_captured_meta_identity( true ) as $key => $value ) {
+			$conversion_attribution[ $key ] = $value;
+		}
+	}
 
 	$relay_payload = array(
 		'nvx_lead_id'           => $lead_id,
@@ -309,8 +355,8 @@ function nvx_lead_captured_on_http_response( $response, array $parsed_args, stri
 		'nvx_is_test_lead'       => $is_test,
 		'nvx_test_run_id'        => '' !== $test_run_id ? $test_run_id : null,
 		'marketing_consent'      => $marketing_consent,
-		'first_attribution'      => $marketing_consent ? nvx_lead_captured_attribution( $fields, 'nvx_first_' ) : array(),
-		'conversion_attribution' => $marketing_consent ? nvx_lead_captured_attribution( $fields, 'nvx_conversion_' ) : array(),
+		'first_attribution'      => $first_attribution,
+		'conversion_attribution' => $conversion_attribution,
 	);
 	$relay_body = wp_json_encode( $relay_payload );
 	if ( false === $relay_body ) {
