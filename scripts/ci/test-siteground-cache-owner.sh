@@ -29,12 +29,21 @@ grep -Fq 'tools/deploy/siteground-cache-purge.sh' "$WORKFLOW" \
   || fail 'workflow_missing_helper_payload'
 [[ "$(grep -Fc 'siteground_cache_purge "$STAGING_ROOT" active' "$WORKFLOW" || true)" -eq 2 ]] \
   || fail 'workflow_expected_two_active_post_migration_calls'
-[[ "$(grep -Fc 'siteground_cache_purge "$STAGING_ROOT" preserve' "$WORKFLOW" || true)" -eq 2 ]] \
-  || fail 'workflow_expected_two_preserving_rollback_calls'
+[[ "$(grep -Fc 'siteground_cache_purge "$STAGING_ROOT" "$optimizer_state"' "$WORKFLOW" || true)" -eq 2 ]] \
+  || fail 'workflow_expected_two_snapshot_state_rollback_calls'
+[[ "$(grep -Fc 'optimizer-state.txt' "$WORKFLOW" || true)" -ge 6 ]] \
+  || fail 'workflow_optimizer_snapshot_state_contract_missing'
+[[ "$(grep -Fc '$ROLLBACK_DIR/siteground-cache-purge.sh' "$WORKFLOW" || true)" -ge 4 ]] \
+  || fail 'workflow_rollback_helper_snapshot_contract_missing'
 ! grep -Eq 'siteground_cache_purge[^\n]*\|\|[[:space:]]*true' "$WORKFLOW" \
   || fail 'workflow_cache_helper_must_be_fail_closed'
+
+grep -Fq 'restore_transient_activation_on_failure' "$HELPER" \
+  || fail 'helper_failure_restore_trap_missing'
+grep -Fq 'SITEGROUND_CACHE_PURGE_RESTORE=PASS' "$HELPER" \
+  || fail 'helper_failure_restore_evidence_missing'
 
 bash -n "$HELPER"
 bash -n "$DEPLOY"
 
-echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count workflow_inline=0 deploy_inline=0"
+echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count workflow_inline=0 deploy_inline=0 rollback_state=snapshot"
