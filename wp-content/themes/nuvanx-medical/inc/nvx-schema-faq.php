@@ -172,6 +172,7 @@ function nvx_schema_faq_catalog() {
 				}
 				$slug = trim( (string) ( $entry['slug'] ?? '' ), '/' );
 				if ( '' === $slug ) {
+					trigger_error( "nvx_schema_faq_catalog: FAQ-bearing aesthetic JSON key '{$json_key}' is missing a slug, preventing FAQ alias generation", E_USER_WARNING );
 					continue;
 				}
 				$path      = '/' . $slug . '/';

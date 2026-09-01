@@ -107,7 +107,8 @@ foreach ( $aesthetic_pages as $json_key => $entry ) {
 	}
 	$slug = trim( (string) ( $entry['slug'] ?? '' ), '/' );
 	if ( '' === $slug ) {
-		continue;
+		fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL aesthetic JSON key '{$json_key}' with FAQs has empty or missing slug\n" );
+		exit( 1 );
 	}
 	$path      = '/' . $slug . '/';
 	$schema_id = (string) ( $routes[ $path ]['schema_id'] ?? '' );
@@ -121,4 +122,15 @@ foreach ( $aesthetic_pages as $json_key => $entry ) {
 	}
 }
 
+
+// Assert that nvx_schema_faq_node resolves correctly for acido_hialuronico.
+function nvx_schema_resolve_treatment_key( $page_id ) {
+	if ( 3602 === $page_id ) return 'acido_hialuronico';
+	return null;
+}
+$node = nvx_schema_faq_node( 3602 );
+if ( empty( $node ) || 'FAQPage' !== $node['@type'] ) {
+	fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL nvx_schema_faq_node failed to emit FAQPage for acido_hialuronico\n" );
+	exit( 1 );
+}
 echo "TREATMENT_FAQPAGE_CONTRACT=PASS verified_keys=" . count( $required_keys ) . "\n";

@@ -299,13 +299,8 @@ if fetch_url "$BASE_URL/equipo-medico/" schema-physicians && grep -Fq 'Physician
 # Retired short aliases and unpublished Profhilo must not be probed as current
 # origin pages. The signature hub has no visible FAQ, so FAQPage is checked on
 # a published signature phase page instead.
-treatment_procedure_paths=(
-  '/endolift-facial-papada-mandibula/'
-  '/endolaser-corporal-grasa-localizada/'
-  '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/'
-  '/exion-btl/'
-  '/acido-hialuronico-relleno-madrid/'
-)
+mapfile -t treatment_procedure_paths < <(node -e "const r=require('./wp-content/themes/nuvanx-medical/inc/data/routes.json'); Object.entries(r).forEach(([k,v]) => { if(v.schema_type==='MedicalProcedure'||v.schema_group==='treatments'||v.seo_id==='aesthetic_medicine'||v.seo_id==='laser_medicine') console.log(k); })")
+
 for path in "${treatment_procedure_paths[@]}"; do
   tag="schema-proc-${path//\//-}"
   if fetch_url "$BASE_URL$path" "$tag" && grep -Fq 'MedicalProcedure' "$BODY"; then
@@ -315,14 +310,7 @@ for path in "${treatment_procedure_paths[@]}"; do
   fi
 done
 
-treatment_faq_paths=(
-  '/endolift-facial-papada-mandibula/'
-  '/endolaser-corporal-grasa-localizada/'
-  '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/'
-  '/exion-btl/'
-  '/acido-hialuronico-relleno-madrid/'
-  '/papada-definicion-mandibular-madrid/'
-)
+mapfile -t treatment_faq_paths < <(node -e "const f=require('./wp-content/themes/nuvanx-medical/inc/data/aesthetic-treatment-pages.json'); const r=require('./wp-content/themes/nuvanx-medical/inc/data/routes.json'); Object.values(f).forEach(v => { if(v.faqs && v.slug) { const p = '/' + v.slug + '/'; if(r[p]) console.log(p); } }); const b=require('./wp-content/themes/nuvanx-medical/inc/data/btl-detail-pages.json'); Object.values(b).forEach(v => { if(v.faqs && v.slug) { const p = '/' + v.slug + '/'; if(r[p]) console.log(p); } }); ['/endolift-facial-papada-mandibula/','/endolaser-corporal-grasa-localizada/','/laser-co2-fraccionado-madrid-textura-cicatrices-poro/','/papada-definicion-mandibular-madrid/','/exion-btl/'].forEach(p => console.log(p));")
 for path in "${treatment_faq_paths[@]}"; do
   tag="schema-faq-${path//\//-}"
   if fetch_url "$BASE_URL$path" "$tag" && grep -Fq 'FAQPage' "$BODY"; then

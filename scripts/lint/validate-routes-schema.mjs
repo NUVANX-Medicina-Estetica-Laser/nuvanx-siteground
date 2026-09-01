@@ -112,9 +112,8 @@ for (const [route, entry] of Object.entries(data)) {
   const normalizedTarget = normalizeRoute(entry.route_alias);
   if (!normalizedTarget) throw new Error(`Route ${route}.route_alias must not be empty`);
   
-  const expectedFormat = normalizedTarget === '/' ? '/' : `${normalizedTarget}/`;
-  if (entry.route_alias !== expectedFormat) {
-    throw new Error(`Route ${route}.route_alias must use normalized format (got '${entry.route_alias}', expected '${expectedFormat}')`);
+  if (entry.route_alias !== normalizedTarget) {
+    throw new Error(`Route ${route}.route_alias must use normalized format (got '${entry.route_alias}', expected '${normalizedTarget}')`);
   }
 
   if (normalizedRoute === normalizedTarget) {
