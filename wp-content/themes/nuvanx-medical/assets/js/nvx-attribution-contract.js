@@ -73,7 +73,7 @@
 			return 'paid_other';
 		}
 		if (cleanFbclid(urlClickSignal(url, 'fbclid'))) return 'paid_social';
-		if (urlClickSignal(url, 'gclid') || urlClickSignal(url, 'gbraid') || urlClickSignal(url, 'wbraid')) return 'paid_search';
+		if (cleanGoogleClickId(urlClickSignal(url, 'gclid')) || cleanGoogleClickId(urlClickSignal(url, 'gbraid')) || cleanGoogleClickId(urlClickSignal(url, 'wbraid'))) return 'paid_search';
 		if (referrer) {
 			if (referrer.indexOf('google') !== -1 || referrer.indexOf('bing') !== -1) return 'organic_search';
 			if (referrer.indexOf('facebook') !== -1 || referrer.indexOf('instagram') !== -1) return 'organic_social';
@@ -298,18 +298,24 @@
 		var existingFirst = readTouch(FIRST_TOUCH_KEY);
 		var touch = buildTouch();
 
+		var firstSuccess = true;
 		if (!existingFirst) {
-			lsSet(FIRST_TOUCH_KEY, JSON.stringify(pendingFirst || touch));
-		}
-		if (touch.channel !== 'internal' && touch.channel !== 'direct') {
-			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
-		} else if (pendingConversion) {
-			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(pendingConversion));
-		} else if (!readTouch(CONVERSION_TOUCH_KEY)) {
-			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+			firstSuccess = lsSet(FIRST_TOUCH_KEY, JSON.stringify(pendingFirst || touch));
 		}
 
-		clearPendingGoogleAttribution();
+		var conversionSuccess = true;
+		if (pendingConversion) {
+			conversionSuccess = lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(pendingConversion));
+		} else if (touch.channel !== 'internal' && touch.channel !== 'direct') {
+			conversionSuccess = lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+		} else if (!readTouch(CONVERSION_TOUCH_KEY)) {
+			conversionSuccess = lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+		}
+
+		if (firstSuccess && conversionSuccess) {
+			clearPendingGoogleAttribution();
+		}
+
 		syncDirectFormMetaIdentity();
 	}
 

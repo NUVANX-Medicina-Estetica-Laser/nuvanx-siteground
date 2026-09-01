@@ -381,6 +381,30 @@ if (!fs.existsSync(runtimePath)) {
   assert.equal(stagingPayload.nvx_test_run_id, 'staging2-e2e-lint-001');
   assert.equal(stagingPayload.nvx_lead_id, '11111111-1111-4111-8111-111111111111');
 
+  
+  // 1. Malformed Google click on internal nav should not overwrite
+  organic.window.location.href = 'https://nuvanx.com/madrid/valoracion/?gclid=BAD%3CCLICK';
+  organic.window.location.search = '?gclid=BAD%3CCLICK';
+  organic.document.referrer = 'https://www.nuvanx.com/endolift/';
+  const postMalformedConversion = contract.getConversionTouch();
+  assert.equal(postMalformedConversion.channel, 'paid_search', 'malformed click on internal nav must preserve last acquisition touch');
+  assert.equal(postMalformedConversion.gclid, 'GCLID123', 'malformed click on internal nav must preserve conversion click id');
+
+  // 2. Local storage throws, session storage persists
+  const throwingLocalStorage = memoryStorage();
+  throwingLocalStorage.setItem = () => { throw new Error('QuotaExceededError'); };
+  const robustSessionStorage = memoryStorage();
+  const throwingEnv = executeRuntime(runtime, {
+    consent: true,
+    href: 'https://nuvanx.com/?gclid=GCLID_THROW',
+    referrer: 'https://www.google.com/',
+    localStorage: throwingLocalStorage,
+    sessionStorage: robustSessionStorage,
+  });
+  const pendingThrow = throwingEnv.sessionStorage.getItem('nvx_pending_google_conversion_touch');
+  assert.ok(pendingThrow, 'Pending Google touch must remain in session storage if local storage throws');
+  assert.match(pendingThrow, /GCLID_THROW/, 'Pending Google touch must contain the correct click ID');
+
   console.log('STAGING2_E2E_QA_GATE=PASS is_test_lead=true test_run_id=staging2-prefixed server_owned=1');
   console.log('ATTRIBUTION_RUNTIME_BEHAVIOR=PASS first=organic_search conversion=paid_search internal_preserves_paid=1 no_consent_attribution=0 first_party_lineage=1');
   console.log('HUBSPOT_SECURE_ATTRIBUTION_STATIC=PASS canonical_transport=1 secure_endpoint=1 lead_independent_of_marketing=1 qa_server_owned=1 staging_fail_closed=1');
