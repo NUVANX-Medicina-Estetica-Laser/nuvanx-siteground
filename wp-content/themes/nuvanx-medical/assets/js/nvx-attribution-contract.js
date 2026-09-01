@@ -6,8 +6,11 @@
 	var META_CLICK_KEYS = ['fbclid'];
 	var ATTR_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 	var META_BROWSER_ID_MAX_LENGTH = 512;
+	var GOOGLE_CLICK_ID_MAX_LENGTH = 512;
 	var FIRST_TOUCH_KEY = 'nvx_first_touch';
 	var CONVERSION_TOUCH_KEY = 'nvx_conversion_touch';
+	var PENDING_GOOGLE_FIRST_TOUCH_KEY = 'nvx_pending_google_first_touch';
+	var PENDING_GOOGLE_CONVERSION_TOUCH_KEY = 'nvx_pending_google_conversion_touch';
 	var LEAD_SESSION_KEY = 'nvx_lead_id';
 	var qa = (window.nvxConversionEvents && window.nvxConversionEvents.qa) || { is_test_lead: false, test_run_id: '' };
 
@@ -49,6 +52,13 @@
 		} catch (_error) { return ''; }
 	}
 
+	function cleanGoogleClickId(value, maxLength) {
+		value = String(value || '').trim();
+		var max = Number(maxLength || GOOGLE_CLICK_ID_MAX_LENGTH);
+		if (!value || value.length > max) return '';
+		return /^[A-Za-z0-9._~:+-]+$/.test(value) ? value : '';
+	}
+
 	function cleanFbclid(value) {
 		value = String(value || '').trim();
 		return /^[A-Za-z0-9._~:+-]{1,512}$/.test(value) ? value : '';
@@ -84,6 +94,9 @@
 
 	function lsGet(key) { try { return window.localStorage.getItem(key); } catch (_error) { return null; } }
 	function lsSet(key, value) { try { window.localStorage.setItem(key, value); return true; } catch (_error) { return false; } }
+	function ssGet(key) { try { return window.sessionStorage.getItem(key); } catch (_error) { return null; } }
+	function ssSet(key, value) { try { window.sessionStorage.setItem(key, value); return true; } catch (_error) { return false; } }
+	function ssRemove(key) { try { window.sessionStorage.removeItem(key); } catch (_error) {} }
 
 	function readCookie(name) {
 		try {
@@ -123,6 +136,75 @@
 		} catch (_error) { return null; }
 	}
 
+	function readPendingGoogleTouch(key) {
+		var raw = ssGet(key);
+		if (!raw) return null;
+		try {
+			var obj = JSON.parse(raw);
+			if (!obj || typeof obj !== 'object') return null;
+			if (obj.expires_at && Date.now() > Number(obj.expires_at)) {
+				ssRemove(key);
+				return null;
+			}
+			var gclid = cleanGoogleClickId(obj.gclid);
+			var gbraid = cleanGoogleClickId(obj.gbraid);
+			var wbraid = cleanGoogleClickId(obj.wbraid);
+			if (!gclid && !gbraid && !wbraid) {
+				ssRemove(key);
+				return null;
+			}
+			if (gclid) obj.gclid = gclid; else delete obj.gclid;
+			if (gbraid) obj.gbraid = gbraid; else delete obj.gbraid;
+			if (wbraid) obj.wbraid = wbraid; else delete obj.wbraid;
+			var gclsrc = cleanGoogleClickId(obj.gclsrc, 128);
+			if (gclsrc) obj.gclsrc = gclsrc; else delete obj.gclsrc;
+			return obj;
+		} catch (_error) {
+			ssRemove(key);
+			return null;
+		}
+	}
+
+	function buildPendingGoogleTouch() {
+		var params = new URLSearchParams((window.location && window.location.search) || '');
+		var gclid = cleanGoogleClickId(params.get('gclid'));
+		var gbraid = cleanGoogleClickId(params.get('gbraid'));
+		var wbraid = cleanGoogleClickId(params.get('wbraid'));
+		if (!gclid && !gbraid && !wbraid) return null;
+
+		var href = (window.location && window.location.href) || '';
+		var landing = href;
+		try { var parsed = new URL(href); landing = parsed.origin + parsed.pathname; } catch (_error) {}
+		var referrer = (document && document.referrer) || '';
+		var now = Date.now();
+		var touch = {
+			channel: 'paid_search', source: 'google', medium: params.get('utm_medium') || 'cpc',
+			campaign_id: params.get('utm_campaign') || '', utm_content: params.get('utm_content') || '', utm_term: params.get('utm_term') || '',
+			landing_url: landing, referrer_domain: '', timestamp: new Date(now).toISOString(), expires_at: now + ATTR_TTL_MS,
+		};
+		if (gclid) touch.gclid = gclid;
+		if (gbraid) touch.gbraid = gbraid;
+		if (wbraid) touch.wbraid = wbraid;
+		var gclsrc = cleanGoogleClickId(params.get('gclsrc'), 128);
+		if (gclsrc) touch.gclsrc = gclsrc;
+		if (referrer) { try { touch.referrer_domain = new URL(referrer).hostname; } catch (_error) {} }
+		return touch;
+	}
+
+	function capturePendingGoogleAttribution() {
+		var touch = buildPendingGoogleTouch();
+		if (!touch) return;
+		if (!readPendingGoogleTouch(PENDING_GOOGLE_FIRST_TOUCH_KEY)) {
+			ssSet(PENDING_GOOGLE_FIRST_TOUCH_KEY, JSON.stringify(touch));
+		}
+		ssSet(PENDING_GOOGLE_CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+	}
+
+	function clearPendingGoogleAttribution() {
+		ssRemove(PENDING_GOOGLE_FIRST_TOUCH_KEY);
+		ssRemove(PENDING_GOOGLE_CONVERSION_TOUCH_KEY);
+	}
+
 	function buildTouch() {
 		var params = new URLSearchParams((window.location && window.location.search) || '');
 		var utm = {};
@@ -137,6 +219,10 @@
 			var clickValue = params.get(allClickKeys[i]);
 			if (clickValue) clicks[allClickKeys[i]] = clickValue;
 		}
+		if (clicks.gclid) clicks.gclid = cleanGoogleClickId(clicks.gclid);
+		if (clicks.gbraid) clicks.gbraid = cleanGoogleClickId(clicks.gbraid);
+		if (clicks.wbraid) clicks.wbraid = cleanGoogleClickId(clicks.wbraid);
+		if (clicks.gclsrc) clicks.gclsrc = cleanGoogleClickId(clicks.gclsrc, 128);
 		if (clicks.fbclid) {
 			clicks.fbclid = cleanFbclid(clicks.fbclid);
 			if (!clicks.fbclid) delete clicks.fbclid;
@@ -204,12 +290,26 @@
 	}
 
 	function captureAttribution() {
+		capturePendingGoogleAttribution();
 		if (!hasMarketingConsent()) { syncDirectFormMetaIdentity(); return; }
+
+		var pendingFirst = readPendingGoogleTouch(PENDING_GOOGLE_FIRST_TOUCH_KEY);
+		var pendingConversion = readPendingGoogleTouch(PENDING_GOOGLE_CONVERSION_TOUCH_KEY);
 		var existingFirst = readTouch(FIRST_TOUCH_KEY);
 		var touch = buildTouch();
-		if (!existingFirst) lsSet(FIRST_TOUCH_KEY, JSON.stringify(touch));
-		if (touch.channel !== 'internal' && touch.channel !== 'direct') lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
-		else if (!readTouch(CONVERSION_TOUCH_KEY)) lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+
+		if (!existingFirst) {
+			lsSet(FIRST_TOUCH_KEY, JSON.stringify(pendingFirst || touch));
+		}
+		if (touch.channel !== 'internal' && touch.channel !== 'direct') {
+			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+		} else if (pendingConversion) {
+			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(pendingConversion));
+		} else if (!readTouch(CONVERSION_TOUCH_KEY)) {
+			lsSet(CONVERSION_TOUCH_KEY, JSON.stringify(touch));
+		}
+
+		clearPendingGoogleAttribution();
 		syncDirectFormMetaIdentity();
 	}
 
@@ -253,6 +353,8 @@
 		getConversionTouch: function() { captureAttribution(); return readTouch(CONVERSION_TOUCH_KEY); },
 		getLeadId: safeSessionStorage, buildFormPayload: buildFormPayload, classifyChannel: classifyChannel,
 		FIRST_TOUCH_KEY: FIRST_TOUCH_KEY, CONVERSION_TOUCH_KEY: CONVERSION_TOUCH_KEY,
+		PENDING_GOOGLE_FIRST_TOUCH_KEY: PENDING_GOOGLE_FIRST_TOUCH_KEY,
+		PENDING_GOOGLE_CONVERSION_TOUCH_KEY: PENDING_GOOGLE_CONVERSION_TOUCH_KEY,
 		UTM_KEYS: UTM_KEYS, CLICK_KEYS: CLICK_KEYS, META_CLICK_KEYS: META_CLICK_KEYS, ATTR_TTL_MS: ATTR_TTL_MS,
 	};
 	window.nvxAttribution = {
