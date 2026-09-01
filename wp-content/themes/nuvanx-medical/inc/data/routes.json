@@ -877,16 +877,7 @@
   "/botox-madrid-precio-neuromoduladores/": {
     "route_alias": "/precio-neuromoduladores-madrid/"
   },
-  "/emfusion/": {
+  "/emfusion-limpieza-profunda-microneedling-diferencias/": {
     "route_alias": "/emfusion/"
-  },
-  "/endolift-ciencia-laser-subdermico/": {
-    "route_alias": "/endolift-ciencia-laser-subdermico/"
-  },
-  "/rinomodelacion-sin-cirugia-madrid-guia/": {
-    "route_alias": "/rinomodelacion-sin-cirugia-madrid-guia/"
-  },
-  "/laserlipolisis-vs-liposuccion/": {
-    "route_alias": "/laserlipolisis-vs-liposuccion/"
   }
 }
