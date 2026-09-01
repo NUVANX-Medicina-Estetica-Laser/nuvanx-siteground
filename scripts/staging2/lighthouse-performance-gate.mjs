@@ -54,11 +54,11 @@ const metricKeys = [
 const budgetMetrics = ['lcp_ms', 'cls', 'tbt_ms', 'ttfb_ms', 'performance_score'];
 
 const defaultBudgets = {
-  lcp_ms: { max: 4000, regression_delta: 500 },
-  cls: { max: 0.25, regression_delta: 0.05 },
-  tbt_ms: { max: 600, regression_delta: 200 },
-  ttfb_ms: { max: 1200, regression_delta: 300 },
-  performance_score: { min: 70, regression_delta: 5 },
+  lcp_ms: { max: 3800, regression_delta: 400 },
+  cls: { max: 0.1, regression_delta: 0.05 },
+  tbt_ms: { max: 200, regression_delta: 100 },
+  ttfb_ms: { max: 800, regression_delta: 200 },
+  performance_score: { min: 80, regression_delta: 5 },
 };
 
 function loadBudgets() {
