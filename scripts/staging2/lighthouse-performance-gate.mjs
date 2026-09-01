@@ -123,6 +123,63 @@ function isValidMetrics(m) {
   return m !== null && typeof m === 'object' && metricKeys.every((k) => typeof m[k] === 'number');
 }
 
+function normalizeNavigationUrl(value) {
+  if (typeof value !== 'string' || value.trim() === '') return '';
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    return url.href;
+  } catch {
+    return '';
+  }
+}
+
+function classifyLighthouseNavigation(lighthouseJson, expectedUrl) {
+  const lh = typeof lighthouseJson === 'string' ? JSON.parse(lighthouseJson) : lighthouseJson;
+  const expected = normalizeNavigationUrl(expectedUrl);
+  const requested = normalizeNavigationUrl(lh.requestedUrl);
+  const finalUrl = normalizeNavigationUrl(lh.finalUrl);
+  const mainDocumentUrl = normalizeNavigationUrl(lh.mainDocumentUrl);
+  const networkItems = lh.audits?.['network-requests']?.details?.items || [];
+  const documentRequests = networkItems.filter((item) => item?.resourceType === 'Document');
+  const observedUrls = [finalUrl, mainDocumentUrl, ...documentRequests.map((item) => normalizeNavigationUrl(item?.url))]
+    .filter(Boolean);
+
+  const challengeUrl = observedUrls.find((value) => {
+    try {
+      return new URL(value).pathname.startsWith('/.well-known/sgcaptcha/');
+    } catch {
+      return false;
+    }
+  });
+  const initial202 = documentRequests.find((item) => {
+    return Number(item?.statusCode) === 202 && normalizeNavigationUrl(item?.url) === expected;
+  });
+
+  if (challengeUrl || initial202) {
+    return {
+      status: 'transient_infrastructure',
+      diagnostic: `SiteGround challenge intercepted Lighthouse navigation expected=${expected} final=${finalUrl || 'missing'} main=${mainDocumentUrl || 'missing'} challenge=${challengeUrl || 'http_202'}`,
+    };
+  }
+
+  if (!requested || requested !== expected) {
+    return {
+      status: 'lighthouse_execution_failed',
+      diagnostic: `Lighthouse requested URL mismatch expected=${expected} requested=${requested || 'missing'}`,
+    };
+  }
+
+  if (!finalUrl || !mainDocumentUrl || finalUrl !== expected || mainDocumentUrl !== expected) {
+    return {
+      status: 'lighthouse_execution_failed',
+      diagnostic: `Lighthouse navigation escaped expected route expected=${expected} final=${finalUrl || 'missing'} main=${mainDocumentUrl || 'missing'}`,
+    };
+  }
+
+  return null;
+}
+
 function classifyLighthouseError(error) {
   const message = error instanceof Error ? error.message : String(error || '');
   if (
@@ -187,7 +244,14 @@ async function runLighthouseCell(page, mode, outputDir) {
 
     try {
       const rawJson = await fs.readFile(outFile, 'utf8');
-      const metrics = extractMetrics(rawJson);
+      const lighthouse = JSON.parse(rawJson);
+      const navigation = classifyLighthouseNavigation(lighthouse, url);
+      if (navigation) {
+        if (navigation.status === 'transient_infrastructure') transientCount++;
+        runs.push({ attempt, status: navigation.status, metrics: null, diagnostic: navigation.diagnostic });
+        continue;
+      }
+      const metrics = extractMetrics(lighthouse);
       if (!isValidMetrics(metrics)) {
         runs.push({ attempt, status: 'invalid_json', metrics: null, diagnostic: 'JSON validation failed' });
         continue;
@@ -361,12 +425,26 @@ async function main() {
 
   const transientCells = cellResults.filter((c) => c.status === 'transient_infrastructure');
   const failedCells = cellResults.filter((c) => c.status === 'lighthouse_failed');
+  const incompleteCells = cellResults.filter((c) => c.status !== 'success');
 
   if (transientCells.length > 0) {
     console.error(`\nPERF_GATE_TRANSIENT cells=${transientCells.length}/${cellResults.length}`);
     for (const c of transientCells) {
       console.error(`  ${c.page}/${c.mode}: ${c.transients} transient of ${c.attempts} attempts`);
     }
+  }
+
+  if (incompleteCells.length > 0) {
+    if (gateMode === 'enforce') {
+      if (transientCells.length > 0) {
+        console.error(`\nPERF_GATE=INCOMPLETE mode=enforce valid_cells=${cellResults.length - incompleteCells.length}/${cellResults.length} transient_cells=${transientCells.length}`);
+        process.exit(75);
+      }
+      console.error(`\nPERF_GATE=FAIL mode=enforce reason=incomplete_measurement valid_cells=${cellResults.length - incompleteCells.length}/${cellResults.length}`);
+      process.exit(1);
+    }
+    console.error(`\nPERF_GATE=INCOMPLETE mode=baseline valid_cells=${cellResults.length - incompleteCells.length}/${cellResults.length} transient_cells=${transientCells.length}`);
+    return;
   }
 
   if (gateMode === 'enforce') {
