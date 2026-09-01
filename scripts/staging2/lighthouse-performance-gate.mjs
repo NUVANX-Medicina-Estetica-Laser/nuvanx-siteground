@@ -285,13 +285,23 @@ async function runLighthouseCell(page, mode, outputDir) {
     cellResult.status = transientCount === cellResult.failures
       ? 'transient_infrastructure'
       : 'lighthouse_failed';
-    const lastFailure = runs[runs.length - 1];
-    if (lastFailure?.diagnostic) {
-      const fullDiagnostic = lastFailure.diagnostic;
+    const nonTransientFailure = runs.find((r) => r.status !== 'transient_infrastructure' && r.status !== 'success');
+    const representativeFailure = nonTransientFailure || runs[runs.length - 1];
+    if (representativeFailure?.diagnostic) {
+      const fullDiagnostic = representativeFailure.diagnostic;
       cellResult.diagnostic = fullDiagnostic.length > 1000
         ? `${fullDiagnostic.slice(0, 1000)}... (truncated)`
         : fullDiagnostic;
     }
+    cellResult.failed_runs = runs
+      .filter((r) => r.status !== 'success')
+      .map((r) => ({
+        attempt: r.attempt,
+        status: r.status,
+        diagnostic: r.diagnostic && r.diagnostic.length > 1000
+          ? `${r.diagnostic.slice(0, 1000)}... (truncated)`
+          : r.diagnostic,
+      }));
     return cellResult;
   }
 
