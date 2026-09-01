@@ -41,6 +41,7 @@ const pages = [
 ];
 
 const modes = ['mobile', 'desktop'];
+const requiredCells = pages.flatMap((page) => modes.map((mode) => `${page.key}/${mode}`));
 
 const metricKeys = [
   'performance_score',
@@ -311,14 +312,9 @@ async function runLighthouseCell(page, mode, outputDir) {
   return cellResult;
 }
 
-async function loadBaselineContract() {
-  try {
-    const raw = await fs.readFile(baselineContractPath, 'utf8');
-    return JSON.parse(raw);
-  } catch (error) {
-    console.error(`PERF_GATE=FAIL_CONFIG reason=baseline_read_failed path=${baselineContractPath} diagnostic=${String(error.message || error)}`);
-    process.exit(78);
-  }
+async function readBaselineContract() {
+  const raw = await fs.readFile(baselineContractPath, 'utf8');
+  return JSON.parse(raw);
 }
 
 async function writeArtifacts(outputDir, cellResults, baselineContract, evaluation) {
@@ -401,6 +397,41 @@ async function main() {
   console.log(`PERF_GATE=START mode=${gateMode} sha=${expectedSha} base=${baseUrl}`);
   console.log(`PERF_GATE_LIGHTHOUSE version=${lighthouseVersion}`);
 
+  let baselineContract = null;
+  if (gateMode === 'enforce') {
+    try {
+      baselineContract = await readBaselineContract();
+    } catch (error) {
+      const diagnostic = String(error.message || error);
+      await writeArtifacts(outputDir, [], null, {
+        schema: 1,
+        status: 'config_error',
+        reason: 'baseline_read_failed',
+        path: baselineContractPath,
+        diagnostic,
+      });
+      console.error(`PERF_GATE=FAIL_CONFIG reason=baseline_read_failed baseline=${baselineContractPath} diagnostic=${diagnostic}`);
+      process.exit(78);
+    }
+
+    const validation = validatePerformanceBaselineContract(baselineContract, {
+      lighthouseVersion,
+      requiredCells,
+      requireApproved: true,
+    });
+    if (!validation.ok) {
+      await writeArtifacts(outputDir, [], baselineContract, {
+        schema: 1,
+        status: 'config_error',
+        reason: validation.reason,
+        path: baselineContractPath,
+      });
+      console.error(`PERF_GATE=FAIL_CONFIG reason=${validation.reason} baseline=${baselineContractPath}`);
+      process.exit(78);
+    }
+    console.log(`PERF_GATE_BASELINE=PASS path=${baselineContractPath} sources=${baselineContract.generated_from.length} cells=${requiredCells.length}`);
+  }
+
   const cellResults = [];
   for (const page of pages) {
     for (const mode of modes) {
@@ -439,7 +470,26 @@ async function main() {
   }
 
   if (incompleteCells.length > 0) {
-    await writeArtifacts(outputDir, cellResults, null, null);
+    const incompleteEvaluation = gateMode === 'enforce'
+      ? {
+          schema: 1,
+          status: 'incomplete',
+          reason: transientCells.length > 0 ? 'transient_infrastructure' : 'incomplete_measurement',
+          valid_cells: cellResults.length - incompleteCells.length,
+          total_cells: cellResults.length,
+          transient_cells: transientCells.length,
+          incomplete_cells: incompleteCells.map((cell) => ({
+            page: cell.page,
+            mode: cell.mode,
+            status: cell.status,
+            successes: cell.successes,
+            attempts: cell.attempts,
+            transients: cell.transients,
+          })),
+        }
+      : null;
+    await writeArtifacts(outputDir, cellResults, baselineContract, incompleteEvaluation);
+
     if (gateMode === 'enforce') {
       if (transientCells.length > 0) {
         console.error(`\nPERF_GATE=INCOMPLETE mode=enforce valid_cells=${cellResults.length - incompleteCells.length}/${cellResults.length} transient_cells=${transientCells.length}`);
@@ -453,24 +503,6 @@ async function main() {
   }
 
   if (gateMode === 'enforce') {
-    const baselineContract = await loadBaselineContract();
-    const requiredCells = pages.flatMap((page) => modes.map((mode) => `${page.key}/${mode}`));
-    const validation = validatePerformanceBaselineContract(baselineContract, {
-      lighthouseVersion,
-      requiredCells,
-      requireApproved: true,
-    });
-
-    if (!validation.ok) {
-      await writeArtifacts(outputDir, cellResults, baselineContract, {
-        schema: 1,
-        status: 'config_error',
-        reason: validation.reason,
-      });
-      console.error(`PERF_GATE=FAIL_CONFIG reason=${validation.reason} baseline=${baselineContractPath}`);
-      process.exit(78);
-    }
-
     const evaluation = evaluatePerformanceRegression(cellResults, baselineContract);
     await writeArtifacts(outputDir, cellResults, baselineContract, {
       schema: 1,
