@@ -185,7 +185,7 @@ function validatePublicationTopology(pages, manifest) {
       errors.push(`Manifest page ${id} type mismatch: expected ${expected.post_type}, got ${actual.post_type}`);
       hasTypeError = true;
     }
-    if (actual.status && expected.status && actual.status !== expected.status) {
+    if (!actual.status || !expected.status || actual.status !== expected.status) {
       errors.push(`Manifest page ${id} status mismatch: expected ${expected.status}, got ${actual.status}`);
       hasStatusError = true;
     }
