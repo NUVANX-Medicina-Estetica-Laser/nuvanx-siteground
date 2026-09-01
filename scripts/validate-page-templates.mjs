@@ -33,7 +33,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const THEME_ROOT = join(__dirname, '..', 'wp-content', 'themes', 'nuvanx-medical');
 const TEMPLATES_DIR = join(THEME_ROOT, 'templates');
-const MANIFEST_FILE = join(__dirname, 'staging2', 'published-pages-manifest.json');
+const MANIFEST_FILE = join(THEME_ROOT, 'inc', 'data', 'publication-manifest.json');
 const TRANSIENT_HTTP = new Set([202, 429, 503]);
 const SITEMAP_ORIGIN_SSH_ALIAS = String(process.env.SITEMAP_ORIGIN_SSH_ALIAS || 'nvx-staging2').trim();
 
@@ -61,7 +61,18 @@ function loadManifest() {
   if (!existsSync(MANIFEST_FILE)) {
     throw new Error(`Canonical published-page manifest is missing: ${MANIFEST_FILE}`);
   }
-  const manifest = parsePagesJson(readFileSync(MANIFEST_FILE, 'utf8'), MANIFEST_FILE);
+  const raw = JSON.parse(readFileSync(MANIFEST_FILE, 'utf8'));
+  const routes = raw.routes || {};
+  
+  const manifest = Object.entries(routes).map(([path, data]) => ({
+    id: data.post_id,
+    slug: data.slug,
+    path: path,
+    post_type: data.post_type,
+    status: data.status,
+    robots: data.robots,
+  }));
+
   if (manifest.length === 0) {
     throw new Error('Canonical published-page manifest must not be empty');
   }
@@ -92,17 +103,23 @@ async function fetchPublishedPages() {
   }
 
   const baseUrl = process.env.WORDPRESS_URL || 'https://nuvanx.com';
-  const endpoint = `${baseUrl}/wp-json/wp/v2/pages?per_page=100&status=publish&_fields=id,slug,template`;
-  const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
-  const body = await response.text();
-  if (!response.ok) {
-    throw new Error(`Failed to fetch pages: ${response.status} ${response.statusText}`);
-  }
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.toLowerCase().includes('application/json')) {
-    throw new Error(`Expected JSON from ${endpoint}; got ${contentType || 'unknown content-type'}`);
-  }
-  return parsePagesJson(body, endpoint);
+  
+  const fetchType = async (type) => {
+    const endpoint = `${baseUrl}/wp-json/wp/v2/${type}?per_page=100&status=publish&_fields=id,slug,template,type,link,status`;
+    const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+    const body = await response.text();
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${type}: ${response.status} ${response.statusText}`);
+    }
+    return parsePagesJson(body, endpoint).map(p => ({...p, post_type: p.type || (type === 'pages' ? 'page' : 'post')}));
+  };
+
+  const [pages, posts] = await Promise.all([
+    fetchType('pages'),
+    fetchType('posts')
+  ]);
+  
+  return [...pages, ...posts];
 }
 
 function validatePublicationTopology(pages, manifest) {
@@ -117,18 +134,26 @@ function validatePublicationTopology(pages, manifest) {
       errors.push(`Manifest page ${id} (${expected.path}) is not published in WordPress`);
       continue;
     }
-
-    const expectedSlug = String(expected.slug || '').trim();
-    if (expectedSlug && String(actual.slug || '') !== expectedSlug) {
-      errors.push(`Page ${id} slug drift: WordPress=${actual.slug || '(empty)'}, manifest=${expectedSlug}`);
+    if (actual.slug !== expected.slug) {
+      errors.push(`Manifest page ${id} slug mismatch: expected ${expected.slug}, got ${actual.slug}`);
+    }
+    if (actual.post_type !== expected.post_type) {
+      errors.push(`Manifest page ${id} type mismatch: expected ${expected.post_type}, got ${actual.post_type}`);
+    }
+    if (actual.status && expected.status && actual.status !== expected.status) {
+      errors.push(`Manifest page ${id} status mismatch: expected ${expected.status}, got ${actual.status}`);
     }
   }
 
-  const extraPages = pages.filter((page) => !expectedIds.has(Number(page.id)));
-  if (extraPages.length > 0) {
-    console.log(`ℹ️ ${extraPages.length} additional published page(s) present in WordPress (IDs: ${extraPages.map((p) => p.id).join(', ')})`);
+  for (const actual of pages) {
+    if (!expectedIds.has(Number(actual.id))) {
+      errors.push(`WordPress ${actual.post_type} ${actual.id} (${actual.slug}) is missing from canonical manifest`);
+    }
   }
 
+  console.log(`WORDPRESS_PUBLICATION_INVENTORY pages=${pages.filter(p => p.post_type === 'page').length} posts=${pages.filter(p => p.post_type === 'post').length} total=${pages.length}`);
+  console.log(`PUBLICATION_ID_PARITY=${errors.length === 0 ? 'PASS' : 'FAIL'}`);
+  console.log(`PUBLICATION_TYPE_PARITY=${errors.length === 0 ? 'PASS' : 'FAIL'}`);
   return errors;
 }
 
@@ -302,6 +327,7 @@ async function fetchXml(url) {
 
 function inventoryBaseUrl(pages) {
   for (const page of pages) {
+      if (page.post_type !== 'page') continue;
     const rawLink = typeof page?.link === 'string' ? page.link.trim() : '';
     if (!rawLink) continue;
     try {
