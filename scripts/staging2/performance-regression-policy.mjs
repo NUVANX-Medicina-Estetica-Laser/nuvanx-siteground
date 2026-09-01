@@ -130,7 +130,15 @@ export function validatePerformanceBaselineContract(
         return { ok: false, reason: `invalid_reference_${key}_${metric}` };
       }
     }
-    if (baselineCell.reference.performance_score > 100 || baselineCell.reference.cls > 1) {
+    if (
+      baselineCell.reference.lcp_ms > p.lcp_ms.absolute_max
+      || baselineCell.reference.tbt_ms > p.tbt_ms.absolute_max
+      || baselineCell.reference.cls > p.cls.absolute_max
+      || baselineCell.reference.ttfb_ms > p.ttfb_ms.absolute_max
+      || baselineCell.reference.performance_score < p.performance_score.absolute_min
+      || baselineCell.reference.performance_score > 100
+      || baselineCell.reference.cls > 1
+    ) {
       return { ok: false, reason: `invalid_reference_range_${key}` };
     }
   }
