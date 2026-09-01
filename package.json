@@ -18,7 +18,8 @@
     "lint:clinics-hub-equipment": "node scripts/lint/test-clinics-hub-equipment-contract.mjs",
     "lint:css-ownership": "node scripts/lint/test-css-ownership-contract.mjs",
     "lint:integrations": "node scripts/lint/test-conversion-ownership-contract.mjs && node scripts/lint/test-integration-config-fail-closed.mjs",
-    "lint:manifest": "node scripts/lint/test-css-manifest-contract.mjs && php scripts/lint/test-cases-publication-policy.php && npm run lint:css-ownership && npm run lint:integrations",
+    "lint:performance-gate": "node scripts/lint/test-performance-regression-policy.mjs",
+    "lint:manifest": "node scripts/lint/test-css-manifest-contract.mjs && php scripts/lint/test-cases-publication-policy.php && npm run lint:css-ownership && npm run lint:integrations && npm run lint:performance-gate",
     "lint": "npm run lint:colors && npm run lint:fontsize && npm run lint:styles && npm run lint:routes && npm run lint:contrast && npm run lint:complianz && npm run lint:schema && npm run lint:endolaser-approval && npm run lint:clinical-evidence && npm run lint:clinics-hub-equipment && npm run lint:manifest"
   },
   "engines": {

@@ -2,18 +2,13 @@
 /**
  * Exact-SHA Staging performance regression gate.
  *
- * Runs a Lighthouse matrix (6 pages x mobile/desktop) against the deployed
- * Staging candidate, classifies SiteGround anti-bot/transport conditions
- * separately from true page-performance failures, and enforces bounded
- * regression budgets when PERFORMANCE_GATE_MODE=enforce.
+ * Baseline mode captures a 6-route x mobile/desktop Lighthouse matrix.
+ * Enforce mode measures the same exact-SHA matrix and compares every valid
+ * cell against the approved empirical per-route/mode baseline contract.
  *
- * Phase 1 (baseline): captures metrics, persists artifacts, never blocks.
- * Phase 2 (enforce):  blocks on material regression beyond bounded deltas.
- *
- * Every artifact records the exact candidate SHA so performance evidence is
- * tied to the deployed release candidate.
- *
- * @package nuvanx-siteground
+ * SiteGround CAPTCHA/HTTP 202, transport and other recoverable infrastructure
+ * conditions are classified separately from deterministic application or
+ * performance regressions.
  */
 
 import fs from 'node:fs/promises';
@@ -22,6 +17,10 @@ import { spawnSync } from 'node:child_process';
 import {
   isSiteGroundTransientResponse,
 } from './siteground-transient-classifier.mjs';
+import {
+  evaluatePerformanceRegression,
+  validatePerformanceBaselineContract,
+} from './performance-regression-policy.mjs';
 
 const baseUrl = (process.env.BASE_URL || 'https://staging2.nuvanx.com').replace(/\/$/, '');
 const expectedSha = (process.env.EXPECTED_SHA || '').trim();
@@ -29,6 +28,8 @@ const gateMode = (process.env.PERFORMANCE_GATE_MODE || 'baseline').trim().toLowe
 const lighthouseVersion = '12.8.2';
 const attemptsPerCell = 3;
 const requestTimeoutMs = Number.parseInt(process.env.PERFORMANCE_REQUEST_TIMEOUT_MS || '60000', 10);
+const baselineContractPath = process.env.PERFORMANCE_BASELINE_PATH
+  || 'scripts/staging2/performance-baseline.json';
 
 const pages = [
   { key: 'home', path: '/' },
@@ -40,6 +41,7 @@ const pages = [
 ];
 
 const modes = ['mobile', 'desktop'];
+const requiredCells = pages.flatMap((page) => modes.map((mode) => `${page.key}/${mode}`));
 
 const metricKeys = [
   'performance_score',
@@ -51,48 +53,29 @@ const metricKeys = [
   'ttfb_ms',
 ];
 
-const budgetMetrics = ['lcp_ms', 'cls', 'tbt_ms', 'ttfb_ms', 'performance_score'];
-
-const defaultBudgets = {
-  lcp_ms: { max: 4000, regression_delta: 500 },
-  cls: { max: 0.25, regression_delta: 0.05 },
-  tbt_ms: { max: 600, regression_delta: 200 },
-  ttfb_ms: { max: 1200, regression_delta: 300 },
-  performance_score: { min: 70, regression_delta: 5 },
-};
-
-function loadBudgets() {
-  const budgets = {};
-  for (const key of budgetMetrics) {
-    const prefix = `PERF_BUDGET_${key.toUpperCase()}`;
-    const base = { ...defaultBudgets[key] };
-    const maxOverride = process.env[`${prefix}_MAX`];
-    const minOverride = process.env[`${prefix}_MIN`];
-    const deltaOverride = process.env[`${prefix}_DELTA`];
-    if (maxOverride !== undefined) base.max = Number(maxOverride);
-    if (minOverride !== undefined) base.min = Number(minOverride);
-    if (deltaOverride !== undefined) base.regression_delta = Number(deltaOverride);
-    budgets[key] = base;
-  }
-  return budgets;
-}
-
 function validateInput() {
-  if (!/^[a-z0-9.-]+$/.test(new URL(baseUrl).hostname)) {
-    console.error('PERF_GATE=FAIL reason=invalid_base_url');
-    process.exit(1);
+  let parsed;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    console.error('PERF_GATE=FAIL_CONFIG reason=invalid_base_url');
+    process.exit(78);
+  }
+  if (!/^[a-z0-9.-]+$/.test(parsed.hostname)) {
+    console.error('PERF_GATE=FAIL_CONFIG reason=invalid_base_url');
+    process.exit(78);
   }
   if (expectedSha && !/^[0-9a-f]{40}$/.test(expectedSha)) {
-    console.error('PERF_GATE=FAIL reason=invalid_expected_sha');
-    process.exit(1);
+    console.error('PERF_GATE=FAIL_CONFIG reason=invalid_expected_sha');
+    process.exit(78);
   }
   if (gateMode !== 'baseline' && gateMode !== 'enforce') {
-    console.error('PERF_GATE=FAIL reason=invalid_gate_mode');
-    process.exit(1);
+    console.error('PERF_GATE=FAIL_CONFIG reason=invalid_gate_mode');
+    process.exit(78);
   }
   if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 10000 || requestTimeoutMs > 120000) {
-    console.error('PERF_GATE=FAIL reason=invalid_timeout');
-    process.exit(1);
+    console.error('PERF_GATE=FAIL_CONFIG reason=invalid_timeout');
+    process.exit(78);
   }
 }
 
@@ -119,8 +102,10 @@ function extractMetrics(lighthouseJson) {
   };
 }
 
-function isValidMetrics(m) {
-  return m !== null && typeof m === 'object' && metricKeys.every((k) => typeof m[k] === 'number');
+function isValidMetrics(metrics) {
+  return metrics !== null
+    && typeof metrics === 'object'
+    && metricKeys.every((key) => typeof metrics[key] === 'number' && Number.isFinite(metrics[key]));
 }
 
 function normalizeNavigationUrl(value) {
@@ -142,8 +127,11 @@ function classifyLighthouseNavigation(lighthouseJson, expectedUrl) {
   const mainDocumentUrl = normalizeNavigationUrl(lh.mainDocumentUrl);
   const networkItems = lh.audits?.['network-requests']?.details?.items || [];
   const documentRequests = networkItems.filter((item) => item?.resourceType === 'Document');
-  const observedUrls = [finalUrl, mainDocumentUrl, ...documentRequests.map((item) => normalizeNavigationUrl(item?.url))]
-    .filter(Boolean);
+  const observedUrls = [
+    finalUrl,
+    mainDocumentUrl,
+    ...documentRequests.map((item) => normalizeNavigationUrl(item?.url)),
+  ].filter(Boolean);
 
   const challengeUrl = observedUrls.find((value) => {
     try {
@@ -152,9 +140,10 @@ function classifyLighthouseNavigation(lighthouseJson, expectedUrl) {
       return false;
     }
   });
-  const initial202 = documentRequests.find((item) => {
-    return Number(item?.statusCode) === 202 && normalizeNavigationUrl(item?.url) === expected;
-  });
+  const initial202 = documentRequests.find((item) => (
+    Number(item?.statusCode) === 202
+    && normalizeNavigationUrl(item?.url) === expected
+  ));
 
   if (challengeUrl || initial202) {
     return {
@@ -224,7 +213,7 @@ async function runLighthouseCell(page, mode, outputDir) {
         timeout: requestTimeoutMs,
         maxBuffer: 20 * 1024 * 1024,
         stdio: ['ignore', 'pipe', 'pipe'],
-      }
+      },
     );
 
     const diagnostic = [
@@ -237,7 +226,7 @@ async function runLighthouseCell(page, mode, outputDir) {
 
     if (child.error || child.status !== 0) {
       const classification = classifyLighthouseError(diagnostic);
-      if (classification === 'transient_infrastructure') transientCount++;
+      if (classification === 'transient_infrastructure') transientCount += 1;
       runs.push({ attempt, status: classification, metrics: null, diagnostic });
       continue;
     }
@@ -247,24 +236,40 @@ async function runLighthouseCell(page, mode, outputDir) {
       const lighthouse = JSON.parse(rawJson);
       const navigation = classifyLighthouseNavigation(lighthouse, url);
       if (navigation) {
-        if (navigation.status === 'transient_infrastructure') transientCount++;
-        runs.push({ attempt, status: navigation.status, metrics: null, diagnostic: navigation.diagnostic });
+        if (navigation.status === 'transient_infrastructure') transientCount += 1;
+        runs.push({
+          attempt,
+          status: navigation.status,
+          metrics: null,
+          diagnostic: navigation.diagnostic,
+        });
         continue;
       }
+
       const metrics = extractMetrics(lighthouse);
       if (!isValidMetrics(metrics)) {
-        runs.push({ attempt, status: 'invalid_json', metrics: null, diagnostic: 'JSON validation failed' });
+        runs.push({
+          attempt,
+          status: 'invalid_json',
+          metrics: null,
+          diagnostic: 'JSON validation failed',
+        });
         continue;
       }
       runs.push({ attempt, status: 'success', metrics });
     } catch (error) {
       const classification = classifyLighthouseError(error);
-      if (classification === 'transient_infrastructure') transientCount++;
-      runs.push({ attempt, status: classification, metrics: null, diagnostic: String(error.message || error) });
+      if (classification === 'transient_infrastructure') transientCount += 1;
+      runs.push({
+        attempt,
+        status: classification,
+        metrics: null,
+        diagnostic: String(error.message || error),
+      });
     }
   }
 
-  const successfulRuns = runs.filter((r) => r.status === 'success');
+  const successfulRuns = runs.filter((run) => run.status === 'success');
   const cellResult = {
     page: page.key,
     mode,
@@ -277,74 +282,42 @@ async function runLighthouseCell(page, mode, outputDir) {
   };
 
   if (successfulRuns.length === 0) {
-    cellResult.status = transientCount > 0 ? 'transient_infrastructure' : 'lighthouse_failed';
+    cellResult.status = transientCount > 0
+      ? 'transient_infrastructure'
+      : 'lighthouse_failed';
     const lastFailure = runs[runs.length - 1];
-    if (lastFailure && lastFailure.diagnostic) {
+    if (lastFailure?.diagnostic) {
       const fullDiagnostic = lastFailure.diagnostic;
-      cellResult.diagnostic = fullDiagnostic.length > 1000 ? fullDiagnostic.slice(0, 1000) + '... (truncated)' : fullDiagnostic;
+      cellResult.diagnostic = fullDiagnostic.length > 1000
+        ? `${fullDiagnostic.slice(0, 1000)}... (truncated)`
+        : fullDiagnostic;
     }
     return cellResult;
   }
 
   const medians = {};
   for (const key of metricKeys) {
-    const values = successfulRuns.map((r) => r.metrics[key]).filter((v) => v !== null);
-    if (values.length > 0) {
-      medians[key] = key === 'cls'
+    const values = successfulRuns
+      .map((run) => run.metrics[key])
+      .filter((value) => value !== null);
+    medians[key] = values.length === 0
+      ? null
+      : key === 'cls'
         ? Math.round(median(values) * 10000) / 10000
         : Math.round(median(values));
-    } else {
-      medians[key] = null;
-    }
   }
+
   cellResult.median = medians;
   cellResult.status = 'success';
   return cellResult;
 }
 
-function evaluateBudgets(cellResults, budgets) {
-  const violations = [];
-
-  for (const cell of cellResults) {
-    if (cell.status !== 'success' || !cell.median) continue;
-
-    for (const key of budgetMetrics) {
-      const budget = budgets[key];
-      const value = cell.median[key];
-      if (value === null) continue;
-
-      if (key === 'performance_score') {
-        if (typeof budget.min === 'number' && value < budget.min - budget.regression_delta) {
-          violations.push({
-            page: cell.page,
-            mode: cell.mode,
-            metric: key,
-            value,
-            threshold: budget.min,
-            delta_allowed: budget.regression_delta,
-            severity: 'regression',
-          });
-        }
-      } else {
-        if (typeof budget.max === 'number' && value > budget.max + budget.regression_delta) {
-          violations.push({
-            page: cell.page,
-            mode: cell.mode,
-            metric: key,
-            value,
-            threshold: budget.max,
-            delta_allowed: budget.regression_delta,
-            severity: 'regression',
-          });
-        }
-      }
-    }
-  }
-
-  return violations;
+async function readBaselineContract() {
+  const raw = await fs.readFile(baselineContractPath, 'utf8');
+  return JSON.parse(raw);
 }
 
-async function writeArtifacts(outputDir, cellResults, budgets) {
+async function writeArtifacts(outputDir, cellResults, baselineContract, evaluation) {
   await fs.mkdir(path.join(outputDir, 'raw'), { recursive: true });
 
   const summaryTsvPath = path.join(outputDir, 'summary.tsv');
@@ -355,34 +328,63 @@ async function writeArtifacts(outputDir, cellResults, budgets) {
   let tsvBody = '';
   for (const cell of cellResults) {
     const row = [
-      cell.page, cell.mode, cell.status, cell.attempts, cell.successes, cell.transients,
-      ...metricKeys.map((k) => cell.median?.[k] ?? 'N/A'),
+      cell.page,
+      cell.mode,
+      cell.status,
+      cell.attempts,
+      cell.successes,
+      cell.transients,
+      ...metricKeys.map((key) => cell.median?.[key] ?? 'N/A'),
     ];
     tsvBody += row.join('\t') + '\n';
   }
   await fs.writeFile(summaryTsvPath, tsvHeader + tsvBody, 'utf8');
 
-  const summaryJsonPath = path.join(outputDir, 'summary.json');
   const summaryJson = {
-    schema: 1,
+    schema: 2,
     candidate_sha: expectedSha,
     base_url: baseUrl,
     lighthouse_version: lighthouseVersion,
     gate_mode: gateMode,
     generated_at: new Date().toISOString(),
-    pages: pages.map((p) => p.path),
+    pages: pages.map((page) => page.path),
     modes,
     attempts_per_cell: attemptsPerCell,
-    budgets: gateMode === 'enforce' ? budgets : null,
+    baseline_contract: baselineContract
+      ? {
+          path: baselineContractPath,
+          schema: baselineContract.schema,
+          status: baselineContract.status,
+          approved_at: baselineContract.approved_at || null,
+          generated_from: baselineContract.generated_from || [],
+        }
+      : null,
     results: cellResults,
   };
-  await fs.writeFile(summaryJsonPath, JSON.stringify(summaryJson, null, 2) + '\n', 'utf8');
+  await fs.writeFile(
+    path.join(outputDir, 'summary.json'),
+    JSON.stringify(summaryJson, null, 2) + '\n',
+    'utf8',
+  );
 
-  const lighthouseVersionPath = path.join(outputDir, 'lighthouse-version.txt');
-  await fs.writeFile(lighthouseVersionPath, lighthouseVersion + '\n', 'utf8');
+  if (evaluation) {
+    await fs.writeFile(
+      path.join(outputDir, 'regression-evaluation.json'),
+      JSON.stringify(evaluation, null, 2) + '\n',
+      'utf8',
+    );
+  }
 
-  const shaPath = path.join(outputDir, 'candidate-sha.txt');
-  await fs.writeFile(shaPath, expectedSha + '\n', 'utf8');
+  await fs.writeFile(
+    path.join(outputDir, 'lighthouse-version.txt'),
+    lighthouseVersion + '\n',
+    'utf8',
+  );
+  await fs.writeFile(
+    path.join(outputDir, 'candidate-sha.txt'),
+    expectedSha + '\n',
+    'utf8',
+  );
 }
 
 async function main() {
@@ -395,46 +397,99 @@ async function main() {
   console.log(`PERF_GATE=START mode=${gateMode} sha=${expectedSha} base=${baseUrl}`);
   console.log(`PERF_GATE_LIGHTHOUSE version=${lighthouseVersion}`);
 
+  let baselineContract = null;
+  if (gateMode === 'enforce') {
+    try {
+      baselineContract = await readBaselineContract();
+    } catch (error) {
+      const diagnostic = String(error.message || error);
+      await writeArtifacts(outputDir, [], null, {
+        schema: 1,
+        status: 'config_error',
+        reason: 'baseline_read_failed',
+        path: baselineContractPath,
+        diagnostic,
+      });
+      console.error(`PERF_GATE=FAIL_CONFIG reason=baseline_read_failed baseline=${baselineContractPath} diagnostic=${diagnostic}`);
+      process.exit(78);
+    }
+
+    const validation = validatePerformanceBaselineContract(baselineContract, {
+      lighthouseVersion,
+      requiredCells,
+      requireApproved: true,
+    });
+    if (!validation.ok) {
+      await writeArtifacts(outputDir, [], baselineContract, {
+        schema: 1,
+        status: 'config_error',
+        reason: validation.reason,
+        path: baselineContractPath,
+      });
+      console.error(`PERF_GATE=FAIL_CONFIG reason=${validation.reason} baseline=${baselineContractPath}`);
+      process.exit(78);
+    }
+    console.log(`PERF_GATE_BASELINE=PASS path=${baselineContractPath} sources=${baselineContract.generated_from.length} cells=${requiredCells.length}`);
+  }
+
   const cellResults = [];
   for (const page of pages) {
     for (const mode of modes) {
       process.stdout.write(`  ${page.key}/${mode} ... `);
       const result = await runLighthouseCell(page, mode, outputDir);
       cellResults.push(result);
-      console.log(result.status === 'success'
-        ? `OK (median perf=${result.median.performance_score} lcp=${result.median.lcp_ms} cls=${result.median.cls} tbt=${result.median.tbt_ms} ttfb=${result.median.ttfb_ms})`
-        : `SKIP (${result.status} successes=${result.successes}/${result.attempts})`);
+      console.log(
+        result.status === 'success'
+          ? `OK (median perf=${result.median.performance_score} lcp=${result.median.lcp_ms} cls=${result.median.cls} tbt=${result.median.tbt_ms} ttfb=${result.median.ttfb_ms})`
+          : `SKIP (${result.status} successes=${result.successes}/${result.attempts})`,
+      );
     }
   }
-
-  const budgets = loadBudgets();
-  await writeArtifacts(outputDir, cellResults, budgets);
 
   console.log('\n--- Performance Summary ---');
   for (const cell of cellResults) {
     if (cell.status === 'success' && cell.median) {
       console.log(
-        `  ${cell.page}/${cell.mode}: perf=${cell.median.performance_score} ` +
-        `lcp=${cell.median.lcp_ms}ms cls=${cell.median.cls} ` +
-        `tbt=${cell.median.tbt_ms}ms ttfb=${cell.median.ttfb_ms}ms`
+        `  ${cell.page}/${cell.mode}: perf=${cell.median.performance_score} `
+        + `lcp=${cell.median.lcp_ms}ms cls=${cell.median.cls} `
+        + `tbt=${cell.median.tbt_ms}ms ttfb=${cell.median.ttfb_ms}ms`,
       );
     } else {
       console.log(`  ${cell.page}/${cell.mode}: ${cell.status}`);
     }
   }
 
-  const transientCells = cellResults.filter((c) => c.status === 'transient_infrastructure');
-  const failedCells = cellResults.filter((c) => c.status === 'lighthouse_failed');
-  const incompleteCells = cellResults.filter((c) => c.status !== 'success');
+  const transientCells = cellResults.filter((cell) => cell.status === 'transient_infrastructure');
+  const incompleteCells = cellResults.filter((cell) => cell.status !== 'success');
 
   if (transientCells.length > 0) {
     console.error(`\nPERF_GATE_TRANSIENT cells=${transientCells.length}/${cellResults.length}`);
-    for (const c of transientCells) {
-      console.error(`  ${c.page}/${c.mode}: ${c.transients} transient of ${c.attempts} attempts`);
+    for (const cell of transientCells) {
+      console.error(`  ${cell.page}/${cell.mode}: ${cell.transients} transient of ${cell.attempts} attempts`);
     }
   }
 
   if (incompleteCells.length > 0) {
+    const incompleteEvaluation = gateMode === 'enforce'
+      ? {
+          schema: 1,
+          status: 'incomplete',
+          reason: transientCells.length > 0 ? 'transient_infrastructure' : 'incomplete_measurement',
+          valid_cells: cellResults.length - incompleteCells.length,
+          total_cells: cellResults.length,
+          transient_cells: transientCells.length,
+          incomplete_cells: incompleteCells.map((cell) => ({
+            page: cell.page,
+            mode: cell.mode,
+            status: cell.status,
+            successes: cell.successes,
+            attempts: cell.attempts,
+            transients: cell.transients,
+          })),
+        }
+      : null;
+    await writeArtifacts(outputDir, cellResults, baselineContract, incompleteEvaluation);
+
     if (gateMode === 'enforce') {
       if (transientCells.length > 0) {
         console.error(`\nPERF_GATE=INCOMPLETE mode=enforce valid_cells=${cellResults.length - incompleteCells.length}/${cellResults.length} transient_cells=${transientCells.length}`);
@@ -448,28 +503,33 @@ async function main() {
   }
 
   if (gateMode === 'enforce') {
-    const violations = evaluateBudgets(cellResults, budgets);
-    if (violations.length > 0) {
-      console.error(`\nPERF_GATE=FAIL mode=enforce violations=${violations.length}`);
-      for (const v of violations) {
+    const evaluation = evaluatePerformanceRegression(cellResults, baselineContract);
+    await writeArtifacts(outputDir, cellResults, baselineContract, {
+      schema: 1,
+      status: evaluation.violations.length === 0 ? 'pass' : 'fail',
+      ...evaluation,
+    });
+
+    if (evaluation.violations.length > 0) {
+      console.error(`\nPERF_GATE=FAIL mode=enforce violations=${evaluation.violations.length}`);
+      for (const violation of evaluation.violations) {
         console.error(
-          `  ${v.page}/${v.mode} ${v.metric}: ${v.value} ` +
-          `(threshold=${v.threshold} delta_allowed=${v.delta_allowed})`
+          `  ${violation.page}/${violation.mode} ${violation.metric}: ${violation.value} `
+          + `(baseline=${violation.baseline ?? 'N/A'} allowed=${violation.allowed ?? 'N/A'} severity=${violation.severity})`,
         );
       }
       process.exit(1);
     }
-    console.log(`\nPERF_GATE=PASS mode=enforce cells=${cellResults.length} violations=0`);
-  } else {
-    console.log(`\nPERF_GATE=PASS mode=baseline cells=${cellResults.length} (non-blocking)`);
+
+    console.log(`\nPERF_GATE=PASS mode=enforce cells=${cellResults.length} violations=0 baseline=${baselineContractPath}`);
+    return;
   }
 
-  if (failedCells.length > 0 && transientCells.length === 0) {
-    console.error(`PERF_GATE_WARNING lighthouse_failures=${failedCells.length}`);
-  }
+  await writeArtifacts(outputDir, cellResults, null, null);
+  console.log(`\nPERF_GATE=PASS mode=baseline cells=${cellResults.length} (non-blocking)`);
 }
 
-main().catch((err) => {
-  console.error('PERF_GATE=FAIL', err);
+main().catch((error) => {
+  console.error('PERF_GATE=FAIL', error);
   process.exit(1);
 });
