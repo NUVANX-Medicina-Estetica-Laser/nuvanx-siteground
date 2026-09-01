@@ -29,6 +29,21 @@
 	pointer-events: none;
 }
 
+.nvx-home-hero__poster {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	z-index: var(--nvx-z-local-base);
+}
+
+.nvx-home-hero__poster-img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
 .nvx-home-hero__video {
 	position: absolute;
 	top: 0;
@@ -37,7 +52,7 @@
 	height: 100%;
 	object-fit: cover;
 	opacity: 1; /* Contrast guaranteed by overlay */
-	z-index: var(--nvx-z-local-base);
+	z-index: calc(var(--nvx-z-local-base) + 1);
 }
 
 .nvx-home-hero__content {

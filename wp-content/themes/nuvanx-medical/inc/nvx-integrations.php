@@ -126,6 +126,27 @@ function nvx_resolve_home_hero_poster_url(): string {
 		: $canonical_poster_url;
 }
 
+/**
+ * Resolve the mobile home page hero poster URL.
+ *
+ * @return string The resolved mobile poster URL, or empty string when not found.
+ */
+function nvx_resolve_home_hero_poster_mobile_url(): string {
+	$canonical_mobile_url = content_url( '/uploads/2026/07/nvx-home-video-portada-poster-mobile.webp' );
+	$poster_id            = (int) get_theme_mod( 'nvx_home_video_poster_mobile_id', 0 );
+	$poster_file          = $poster_id > 0 ? get_attached_file( $poster_id ) : '';
+	$configured_url       = ( $poster_id > 0 && is_string( $poster_file ) && '' !== $poster_file && is_readable( $poster_file ) )
+		? wp_get_attachment_image_url( $poster_id, 'full' )
+		: '';
+	if ( is_string( $configured_url ) && '' !== $configured_url ) {
+		return $configured_url;
+	}
+	if ( function_exists( 'nvx_public_media_upload_url_is_readable' ) && ! nvx_public_media_upload_url_is_readable( $canonical_mobile_url ) ) {
+		return '';
+	}
+	return $canonical_mobile_url;
+}
+
 add_action(
 	'wp_head',
 	function (): void {
@@ -133,8 +154,12 @@ add_action(
 		// the early connection work without shortening the critical path.
 
 		if ( is_front_page() ) {
-			$poster_url = nvx_resolve_home_hero_poster_url();
-			if ( is_string( $poster_url ) && '' !== $poster_url ) {
+			$poster_url        = nvx_resolve_home_hero_poster_url();
+			$poster_mobile_url = function_exists( 'nvx_resolve_home_hero_poster_mobile_url' ) ? nvx_resolve_home_hero_poster_mobile_url() : '';
+			if ( is_string( $poster_mobile_url ) && '' !== $poster_mobile_url ) {
+				echo '<link rel="preload" as="image" href="' . esc_url( $poster_mobile_url ) . '" media="(max-width: 768px)" fetchpriority="high" type="image/webp" />' . "\n";
+				echo '<link rel="preload" as="image" href="' . esc_url( $poster_url ) . '" media="(min-width: 769px)" fetchpriority="high" type="image/webp" />' . "\n";
+			} elseif ( is_string( $poster_url ) && '' !== $poster_url ) {
 				echo '<link rel="preload" as="image" href="' . esc_url( $poster_url ) . '" fetchpriority="high" type="image/webp" />' . "\n";
 			}
 		}
