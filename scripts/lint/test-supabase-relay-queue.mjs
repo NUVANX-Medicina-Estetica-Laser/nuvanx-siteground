@@ -33,6 +33,20 @@ assert.match(queue, /SUCCESS.*HTTP_4XX.*HTTP_429.*HTTP_5XX.*TRANSPORT.*QUEUED.*D
 assert.match(queue, /function nvx_supabase_relay_dispatch\(/);
 assert.match(queue, /wp_schedule_event\( time\(\) \+ 60, 'nvx_relay_outbox_5min'/);
 assert.match(queue, /add_action\( 'shutdown', 'nvx_supabase_relay_queue_shutdown_drain' \)/);
+assert.match(queue, /NVX_GOOGLE_CLICK_HMAC_CONTEXT\s*=\s*'nuvanx-google-click-attribution-hmac-key-v1'/,
+  'Google click signing context must match the Supabase collector contract');
+assert.match(queue, /function nvx_supabase_relay_google_click_hmac_key\(/,
+  'Google click relay must derive a dedicated HMAC key');
+assert.match(queue, /hash_hmac\( 'sha256', NVX_GOOGLE_CLICK_HMAC_CONTEXT, \$token \)/,
+  'Derived Google click HMAC key must use the existing server-only HubSpot token as root');
+assert.match(queue, /'x-nvx-timestamp'\s*=>\s*\$timestamp/,
+  'Google click requests must carry replay-bounded timestamps');
+assert.match(queue, /'x-nvx-signature'\s*=>\s*\$signature/,
+  'Google click requests must carry HMAC signatures');
+assert.match(queue, /if \( 'google_click' === \$endpoint \)/,
+  'Google click sends must take the authenticated transport path');
+assert.match(queue, /nvx_supabase_relay_google_click_post_signed\( \$url, \$body, \$origin, \$token \)/,
+  'Google click retries must be signed at send time instead of persisting signatures');
 assert.doesNotMatch(queue, /email|phone|firstname|authorization/i);
 
 assert.match(integration, /nvx_supabase_relay_dispatch\(\s*'google_click'/);
@@ -50,4 +64,4 @@ assert.equal(
 );
 assert.match(idHarness.stdout, /ATTRIBUTION_SUBMISSION_ID=PASS/);
 
-console.log('SUPABASE_RELAY_QUEUE=PASS blocking=1 outbox=1 telemetry=1 submission_id=deterministic');
+console.log('SUPABASE_RELAY_QUEUE=PASS blocking=1 outbox=1 telemetry=1 google_click_hmac=1 submission_id=deterministic');
