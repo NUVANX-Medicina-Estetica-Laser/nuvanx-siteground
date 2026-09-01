@@ -122,7 +122,7 @@ async function fetchPublishedPages() {
       const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
       const body = await response.text();
       
-      if (body.includes('sgcaptcha') || response.status === 429 || response.status === 503) {
+      if (body.includes('sgcaptcha') || TRANSIENT_HTTP.has(Number(response.status))) {
          const err = new Error(`Transient SiteGround challenge or rate limit fetching ${type}`);
          err.isTransient = true;
          throw err;
