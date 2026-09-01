@@ -8,6 +8,11 @@
     var toggle = document.getElementById('nvx-hero-video-toggle');
     var hero = video.closest('.nvx-home-hero');
 
+    var posterMobile = video.getAttribute('data-poster-mobile');
+    if (posterMobile && window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+      video.setAttribute('poster', posterMobile);
+    }
+
     function usePosterFallback() {
       video.pause();
       video.hidden = true;

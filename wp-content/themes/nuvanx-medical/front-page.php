@@ -11,16 +11,17 @@
 
 defined( 'ABSPATH' ) || exit;
 
-$hero_video_url  = content_url( '/uploads/2026/07/nvx-home-video-portada-hero-12s-720p.mp4' );
-$hero_poster_url = function_exists( 'nvx_resolve_home_hero_poster_url' ) ? nvx_resolve_home_hero_poster_url() : content_url( '/uploads/2026/07/nvx-home-video-portada-poster.webp' );
-$evidence_image  = content_url( '/uploads/2026/07/consulta-medica-personalizada-nuvanx-madrid.webp' );
-$clinics         = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+$hero_video_url         = content_url( '/uploads/2026/07/nvx-home-video-portada-hero-12s-720p.mp4' );
+$hero_poster_url        = function_exists( 'nvx_resolve_home_hero_poster_url' ) ? nvx_resolve_home_hero_poster_url() : content_url( '/uploads/2026/07/nvx-home-video-portada-poster.webp' );
+$hero_poster_mobile_url = function_exists( 'nvx_resolve_home_hero_poster_mobile_url' ) ? nvx_resolve_home_hero_poster_mobile_url() : '';
+$evidence_image         = content_url( '/uploads/2026/07/consulta-medica-personalizada-nuvanx-madrid.webp' );
+$clinics                = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
 
 ob_start();
 ?>
 <div id="nvx-home-v3" class="nvx-home-v3">
 	<section class="nvx-home-hero" aria-labelledby="nvx-home-hero-title">
-		<video id="nvx-home-hero-video" class="nvx-home-hero__video nvx-home-hero-video" autoplay muted loop playsinline preload="none" poster="<?php echo esc_url( $hero_poster_url ); ?>" aria-label="Experiencia NUVANX Medicina Estética Láser en Madrid">
+		<video id="nvx-home-hero-video" class="nvx-home-hero__video nvx-home-hero-video" autoplay muted loop playsinline preload="none" poster="<?php echo esc_url( $hero_poster_url ); ?>" <?php if ( '' !== $hero_poster_mobile_url ) : ?>data-poster-mobile="<?php echo esc_url( $hero_poster_mobile_url ); ?>"<?php endif; ?> aria-label="Experiencia NUVANX Medicina Estética Láser en Madrid">
 			<source src="<?php echo esc_url( $hero_video_url ); ?>" type="video/mp4">
 		</video>
 		<div class="nvx-home-hero__content nvx-home-hero__copy">
