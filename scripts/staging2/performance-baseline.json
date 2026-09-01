@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "status": "approved",
+  "lighthouse_version": "12.8.2",
+  "approved_at": "2026-09-01",
+  "approval_basis": "Median of three complete exact-SHA 12-cell Lighthouse matrices. The first two predate native CAPTCHA/navigation hardening but their retained raw artifacts were post-hoc audited 36/36 with requestedUrl == finalUrl == mainDocumentUrl, zero CAPTCHA paths and zero HTTP 202 documents; the third was measured with native hardening and independently re-audited. Tolerances include observed CI/SiteGround dispersion and absolute safety caps.",
+  "generated_from": [
+    {
+      "sha":"96db0e6d7ce39312c3a63a2465aeb53e2981cabc",
+      "run_id":33455347145,
+      "artifact_id":9781877621,
+      "artifact_digest":"sha256:101a23b58f5a711b438e1b5b3c12158da0f8603b840360531ae087301c86d745",
+      "navigation_validation":{"method":"post_hoc_raw_artifact_audit","raw_runs":36,"valid_runs":36,"captcha_runs":0,"http_202_runs":0}
+    },
+    {
+      "sha":"71e547c523eb258784947088ccd03ec035d53f34",
+      "run_id":33482375188,
+      "artifact_id":9791186810,
+      "artifact_digest":"sha256:450f65a002f0cb30aab876507fc9fd1d8a41eae63d1c7bd584607c5772a36dcc",
+      "navigation_validation":{"method":"post_hoc_raw_artifact_audit","raw_runs":36,"valid_runs":36,"captcha_runs":0,"http_202_runs":0}
+    },
+    {
+      "sha":"79e14c094dda17c7eeec52ec072fd6243d16dd27",
+      "run_id":33531128461,
+      "artifact_id":9810797796,
+      "artifact_digest":"sha256:650a2295c03d7dee9b6ab4e45d55c0569619b8837bf620ef576e4498edc7e566",
+      "navigation_validation":{"method":"native_gate_and_post_hoc_raw_artifact_audit","raw_runs":36,"valid_runs":36,"captcha_runs":0,"http_202_runs":0}
+    }
+  ],
+  "policy": {
+    "lcp_ms": {"relative_increase":0.35,"absolute_delta":400,"absolute_max":4500},
+    "tbt_ms": {"absolute_delta":150,"absolute_max":600},
+    "cls": {"absolute_delta":0.05,"absolute_max":0.25},
+    "ttfb_ms": {"relative_increase":1.0,"absolute_delta":250,"absolute_max":1200},
+    "performance_score": {"drop_points":8,"absolute_min":70}
+  },
+  "cells": {
+    "blog/desktop":{"reference":{"performance_score":92,"lcp_ms":1298,"tbt_ms":0,"cls":0.0001,"ttfb_ms":293}},
+    "blog/mobile":{"reference":{"performance_score":90,"lcp_ms":2838,"tbt_ms":80,"cls":0.0024,"ttfb_ms":478}},
+    "endolaser/desktop":{"reference":{"performance_score":94,"lcp_ms":1306,"tbt_ms":0,"cls":0.0,"ttfb_ms":293}},
+    "endolaser/mobile":{"reference":{"performance_score":86,"lcp_ms":3467,"tbt_ms":69,"cls":0.0,"ttfb_ms":296}},
+    "endolift/desktop":{"reference":{"performance_score":91,"lcp_ms":1501,"tbt_ms":0,"cls":0.0,"ttfb_ms":292}},
+    "endolift/mobile":{"reference":{"performance_score":90,"lcp_ms":3141,"tbt_ms":83,"cls":0.0,"ttfb_ms":354}},
+    "faciales/desktop":{"reference":{"performance_score":92,"lcp_ms":1297,"tbt_ms":0,"cls":0.0,"ttfb_ms":293}},
+    "faciales/mobile":{"reference":{"performance_score":87,"lcp_ms":3240,"tbt_ms":73,"cls":0.0,"ttfb_ms":296}},
+    "home/desktop":{"reference":{"performance_score":90,"lcp_ms":1579,"tbt_ms":0,"cls":0.0242,"ttfb_ms":289}},
+    "home/mobile":{"reference":{"performance_score":81,"lcp_ms":3451,"tbt_ms":87,"cls":0.032,"ttfb_ms":288}},
+    "valoracion/desktop":{"reference":{"performance_score":95,"lcp_ms":1207,"tbt_ms":0,"cls":0.0009,"ttfb_ms":289}},
+    "valoracion/mobile":{"reference":{"performance_score":87,"lcp_ms":3295,"tbt_ms":81,"cls":0.0,"ttfb_ms":289}}
+  }
+}

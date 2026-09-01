@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 
-const manifestUrl = new URL('./published-pages-manifest.json', import.meta.url);
+const manifestUrl = new URL('../../wp-content/themes/nuvanx-medical/inc/data/publication-manifest.json', import.meta.url);
 
 export const MIN_MANIFEST_ENTRIES = 40;
 
@@ -18,8 +18,9 @@ function normalizePath(value) {
 }
 
 export async function loadPublishedPagesManifest() {
-  const manifest = JSON.parse(await fs.readFile(manifestUrl, 'utf8'));
-  if (!Array.isArray(manifest) || manifest.length === 0) {
+  const raw = JSON.parse(await fs.readFile(manifestUrl, 'utf8'));
+  const manifest = Object.entries(raw.routes || {}).map(([path, data]) => ({ path, ...data }));
+  if (manifest.length === 0) {
     throw new Error('Canonical published-page manifest must be a non-empty array');
   }
   if (manifest.length < MIN_MANIFEST_ENTRIES) {
