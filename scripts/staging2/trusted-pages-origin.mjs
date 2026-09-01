@@ -7,7 +7,7 @@ const ALLOWED_STAGING_ALIASES = new Set(['nvx-staging2', 'nvx-staging2-pr']);
 
 const WP_PAGES_SCRIPT = `set -Eeuo pipefail
 cd "$STAGING_ROOT"
-wp eval '$pages=get_posts(array("post_type"=>array("page","post"),"post_status"=>"publish","posts_per_page"=>-1,"orderby"=>"ID","order"=>"ASC")); $payload=array_map(static function($p){return array("id"=>(int)$p->ID,"slug"=>(string)$p->post_name,"link"=>(string)get_permalink($p->ID),"title"=>(string)get_the_title($p->ID),"post_type"=>(string)$p->post_type,"template"=>"page" === $p->post_type ? (string)get_page_template_slug($p->ID) : "");},$pages); echo wp_json_encode($payload);'
+wp eval '$pages=get_posts(array("post_type"=>array("page","post"),"post_status"=>"publish","posts_per_page"=>-1,"orderby"=>"ID","order"=>"ASC")); $payload=array_map(static function($p){return array("id"=>(int)$p->ID,"slug"=>(string)$p->post_name,"link"=>(string)get_permalink($p->ID),"title"=>(string)get_the_title($p->ID),"post_type"=>(string)$p->post_type,"status"=>(string)$p->post_status,"template"=>"page" === $p->post_type ? (string)get_page_template_slug($p->ID) : "");},$pages); echo wp_json_encode($payload);'
 `;
 
 function runTrustedWpCliInventory(alias, stagingRoot) {

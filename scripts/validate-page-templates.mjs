@@ -175,6 +175,9 @@ function validatePublicationTopology(pages, manifest) {
     if (!actual) {
       errors.push(`Manifest page ${id} (${expected.path}) is not published in WordPress`);
       hasIdError = true;
+      hasSlugError = true;
+      hasTypeError = true;
+      hasStatusError = true;
       continue;
     }
     if (actual.slug !== expected.slug) {
