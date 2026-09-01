@@ -953,8 +953,58 @@ jobs:
           set -euo pipefail
           candidate="$(printf '%s' "$CANDIDATE_SHA" | tr -d '[:space:]')"
           [[ "$candidate" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid candidate SHA.' >&2; exit 1; }
-          deployed="$(ssh nvx-staging2 "tr -d '\r\n' < '$STAGING_ROOT/wp-content/themes/nuvanx-medical/.nvx-deploy-sha' 2>/dev/null || true")"
-          [[ "$deployed" == "$candidate" ]] || { echo "STAGING_SHA_MISMATCH expected=$candidate deployed=$deployed" >&2; exit 1; }
+          artifact_dir='scripts/staging2/performance-artifacts'
+          mkdir -p "$artifact_dir"
+          preflight_log="$artifact_dir/ssh-preflight.log"
+          : > "$preflight_log"
+          retry_delay="$SSH_RETRY_BASE_DELAY_SECONDS"
+          verified=0
+          for attempt in $(seq 1 "$SSH_RETRY_ATTEMPTS"); do
+            ssh_err="$RUNNER_TEMP/performance-staging-sha-${attempt}.err"
+            : > "$ssh_err"
+            set +e
+            deployed="$(ssh -n nvx-staging2 "tr -d '\r\n' < '$STAGING_ROOT/wp-content/themes/nuvanx-medical/.nvx-deploy-sha'" 2>"$ssh_err")"
+            ssh_rc=$?
+            set -e
+            if [[ "$ssh_rc" -eq 0 ]]; then
+              if [[ "$deployed" != "$candidate" ]]; then
+                printf 'PERFORMANCE_STAGING_SHA=FAIL_MISMATCH expected=%s deployed=%s attempt=%s/%s\n' "$candidate" "${deployed:-missing}" "$attempt" "$SSH_RETRY_ATTEMPTS" | tee -a "$preflight_log" >&2
+                exit 1
+              fi
+              printf 'PERFORMANCE_STAGING_SHA=PASS sha=%s attempt=%s/%s\n' "$candidate" "$attempt" "$SSH_RETRY_ATTEMPTS" | tee -a "$preflight_log"
+              verified=1
+              break
+            fi
+            diagnostic="$(cat "$ssh_err" 2>/dev/null || true)"
+            status='ssh_other'
+            if [[ "$ssh_rc" -ne 255 ]]; then
+              status='remote_env'
+            elif grep -Eqi 'Connection timed out|Operation timed out|Connection refused|Connection reset by peer|No route to host|Network is unreachable|Could not resolve hostname|Temporary failure in name resolution|Name or service not known|kex_exchange_identification:.*(Connection closed|Connection reset)|Connection closed by .* port' "$ssh_err"; then
+              status='transport'
+            elif grep -Eqi 'Permission denied|Authentication failed|Too many authentication failures|No more authentication methods to try' "$ssh_err"; then
+              status='auth'
+            elif grep -Eqi 'Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|No .* host key is known' "$ssh_err"; then
+              status='hostkey'
+            fi
+            printf 'PERFORMANCE_STAGING_SHA=SSH_%s rc=%s attempt=%s/%s diagnostic=%q\n' "${status^^}" "$ssh_rc" "$attempt" "$SSH_RETRY_ATTEMPTS" "$diagnostic" | tee -a "$preflight_log" >&2
+            case "$status" in
+              transport)
+                if [[ "$attempt" -lt "$SSH_RETRY_ATTEMPTS" ]]; then
+                  echo "PERFORMANCE_STAGING_SHA=RETRY_TRANSPORT delay_seconds=$retry_delay" | tee -a "$preflight_log"
+                  sleep "$retry_delay"
+                  retry_delay=$((retry_delay + SSH_RETRY_BASE_DELAY_SECONDS))
+                  continue
+                fi
+                echo "PERFORMANCE_STAGING_SHA=FAIL_TRANSPORT attempts=$SSH_RETRY_ATTEMPTS" | tee -a "$preflight_log" >&2
+                exit "$SSH_TRANSPORT_EXIT_CODE"
+                ;;
+              auth) echo 'PERFORMANCE_STAGING_SHA=FAIL_AUTH retry_forbidden=1' | tee -a "$preflight_log" >&2; exit 1 ;;
+              hostkey) echo 'PERFORMANCE_STAGING_SHA=FAIL_HOSTKEY retry_forbidden=1' | tee -a "$preflight_log" >&2; exit 1 ;;
+              remote_env) echo 'PERFORMANCE_STAGING_SHA=FAIL_REMOTE_ENV retry_forbidden=1' | tee -a "$preflight_log" >&2; exit 1 ;;
+              *) echo "PERFORMANCE_STAGING_SHA=FAIL_OTHER status=$status retry_forbidden=1" | tee -a "$preflight_log" >&2; exit 1 ;;
+            esac
+          done
+          [[ "$verified" -eq 1 ]]
           echo "STAGING_SHA_VERIFIED=PASS sha=$candidate"
 
       - name: Install Lighthouse
