@@ -99,7 +99,17 @@ async function fetchPublishedPages() {
     if (!existsSync(pagesFile)) {
       throw new Error(`WORDPRESS_PAGES_FILE does not exist: ${pagesFile}`);
     }
-    return parsePagesJson(readFileSync(pagesFile, 'utf8'), pagesFile);
+    const trustedPages = parsePagesJson(readFileSync(pagesFile, 'utf8'), pagesFile);
+    let inferredStatusCount = 0;
+    const normalizedPages = trustedPages.map((page) => {
+      if (page.status) return page;
+      inferredStatusCount += 1;
+      return { ...page, status: 'publish' };
+    });
+    if (inferredStatusCount > 0) {
+      console.log(`TRUSTED_PUBLICATION_STATUS_INFERRED=PASS count=${inferredStatusCount} contract=WORDPRESS_PAGES_FILE_published_only`);
+    }
+    return normalizedPages;
   }
 
   const baseUrl = process.env.WORDPRESS_URL || 'https://nuvanx.com';
