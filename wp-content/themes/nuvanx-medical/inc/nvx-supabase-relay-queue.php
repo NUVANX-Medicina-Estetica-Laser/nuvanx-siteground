@@ -13,10 +13,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-const NVX_SUPABASE_RELAY_QUEUE_CPT      = 'nvx_relay_outbox';
-const NVX_SUPABASE_RELAY_QUEUE_CRON     = 'nvx_supabase_relay_queue_drain';
+const NVX_SUPABASE_RELAY_QUEUE_CPT       = 'nvx_relay_outbox';
+const NVX_SUPABASE_RELAY_QUEUE_CRON      = 'nvx_supabase_relay_queue_drain';
 const NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES = 8;
 const NVX_SUPABASE_RELAY_QUEUE_BATCH     = 10;
+const NVX_GOOGLE_CLICK_HMAC_CONTEXT      = 'nuvanx-google-click-attribution-hmac-key-v1';
 
 /**
  * Allowed relay endpoints that may be queued.
@@ -186,6 +187,48 @@ function nvx_supabase_relay_queue_backoff_seconds( int $attempt ): int {
 	return $schedule[ $index ];
 }
 
+/** Resolve the existing server-only HubSpot token used as the Google-click signing root. */
+function nvx_supabase_relay_google_click_token(): string {
+	if ( function_exists( 'nvx_lead_captured_hubspot_token' ) ) {
+		return trim( (string) nvx_lead_captured_hubspot_token() );
+	}
+	if ( defined( 'NVX_HUBSPOT_ACCESS_TOKEN' ) ) {
+		return trim( (string) NVX_HUBSPOT_ACCESS_TOKEN );
+	}
+	return '';
+}
+
+/** Derive the exact HMAC key expected by google-click-attribution. */
+function nvx_supabase_relay_google_click_hmac_key( string $token ): string {
+	return hash_hmac( 'sha256', NVX_GOOGLE_CLICK_HMAC_CONTEXT, $token );
+}
+
+/** POST a Google-click payload with timestamp + HMAC authentication attached at send time. */
+function nvx_supabase_relay_google_click_post_signed( string $url, string $body, string $origin, string $token ) {
+	$timestamp = (string) time();
+	$hmac_key  = nvx_supabase_relay_google_click_hmac_key( $token );
+	$signature = hash_hmac( 'sha256', $timestamp . '.' . $body, $hmac_key );
+	$headers   = array(
+		'Content-Type'    => 'application/json',
+		'x-nvx-timestamp' => $timestamp,
+		'x-nvx-signature' => $signature,
+	);
+	if ( '' !== $origin ) {
+		$headers['Origin'] = $origin;
+	}
+
+	return wp_remote_post(
+		$url,
+		array(
+			'timeout'     => 3,
+			'redirection' => 0,
+			'blocking'    => true,
+			'headers'     => $headers,
+			'body'        => $body,
+		)
+	);
+}
+
 /**
  * Enqueue a signed-at-send-time collector payload.
  *
@@ -204,9 +247,9 @@ function nvx_supabase_relay_queue_enqueue( string $endpoint, string $body, array
 	$origin = isset( $headers['Origin'] ) ? esc_url_raw( (string) $headers['Origin'] ) : '';
 	$post_id = wp_insert_post(
 		array(
-			'post_type'   => NVX_SUPABASE_RELAY_QUEUE_CPT,
-			'post_status' => 'pending',
-			'post_title'  => $endpoint . ' ' . gmdate( 'Y-m-d H:i:s' ),
+			'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+			'post_status'  => 'pending',
+			'post_title'   => $endpoint . ' ' . gmdate( 'Y-m-d H:i:s' ),
 			'post_content' => $body,
 		),
 		true
@@ -246,6 +289,14 @@ function nvx_supabase_relay_queue_send( string $endpoint, string $body, string $
 			return new WP_Error( 'nvx_relay_signing_key_missing', 'Lead-captured signing is unavailable.' );
 		}
 		return nvx_lead_captured_post_signed( $body, $token );
+	}
+
+	if ( 'google_click' === $endpoint ) {
+		$token = nvx_supabase_relay_google_click_token();
+		if ( '' === $token ) {
+			return new WP_Error( 'nvx_relay_signing_key_missing', 'Google-click signing is unavailable.' );
+		}
+		return nvx_supabase_relay_google_click_post_signed( $url, $body, $origin, $token );
 	}
 
 	$headers = array(
