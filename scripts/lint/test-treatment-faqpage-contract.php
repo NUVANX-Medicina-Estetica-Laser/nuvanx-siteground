@@ -107,7 +107,8 @@ foreach ( $aesthetic_pages as $json_key => $entry ) {
 	}
 	$slug = trim( (string) ( $entry['slug'] ?? '' ), '/' );
 	if ( '' === $slug ) {
-		continue;
+		fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL FAQ-bearing aesthetic entry {$json_key} is missing a slug\n" );
+		exit( 1 );
 	}
 	$path      = '/' . $slug . '/';
 	$schema_id = (string) ( $routes[ $path ]['schema_id'] ?? '' );

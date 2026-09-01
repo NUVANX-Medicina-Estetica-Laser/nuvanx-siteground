@@ -133,7 +133,7 @@ function classifyLighthouseError(error) {
     || /ECONNREFUSED|ECONNRESET|ENOTFOUND/i.test(message)
     || /LanternError:\s*missing metric scores for specified navigation/i.test(message)
     || /Protocol error.*Inspected target navigated or closed/i.test(message)
-    || /TargetCloseError|Target closed|Page crashed/i.test(message)
+    || /TargetCloseError|Target closed/i.test(message)
   ) {
     return 'transient_infrastructure';
   }
@@ -181,7 +181,7 @@ async function runLighthouseCell(page, mode, outputDir) {
     if (child.error || child.status !== 0) {
       const classification = classifyLighthouseError(diagnostic);
       if (classification === 'transient_infrastructure') transientCount++;
-      runs.push({ attempt, status: classification, metrics: null });
+      runs.push({ attempt, status: classification, metrics: null, diagnostic });
       continue;
     }
 
@@ -189,14 +189,14 @@ async function runLighthouseCell(page, mode, outputDir) {
       const rawJson = await fs.readFile(outFile, 'utf8');
       const metrics = extractMetrics(rawJson);
       if (!isValidMetrics(metrics)) {
-        runs.push({ attempt, status: 'invalid_json', metrics: null });
+        runs.push({ attempt, status: 'invalid_json', metrics: null, diagnostic: 'JSON validation failed' });
         continue;
       }
       runs.push({ attempt, status: 'success', metrics });
     } catch (error) {
       const classification = classifyLighthouseError(error);
       if (classification === 'transient_infrastructure') transientCount++;
-      runs.push({ attempt, status: classification, metrics: null });
+      runs.push({ attempt, status: classification, metrics: null, diagnostic: String(error.message || error) });
     }
   }
 
@@ -214,6 +214,11 @@ async function runLighthouseCell(page, mode, outputDir) {
 
   if (successfulRuns.length === 0) {
     cellResult.status = transientCount > 0 ? 'transient_infrastructure' : 'lighthouse_failed';
+    const lastFailure = runs[runs.length - 1];
+    if (lastFailure && lastFailure.diagnostic) {
+      const fullDiagnostic = lastFailure.diagnostic;
+      cellResult.diagnostic = fullDiagnostic.length > 1000 ? fullDiagnostic.slice(0, 1000) + '... (truncated)' : fullDiagnostic;
+    }
     return cellResult;
   }
 

@@ -111,11 +111,22 @@ for (const [route, entry] of Object.entries(data)) {
   const normalizedRoute = normalizeRoute(route);
   const normalizedTarget = normalizeRoute(entry.route_alias);
   if (!normalizedTarget) throw new Error(`Route ${route}.route_alias must not be empty`);
+  
+  const expectedFormat = normalizedTarget === '/' ? '/' : `${normalizedTarget}/`;
+  if (entry.route_alias !== expectedFormat) {
+    throw new Error(`Route ${route}.route_alias must use normalized format (got '${entry.route_alias}', expected '${expectedFormat}')`);
+  }
+
   if (normalizedRoute === normalizedTarget) {
     throw new Error(`Route ${route} must not alias itself (${entry.route_alias})`);
   }
   if (!normalizedRoutes.has(normalizedTarget)) {
     throw new Error(`Route ${route} aliases missing canonical destination ${entry.route_alias}`);
+  }
+
+  const targetOriginalKey = normalizedRoutes.get(normalizedTarget);
+  if (targetOriginalKey && Object.hasOwn(data[targetOriginalKey] || {}, 'route_alias')) {
+    throw new Error(`Route ${route} must alias a canonical route, not alias ${targetOriginalKey}`);
   }
 }
 

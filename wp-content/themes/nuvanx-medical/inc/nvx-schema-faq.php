@@ -172,6 +172,7 @@ function nvx_schema_faq_catalog() {
 				}
 				$slug = trim( (string) ( $entry['slug'] ?? '' ), '/' );
 				if ( '' === $slug ) {
+					error_log( "NUVANX Schema Warning: FAQ-bearing aesthetic entry '{$json_key}' is missing a slug and cannot be aliased." );
 					continue;
 				}
 				$path      = '/' . $slug . '/';
