@@ -105,13 +105,50 @@ async function fetchPublishedPages() {
   const baseUrl = process.env.WORDPRESS_URL || 'https://nuvanx.com';
   
   const fetchType = async (type) => {
-    const endpoint = `${baseUrl}/wp-json/wp/v2/${type}?per_page=100&status=publish&_fields=id,slug,template,type,link,status`;
-    const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
-    const body = await response.text();
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${type}: ${response.status} ${response.statusText}`);
+    let allRecords = [];
+    let pageNum = 1;
+    while (true) {
+      const endpoint = `${baseUrl}/wp-json/wp/v2/${type}?per_page=100&page=${pageNum}&status=publish&_fields=id,slug,template,type,link,status`;
+      const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+      const body = await response.text();
+      
+      if (body.includes('sgcaptcha') || response.status === 429 || response.status === 503) {
+         const err = new Error(`Transient SiteGround challenge or rate limit fetching ${type}`);
+         err.isTransient = true;
+         throw err;
+      }
+      
+      if (!response.ok) {
+        if (response.status === 400 && body.includes('rest_post_invalid_page_number')) {
+          break;
+        }
+        throw new Error(`Failed to fetch ${type} page ${pageNum}: ${response.status} ${response.statusText}`);
+      }
+      
+      let records;
+      try {
+         records = parsePagesJson(body, endpoint).map(p => ({...p, post_type: p.type || (type === 'pages' ? 'page' : 'post')}));
+      } catch (parseError) {
+         if (body.includes('<html>')) {
+            const err = new Error(`Transient HTML response fetching ${type}`);
+            err.isTransient = true;
+            throw err;
+         }
+         throw parseError;
+      }
+      
+      if (records.length === 0) break;
+      allRecords = allRecords.concat(records);
+      
+      const totalPages = response.headers.get('x-wp-totalpages');
+      if (totalPages) {
+        if (pageNum >= Number(totalPages)) break;
+      } else if (records.length < 100) {
+        break;
+      }
+      pageNum++;
     }
-    return parsePagesJson(body, endpoint).map(p => ({...p, post_type: p.type || (type === 'pages' ? 'page' : 'post')}));
+    return allRecords;
   };
 
   const [pages, posts] = await Promise.all([
@@ -124,6 +161,11 @@ async function fetchPublishedPages() {
 
 function validatePublicationTopology(pages, manifest) {
   const errors = [];
+  let hasIdError = false;
+  let hasTypeError = false;
+  let hasSlugError = false;
+  let hasStatusError = false;
+
   const actualById = new Map(pages.map((page) => [Number(page.id), page]));
   const expectedIds = new Set(manifest.map((page) => Number(page.id)));
 
@@ -132,28 +174,35 @@ function validatePublicationTopology(pages, manifest) {
     const actual = actualById.get(id);
     if (!actual) {
       errors.push(`Manifest page ${id} (${expected.path}) is not published in WordPress`);
+      hasIdError = true;
       continue;
     }
     if (actual.slug !== expected.slug) {
       errors.push(`Manifest page ${id} slug mismatch: expected ${expected.slug}, got ${actual.slug}`);
+      hasSlugError = true;
     }
     if (actual.post_type !== expected.post_type) {
       errors.push(`Manifest page ${id} type mismatch: expected ${expected.post_type}, got ${actual.post_type}`);
+      hasTypeError = true;
     }
     if (actual.status && expected.status && actual.status !== expected.status) {
       errors.push(`Manifest page ${id} status mismatch: expected ${expected.status}, got ${actual.status}`);
+      hasStatusError = true;
     }
   }
 
   for (const actual of pages) {
     if (!expectedIds.has(Number(actual.id))) {
       errors.push(`WordPress ${actual.post_type} ${actual.id} (${actual.slug}) is missing from canonical manifest`);
+      hasIdError = true;
     }
   }
 
   console.log(`WORDPRESS_PUBLICATION_INVENTORY pages=${pages.filter(p => p.post_type === 'page').length} posts=${pages.filter(p => p.post_type === 'post').length} total=${pages.length}`);
-  console.log(`PUBLICATION_ID_PARITY=${errors.length === 0 ? 'PASS' : 'FAIL'}`);
-  console.log(`PUBLICATION_TYPE_PARITY=${errors.length === 0 ? 'PASS' : 'FAIL'}`);
+  console.log(`PUBLICATION_ID_PARITY=${!hasIdError ? 'PASS' : 'FAIL'}`);
+  console.log(`PUBLICATION_SLUG_PARITY=${!hasSlugError ? 'PASS' : 'FAIL'}`);
+  console.log(`PUBLICATION_TYPE_PARITY=${!hasTypeError ? 'PASS' : 'FAIL'}`);
+  console.log(`PUBLICATION_STATUS_PARITY=${!hasStatusError ? 'PASS' : 'FAIL'}`);
   return errors;
 }
 
@@ -466,6 +515,7 @@ async function validateTemplates() {
     const templateErrors = [];
 
     for (const page of pages) {
+      if (page.post_type !== 'page') continue;
       const template = page.template || '';
       if (template && !templateExists(template)) {
         templateErrors.push(`Page ${page.id} (${page.slug}): template file missing: ${template}`);
