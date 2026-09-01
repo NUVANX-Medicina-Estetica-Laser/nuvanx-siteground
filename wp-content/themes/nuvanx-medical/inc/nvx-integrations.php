@@ -158,7 +158,7 @@ add_action(
 			$poster_mobile_url = function_exists( 'nvx_resolve_home_hero_poster_mobile_url' ) ? nvx_resolve_home_hero_poster_mobile_url() : '';
 			if ( is_string( $poster_mobile_url ) && '' !== $poster_mobile_url ) {
 				echo '<link rel="preload" as="image" href="' . esc_url( $poster_mobile_url ) . '" media="(max-width: 768px)" fetchpriority="high" type="image/webp" />' . "\n";
-				echo '<link rel="preload" as="image" href="' . esc_url( $poster_url ) . '" media="(min-width: 769px)" fetchpriority="high" type="image/webp" />' . "\n";
+				echo '<link rel="preload" as="image" href="' . esc_url( $poster_url ) . '" media="(min-width: 768.1px)" fetchpriority="high" type="image/webp" />' . "\n";
 			} elseif ( is_string( $poster_url ) && '' !== $poster_url ) {
 				echo '<link rel="preload" as="image" href="' . esc_url( $poster_url ) . '" fetchpriority="high" type="image/webp" />' . "\n";
 			}
