@@ -1054,13 +1054,6 @@ function nvx_inject_treatment_authority_and_cases( string $content ): string {
 	// 1. Endoláser Corporal
 	if ( false !== strpos( $path, 'endolaser-corporal' ) ) {
 		$extra = '';
-		if ( false === strpos( $content, 'nvx-treatment-cases' ) && function_exists( 'nvx_treatment_cases_preview_markup' ) ) {
-			$extra .= nvx_treatment_cases_preview_markup(
-				array( 'caso-03-abdomen-firmeza', 'caso-04-flancos-contorno', 'caso-05-brazos-firmeza' ),
-				__( 'Evidencia Gráfica Documentada', 'nuvanx-medical' ),
-				__( 'Casos Clínicos de Endoláser Corporal', 'nuvanx-medical' )
-			);
-		}
 		if ( false === strpos( $content, 'nvx-treatment-physician' ) && function_exists( 'nvx_treatment_physician_author_markup' ) ) {
 			$extra .= nvx_treatment_physician_author_markup( 'Endoláser Corporal' );
 		}

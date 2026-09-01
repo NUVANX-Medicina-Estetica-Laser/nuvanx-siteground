@@ -316,15 +316,6 @@ function nvx_endolift_editorial_body_markup(): string {
 	$html .= '<p class="nvx-body nvx-body--measure"><em>' . esc_html( $data['postop']['note'] ?? '' ) . '</em></p>';
 	$html .= '</div></section>';
 
-	// E-Ter. Casos Clínicos Documentados (Evidencia gráfica antes/después).
-	if ( function_exists( 'nvx_treatment_cases_preview_markup' ) ) {
-		$html .= nvx_treatment_cases_preview_markup(
-			array( 'caso-01-papada-submenton', 'caso-02-marcacion-mandibular' ),
-			__( 'Evidencia Gráfica Documentada', 'nuvanx-medical' ),
-			__( 'Casos Clínicos de Endolift® Facial', 'nuvanx-medical' )
-		);
-	}
-
 	// F. Presupuesto Clínico — Valoración personalizada.
 	$html .= nvx_page_brand_section_open_markup( 'nvx-endolift-investment', 'nvx-endolift-price-title', '', array( 'id' => 'inversion-endolift' ) );
 	$html .= nvx_page_brand_section_heading_markup( esc_html( $data['investment']['kicker'] ?? '' ), 'nvx-endolift-price-title', esc_html( $data['investment']['title'] ?? '' ) );
