@@ -474,7 +474,7 @@ async function main() {
       ? {
           schema: 1,
           status: 'incomplete',
-          reason: transientCells.length > 0 ? 'transient_infrastructure' : 'incomplete_measurement',
+          reason: incompleteCells.every((cell) => cell.status === 'transient_infrastructure') ? 'transient_infrastructure' : 'incomplete_measurement',
           valid_cells: cellResults.length - incompleteCells.length,
           total_cells: cellResults.length,
           transient_cells: transientCells.length,
@@ -491,7 +491,7 @@ async function main() {
     await writeArtifacts(outputDir, cellResults, baselineContract, incompleteEvaluation);
 
     if (gateMode === 'enforce') {
-      if (transientCells.length > 0) {
+      if (incompleteCells.every((cell) => cell.status === 'transient_infrastructure')) {
         console.error(`\nPERF_GATE=INCOMPLETE mode=enforce valid_cells=${cellResults.length - incompleteCells.length}/${cellResults.length} transient_cells=${transientCells.length}`);
         process.exit(75);
       }
