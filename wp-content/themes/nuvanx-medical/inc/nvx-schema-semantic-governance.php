@@ -301,9 +301,13 @@ function nvx_schema_semantic_normalize_graph( $graph ) {
 
 		$types = nvx_schema_semantic_types( $node['@type'] ?? array() );
 		if ( in_array( 'BreadcrumbList', $types, true ) ) {
-			$id = isset( $node['@id'] ) ? (string) $node['@id'] : '';
-			if ( '' === $id || empty( $valid_breadcrumbs[ $id ] ) ) {
-				continue;
+			$elements = isset( $node['itemListElement'] ) && is_array( $node['itemListElement'] ) ? $node['itemListElement'] : array();
+			if ( empty( $elements ) ) {
+				if ( 1 === count( $types ) ) {
+					continue;
+				}
+				$node['@type'] = array_values( array_diff( $types, array( 'BreadcrumbList' ) ) );
+				$types = nvx_schema_semantic_types( $node['@type'] );
 			}
 		}
 

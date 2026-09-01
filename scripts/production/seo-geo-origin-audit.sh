@@ -305,11 +305,6 @@ treatment_procedure_paths=(
   '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/'
   '/exion-btl/'
   '/acido-hialuronico-relleno-madrid/'
-  '/medicina-estetica/'
-  '/bioestimuladores-colageno-madrid/'
-  '/btl-exilite-ipl-madrid/'
-  '/neuromoduladores-faciales-madrid/'
-  '/rinomodelacion-sin-cirugia-madrid/'
 )
 for path in "${treatment_procedure_paths[@]}"; do
   tag="schema-proc-${path//\//-}"
@@ -325,7 +320,7 @@ treatment_faq_paths=(
   '/endolaser-corporal-grasa-localizada/'
   '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/'
   '/exion-btl/'
-  '/neuromoduladores-faciales-madrid/'
+  '/acido-hialuronico-relleno-madrid/'
   '/papada-definicion-mandibular-madrid/'
 )
 for path in "${treatment_faq_paths[@]}"; do
