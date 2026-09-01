@@ -13,6 +13,11 @@ export const PERFORMANCE_POLICY_METRICS = [
   'performance_score',
 ];
 
+const NAVIGATION_VALIDATION_METHODS = new Set([
+  'post_hoc_raw_artifact_audit',
+  'native_gate_and_post_hoc_raw_artifact_audit',
+]);
+
 function isFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -32,6 +37,7 @@ function validateEvidence(contract) {
   const shas = new Set();
   const runs = new Set();
   const artifacts = new Set();
+  const digests = new Set();
   for (const source of contract.generated_from) {
     if (!source || typeof source !== 'object') {
       return { ok: false, reason: 'invalid_baseline_evidence_entry' };
@@ -45,14 +51,37 @@ function validateEvidence(contract) {
     if (!Number.isInteger(source.artifact_id) || source.artifact_id <= 0) {
       return { ok: false, reason: 'invalid_baseline_evidence_artifact' };
     }
+    if (!/^sha256:[0-9a-f]{64}$/.test(source.artifact_digest || '')) {
+      return { ok: false, reason: 'invalid_baseline_evidence_digest' };
+    }
+
+    const navigation = source.navigation_validation;
+    if (!navigation || typeof navigation !== 'object') {
+      return { ok: false, reason: 'missing_navigation_validation' };
+    }
+    if (!NAVIGATION_VALIDATION_METHODS.has(navigation.method)) {
+      return { ok: false, reason: 'invalid_navigation_validation_method' };
+    }
+    if (
+      !Number.isInteger(navigation.raw_runs)
+      || navigation.raw_runs < 36
+      || navigation.valid_runs !== navigation.raw_runs
+      || navigation.captcha_runs !== 0
+      || navigation.http_202_runs !== 0
+    ) {
+      return { ok: false, reason: 'invalid_navigation_validation_result' };
+    }
+
     shas.add(source.sha);
     runs.add(source.run_id);
     artifacts.add(source.artifact_id);
+    digests.add(source.artifact_digest);
   }
   if (
     shas.size !== contract.generated_from.length
     || runs.size !== contract.generated_from.length
     || artifacts.size !== contract.generated_from.length
+    || digests.size !== contract.generated_from.length
   ) {
     return { ok: false, reason: 'duplicate_baseline_evidence' };
   }
