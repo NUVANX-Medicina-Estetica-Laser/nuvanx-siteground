@@ -53,6 +53,28 @@ assert.equal(
   'insufficient_baseline_evidence',
 );
 
+const duplicateEvidence = structuredClone(committed);
+duplicateEvidence.generated_from[2] = structuredClone(duplicateEvidence.generated_from[1]);
+assert.equal(
+  validatePerformanceBaselineContract(duplicateEvidence, {
+    lighthouseVersion: '12.8.2',
+    requiredCells,
+    requireApproved: true,
+  }).reason,
+  'duplicate_baseline_evidence',
+);
+
+const impossibleReference = structuredClone(committed);
+impossibleReference.cells['home/mobile'].reference.lcp_ms = 5000;
+assert.equal(
+  validatePerformanceBaselineContract(impossibleReference, {
+    lighthouseVersion: '12.8.2',
+    requiredCells,
+    requireApproved: true,
+  }).reason,
+  'invalid_reference_range_home/mobile',
+);
+
 const healthy = [
   ['home','mobile',79,3895,114,0.032,288],
   ['home','desktop',90,1579,0,0.0242,289],
