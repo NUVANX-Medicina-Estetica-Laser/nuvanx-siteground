@@ -282,7 +282,7 @@ async function runLighthouseCell(page, mode, outputDir) {
   };
 
   if (successfulRuns.length === 0) {
-    cellResult.status = transientCount > 0
+    cellResult.status = transientCount === cellResult.failures
       ? 'transient_infrastructure'
       : 'lighthouse_failed';
     const lastFailure = runs[runs.length - 1];
@@ -474,7 +474,7 @@ async function main() {
       ? {
           schema: 1,
           status: 'incomplete',
-          reason: incompleteCells.every((cell) => cell.transients === cell.attempts) ? 'transient_infrastructure' : 'incomplete_measurement',
+          reason: incompleteCells.every((cell) => cell.status === 'transient_infrastructure') ? 'transient_infrastructure' : 'incomplete_measurement',
           valid_cells: cellResults.length - incompleteCells.length,
           total_cells: cellResults.length,
           transient_cells: transientCells.length,
@@ -491,7 +491,7 @@ async function main() {
     await writeArtifacts(outputDir, cellResults, baselineContract, incompleteEvaluation);
 
     if (gateMode === 'enforce') {
-      if (incompleteCells.every((cell) => cell.transients === cell.attempts)) {
+      if (incompleteCells.every((cell) => cell.status === 'transient_infrastructure')) {
         console.error(`\nPERF_GATE=INCOMPLETE mode=enforce valid_cells=${cellResults.length - incompleteCells.length}/${cellResults.length} transient_cells=${transientCells.length}`);
         process.exit(75);
       }
