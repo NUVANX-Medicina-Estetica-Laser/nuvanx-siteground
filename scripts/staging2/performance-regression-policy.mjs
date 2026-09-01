@@ -21,6 +21,44 @@ function cellKey(page, mode) {
   return `${page}/${mode}`;
 }
 
+function validateEvidence(contract) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(contract.approved_at || '')) {
+    return { ok: false, reason: 'invalid_approved_at' };
+  }
+  if (!Array.isArray(contract.generated_from) || contract.generated_from.length < 3) {
+    return { ok: false, reason: 'insufficient_baseline_evidence' };
+  }
+
+  const shas = new Set();
+  const runs = new Set();
+  const artifacts = new Set();
+  for (const source of contract.generated_from) {
+    if (!source || typeof source !== 'object') {
+      return { ok: false, reason: 'invalid_baseline_evidence_entry' };
+    }
+    if (!/^[0-9a-f]{40}$/.test(source.sha || '')) {
+      return { ok: false, reason: 'invalid_baseline_evidence_sha' };
+    }
+    if (!Number.isInteger(source.run_id) || source.run_id <= 0) {
+      return { ok: false, reason: 'invalid_baseline_evidence_run' };
+    }
+    if (!Number.isInteger(source.artifact_id) || source.artifact_id <= 0) {
+      return { ok: false, reason: 'invalid_baseline_evidence_artifact' };
+    }
+    shas.add(source.sha);
+    runs.add(source.run_id);
+    artifacts.add(source.artifact_id);
+  }
+  if (
+    shas.size !== contract.generated_from.length
+    || runs.size !== contract.generated_from.length
+    || artifacts.size !== contract.generated_from.length
+  ) {
+    return { ok: false, reason: 'duplicate_baseline_evidence' };
+  }
+  return { ok: true };
+}
+
 export function validatePerformanceBaselineContract(
   contract,
   {
@@ -41,10 +79,14 @@ export function validatePerformanceBaselineContract(
   if (lighthouseVersion && contract.lighthouse_version !== lighthouseVersion) {
     return { ok: false, reason: 'lighthouse_version_mismatch' };
   }
+
+  const evidence = validateEvidence(contract);
+  if (!evidence.ok) return evidence;
+
   if (!contract.policy || typeof contract.policy !== 'object') {
     return { ok: false, reason: 'missing_policy' };
   }
-  if (!contract.cells || typeof contract.cells !== 'object') {
+  if (!contract.cells || typeof contract.cells !== 'object' || Array.isArray(contract.cells)) {
     return { ok: false, reason: 'missing_cells' };
   }
 
@@ -68,16 +110,28 @@ export function validatePerformanceBaselineContract(
       return { ok: false, reason: `invalid_policy_${name}` };
     }
   }
+  if (p.cls.absolute_max > 1) return { ok: false, reason: 'invalid_policy_cls.absolute_max' };
+  if (p.performance_score.absolute_min > 100 || p.performance_score.drop_points > 100) {
+    return { ok: false, reason: 'invalid_policy_performance_score' };
+  }
 
+  const requiredSet = new Set(requiredCells);
+  if (requiredSet.size !== requiredCells.length) {
+    return { ok: false, reason: 'duplicate_required_cells' };
+  }
   for (const key of requiredCells) {
     const baselineCell = contract.cells[key];
     if (!baselineCell || typeof baselineCell !== 'object' || !baselineCell.reference) {
       return { ok: false, reason: `missing_cell_${key}` };
     }
     for (const metric of PERFORMANCE_POLICY_METRICS) {
-      if (!isFiniteNumber(baselineCell.reference[metric])) {
+      const value = baselineCell.reference[metric];
+      if (!isFiniteNumber(value) || value < 0) {
         return { ok: false, reason: `invalid_reference_${key}_${metric}` };
       }
+    }
+    if (baselineCell.reference.performance_score > 100 || baselineCell.reference.cls > 1) {
+      return { ok: false, reason: `invalid_reference_range_${key}` };
     }
   }
 
