@@ -282,16 +282,26 @@ async function runLighthouseCell(page, mode, outputDir) {
   };
 
   if (successfulRuns.length === 0) {
-    cellResult.status = transientCount > 0
+    cellResult.status = transientCount === cellResult.failures
       ? 'transient_infrastructure'
       : 'lighthouse_failed';
-    const lastFailure = runs[runs.length - 1];
-    if (lastFailure?.diagnostic) {
-      const fullDiagnostic = lastFailure.diagnostic;
+    const nonTransientFailure = runs.find((r) => r.status !== 'transient_infrastructure' && r.status !== 'success');
+    const representativeFailure = nonTransientFailure || runs[runs.length - 1];
+    if (representativeFailure?.diagnostic) {
+      const fullDiagnostic = representativeFailure.diagnostic;
       cellResult.diagnostic = fullDiagnostic.length > 1000
         ? `${fullDiagnostic.slice(0, 1000)}... (truncated)`
         : fullDiagnostic;
     }
+    cellResult.failed_runs = runs
+      .filter((r) => r.status !== 'success')
+      .map((r) => ({
+        attempt: r.attempt,
+        status: r.status,
+        diagnostic: r.diagnostic && r.diagnostic.length > 1000
+          ? `${r.diagnostic.slice(0, 1000)}... (truncated)`
+          : r.diagnostic,
+      }));
     return cellResult;
   }
 
@@ -474,7 +484,7 @@ async function main() {
       ? {
           schema: 1,
           status: 'incomplete',
-          reason: transientCells.length > 0 ? 'transient_infrastructure' : 'incomplete_measurement',
+          reason: incompleteCells.every((cell) => cell.status === 'transient_infrastructure') ? 'transient_infrastructure' : 'incomplete_measurement',
           valid_cells: cellResults.length - incompleteCells.length,
           total_cells: cellResults.length,
           transient_cells: transientCells.length,
@@ -491,7 +501,7 @@ async function main() {
     await writeArtifacts(outputDir, cellResults, baselineContract, incompleteEvaluation);
 
     if (gateMode === 'enforce') {
-      if (transientCells.length > 0) {
+      if (incompleteCells.every((cell) => cell.status === 'transient_infrastructure')) {
         console.error(`\nPERF_GATE=INCOMPLETE mode=enforce valid_cells=${cellResults.length - incompleteCells.length}/${cellResults.length} transient_cells=${transientCells.length}`);
         process.exit(75);
       }
