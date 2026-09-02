@@ -55,7 +55,7 @@ function nvx_theme_request_context(): array {
 	// Default to configured site host. Use client host only if it matches expected variants.
 	$host = $site_host;
 	if ( '' !== $client_host ) {
-		if ( false !== strpos( $client_host, '.sg-host.com' ) || 'staging2.nuvanx.com' === $client_host || $client_host === $site_host ) {
+		if ( ( str_ends_with( $client_host, '.sg-host.com' ) && preg_match( '/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.sg-host\.com$/', $client_host ) ) || 'staging2.nuvanx.com' === $client_host || $client_host === $site_host ) {
 			$host = $client_host;
 		}
 	}
