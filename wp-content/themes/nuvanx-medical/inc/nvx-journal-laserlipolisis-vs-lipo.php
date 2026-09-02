@@ -44,7 +44,6 @@ function nvx_journal_tech_article_catalog( string $slug ): array {
 		return array();
 	}
 
-	require_once __DIR__ . '/nvx-catalog-json.php';
 	$loaded           = nvx_catalog_json_resolved( (string) $map[ $slug ]['file'] );
 	$cache[ $slug ]   = is_array( $loaded ) ? $loaded : array();
 	return $cache[ $slug ];
