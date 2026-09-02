@@ -293,6 +293,7 @@ require_once get_template_directory() . '/inc/nvx-business-config.php';
 require_once get_template_directory() . '/inc/nvx-clinical-governance.php';
 require_once get_template_directory() . '/inc/nvx-environment-flags.php';
 require_once get_template_directory() . '/inc/nvx-page-render-helpers.php';
+require_once get_template_directory() . '/inc/nvx-page-module-loader.php';
 require_once get_template_directory() . '/inc/nvx-authentic-page-photography.php';
 // Some templates build image markup before get_header(); the public-media
 // callbacks must therefore be registered during theme bootstrap, not in header.php.
@@ -331,7 +332,6 @@ require_once get_template_directory() . '/inc/nvx-navigation-filters.php';
 // 4. Page Templates & Editorial Modules
 require_once get_template_directory() . '/inc/nvx-strategy-pages.php';
 require_once get_template_directory() . '/inc/nvx-signature-phase-pages.php';
-require_once get_template_directory() . '/inc/nvx-bridal-page.php';
 require_once get_template_directory() . '/inc/nvx-aesthetic-treatment-pages.php';
 require_once get_template_directory() . '/inc/nvx-aesthetic-treatment-schema.php';
 require_once get_template_directory() . '/inc/nvx-blog-system.php';
@@ -340,19 +340,10 @@ require_once get_template_directory() . '/inc/nvx-medical-review.php';
 require_once get_template_directory() . '/inc/nvx-btl-clinical-governance.php';
 require_once get_template_directory() . '/inc/nvx-treatment-hub-schema.php';
 require_once get_template_directory() . '/inc/nvx-treatments-catalog.php';
-require_once get_template_directory() . '/inc/nvx-solutions-page.php';
-require_once get_template_directory() . '/inc/nvx-endolift-page.php';
-require_once get_template_directory() . '/inc/nvx-exion-page.php';
-require_once get_template_directory() . '/inc/nvx-profhilo-page.php';
-require_once get_template_directory() . '/inc/nvx-endolaser-page.php';
-require_once get_template_directory() . '/inc/nvx-co2-page.php';
 require_once get_template_directory() . '/inc/nvx-btl-detail-pages.php';
-require_once get_template_directory() . '/inc/nvx-equipo-page.php';
-require_once get_template_directory() . '/inc/nvx-nosotros-page.php';
 require_once get_template_directory() . '/inc/nvx-contacto-valoracion-page.php';
 require_once get_template_directory() . '/inc/nvx-valoracion-managed-page.php';
 require_once get_template_directory() . '/inc/nvx-laser-medicine-page.php';
 require_once get_template_directory() . '/inc/nvx-aesthetic-medicine-page.php';
 require_once get_template_directory() . '/inc/nvx-clinics-hub.php';
 require_once get_template_directory() . '/inc/nvx-dr-rivera-page.php';
-require_once get_template_directory() . '/inc/nvx-que-exigir-page.php';
