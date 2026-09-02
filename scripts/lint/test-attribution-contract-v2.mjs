@@ -279,7 +279,7 @@ if (!fs.existsSync(runtimePath)) {
     'Secure bridge must perform exactly one authenticated HubSpot network POST');
   const appendQaPosition = bridge.indexOf('nvx_hubspot_secure_append_qa( $fields )');
   const stagingGuardPosition = bridge.indexOf("nvx_environment_is_staging2() && ! nvx_hubspot_secure_payload_is_staging_qa( $payload )");
-  const networkPosition = bridge.indexOf('return wp_remote_post(');
+  const networkPosition = bridge.indexOf('wp_remote_post(');
   assert.ok(appendQaPosition >= 0 && stagingGuardPosition > appendQaPosition && networkPosition > stagingGuardPosition,
     'Staging QA validation must run after server QA reconstruction and before network transport');
 
