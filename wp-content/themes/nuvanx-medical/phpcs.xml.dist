@@ -20,4 +20,7 @@
     <rule ref="Generic.CodeAnalysis.UnconditionalIfStatement"/>
     <rule ref="Generic.CodeAnalysis.UselessOverridingMethod"/>
     <rule ref="Squiz.PHP.NonExecutableCode"/>
+    
+    <!-- Enforce WordPress Security rules natively and blockingly (QA Trust Boundary I1) -->
+    <rule ref="WordPress.Security"/>
 </ruleset>

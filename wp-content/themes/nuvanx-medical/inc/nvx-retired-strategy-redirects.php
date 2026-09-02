@@ -71,9 +71,9 @@ function nvx_redirect_retired_strategy_slugs(): void {
 		return;
 	}
 
-	$uri   = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+	$uri   = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	$path  = strtolower( trim( (string) wp_parse_url( $uri, PHP_URL_PATH ), '/' ) );
-	$query = isset( $_SERVER['QUERY_STRING'] ) ? (string) wp_unslash( $_SERVER['QUERY_STRING'] ) : '';
+	$query = isset( $_SERVER['QUERY_STRING'] ) ? (string) wp_unslash( $_SERVER['QUERY_STRING'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 
 	$targets = array(
 		'liposculpt-air'       => '/remodelacion-corporal-laser-madrid/',

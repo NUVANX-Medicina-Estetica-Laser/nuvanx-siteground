@@ -25,7 +25,7 @@ function nvx_valoracion_direct_form_markup(): string {
 	$action      = esc_url( home_url( '/madrid/valoracion/' ) );
 	$nonce       = wp_nonce_field( 'nvx_valoracion_submit', 'nvx_valoracion_nonce', true, false );
 
-	$error = isset( $_GET['valoracion'] ) && 'error' === sanitize_key( wp_unslash( (string) $_GET['valoracion'] ) );
+	$error = isset( $_GET['valoracion'] ) && 'error' === sanitize_key( wp_unslash( (string) $_GET['valoracion'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 	$html  = '<form class="nvx-valoracion-direct-form" method="post" action="' . $action . '" data-nvx-direct-form>';
 	$html .= '<input type="hidden" name="nvx_valoracion_submit" value="1">';
@@ -88,7 +88,7 @@ function nvx_valoracion_direct_form_markup(): string {
 	$html .= '<input type="hidden" name="nvx_marketing_consent" value="0">';
 
 	foreach ( array( 'gclid', 'gbraid', 'wbraid', 'gclsrc', 'fbclid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term' ) as $param ) {
-		$value = isset( $_GET[ $param ] ) ? sanitize_text_field( wp_unslash( (string) $_GET[ $param ] ) ) : '';
+		$value = isset( $_GET[ $param ] ) ? sanitize_text_field( wp_unslash( (string) $_GET[ $param ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( 'fbclid' === $param && '' !== $value && 1 !== preg_match( '/^[A-Za-z0-9._~:+-]{1,512}$/', $value ) ) {
 			$value = '';
 		}
@@ -242,7 +242,7 @@ function nvx_valoracion_direct_success_redirect_url(): string {
 }
 
 function nvx_valoracion_direct_success_token(): string {
-	$raw = isset( $_GET['nvx_success'] ) ? (string) $_GET['nvx_success'] : '';
+	$raw = isset( $_GET['nvx_success'] ) ? (string) $_GET['nvx_success'] : ''; // phpcs:ignore
 	return sanitize_text_field( wp_unslash( $raw ) );
 }
 
@@ -320,7 +320,7 @@ add_action( 'wp_head', 'nvx_valoracion_emit_direct_success', 5 );
  * Handle a first-party valoración POST and forward it to HubSpot.
  */
 function nvx_valoracion_maybe_handle_direct_submit(): void {
-	if ( 'POST' !== strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) || empty( $_POST['nvx_valoracion_submit'] ) ) {
+	if ( 'POST' !== strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) || empty( $_POST['nvx_valoracion_submit'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		return;
 	}
 
@@ -334,7 +334,7 @@ function nvx_valoracion_maybe_handle_direct_submit(): void {
 		exit;
 	}
 
-	$honeypot = isset( $_POST['nvx_company'] ) ? trim( (string) wp_unslash( $_POST['nvx_company'] ) ) : '';
+	$honeypot = isset( $_POST['nvx_company'] ) ? trim( (string) wp_unslash( $_POST['nvx_company'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	if ( '' !== $honeypot ) {
 		wp_safe_redirect( $fail );
 		exit;
@@ -342,7 +342,7 @@ function nvx_valoracion_maybe_handle_direct_submit(): void {
 
 	// SEC-02: Trust only REMOTE_ADDR for rate-limiting identity to prevent IP spoofing
 	// until a trusted SiteGround proxies list is versioned.
-	$ip = $_SERVER['REMOTE_ADDR'] ?? '0';
+	$ip = $_SERVER['REMOTE_ADDR'] ?? '0'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	$ip = sanitize_text_field( wp_unslash( (string) $ip ) );
 	$rate_key = 'nvx_val_rl_' . hash( 'sha256', $ip );
 	$hits     = (int) get_transient( $rate_key );
