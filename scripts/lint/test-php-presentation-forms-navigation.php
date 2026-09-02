@@ -35,6 +35,11 @@ function esc_attr( $value ): string { return (string) $value; }
 function esc_url( $value ): string { return (string) $value; }
 function esc_html__( string $value, string $domain = '' ): string { unset( $domain ); return $value; }
 function esc_attr__( string $value, string $domain = '' ): string { unset( $domain ); return $value; }
+function __( string $value, string $domain = 'default' ): string { unset( $domain ); return $value; }
+function esc_html( string $value ): string { return $value; }
+function wp_kses( string $content, array $allowed_html ): string { unset( $allowed_html ); return $content; }
+function add_filter( ...$args ) { return true; }
+function add_action( ...$args ) { return true; }
 
 function nvx_block4_assert( bool $condition, string $name ): void {
 	if ( ! $condition ) {
@@ -44,7 +49,9 @@ function nvx_block4_assert( bool $condition, string $name ): void {
 }
 
 $root = dirname( __DIR__, 2 );
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-cta-components.php';
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-content-presentation.php';
 
 // No modal: CTA must remain an ordinary navigation control with no false dialog semantics.
 $GLOBALS['nvx_test_modal_enabled'] = false;
@@ -57,12 +64,25 @@ nvx_block4_assert( false !== strpos( $pair, 'href="https://nuvanx.test/madrid/va
 $closing = nvx_site_closing_cta_markup();
 nvx_block4_assert( false === strpos( $closing, 'aria-haspopup="dialog"' ), 'CLOSING_CTA_NO_DIALOG_ARIA_WHEN_DISABLED' );
 
+$banner = nvx_home_action_banner_markup();
+nvx_block4_assert( false === strpos( $banner, 'nvx-open-valoracion-modal' ), 'HOME_ACTION_BANNER_NO_MODAL_CLASS_WHEN_DISABLED' );
+nvx_block4_assert( false === strpos( $banner, 'data-nvx-valoracion-modal="1"' ), 'HOME_ACTION_BANNER_NO_MODAL_DATA_WHEN_DISABLED' );
+nvx_block4_assert( false === strpos( $banner, 'aria-haspopup="dialog"' ), 'HOME_ACTION_BANNER_NO_DIALOG_ARIA_WHEN_DISABLED' );
+
 // Modal available: the canonical modal contract must be restored consistently.
 $GLOBALS['nvx_test_modal_enabled'] = true;
 $pair = nvx_cta_pair_markup();
 nvx_block4_assert( false !== strpos( $pair, 'nvx-open-valoracion-modal' ), 'MODAL_CLASS_WHEN_ENABLED' );
 nvx_block4_assert( false !== strpos( $pair, 'data-nvx-valoracion-modal="1"' ), 'MODAL_DATA_WHEN_ENABLED' );
 nvx_block4_assert( false !== strpos( $pair, 'aria-haspopup="dialog"' ), 'DIALOG_ARIA_WHEN_ENABLED' );
+
+$closing = nvx_site_closing_cta_markup();
+nvx_block4_assert( false !== strpos( $closing, 'aria-haspopup="dialog"' ), 'CLOSING_CTA_DIALOG_ARIA_WHEN_ENABLED' );
+
+$banner = nvx_home_action_banner_markup();
+nvx_block4_assert( false !== strpos( $banner, 'nvx-open-valoracion-modal' ), 'HOME_ACTION_BANNER_MODAL_CLASS_WHEN_ENABLED' );
+nvx_block4_assert( false !== strpos( $banner, 'data-nvx-valoracion-modal="1"' ), 'HOME_ACTION_BANNER_MODAL_DATA_WHEN_ENABLED' );
+nvx_block4_assert( false !== strpos( $banner, 'aria-haspopup="dialog"' ), 'HOME_ACTION_BANNER_DIALOG_ARIA_WHEN_ENABLED' );
 
 // Full valoración page: even if a caller toggles the modal capability unexpectedly,
 // the canonical href must still target the first-party form stage.
@@ -76,6 +96,21 @@ nvx_block4_assert(
 nvx_block4_assert( false === strpos( $pair, 'nvx-open-valoracion-modal' ), 'VALORACION_PAGE_NO_MODAL_CLASS' );
 nvx_block4_assert( false === strpos( $pair, 'data-nvx-valoracion-modal="1"' ), 'VALORACION_PAGE_NO_MODAL_DATA' );
 nvx_block4_assert( false === strpos( $pair, 'aria-haspopup="dialog"' ), 'VALORACION_PAGE_NO_FALSE_DIALOG' );
+
+// Reset request flags for subsequent tests.
+$GLOBALS['nvx_test_valoracion_page'] = false;
+$GLOBALS['nvx_test_modal_enabled']    = false;
+
+// Inventory guard: homepage, header and footer valoración CTAs must use canonical modal contract
+$front_page_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/front-page.php' );
+nvx_block4_assert( false !== strpos( $front_page_source, 'nvx_cta_valoracion_modal_contract()' ), 'FRONT_PAGE_USES_MODAL_CONTRACT' );
+nvx_block4_assert( false === strpos( $front_page_source, 'nvx-btn--light nvx-open-valoracion-modal' ), 'FRONT_PAGE_NO_HARDCODED_MODAL_CLASS' );
+
+$header_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/header.php' );
+nvx_block4_assert( false !== strpos( $header_source, 'nvx_cta_valoracion_modal_contract()' ), 'HEADER_USES_MODAL_CONTRACT' );
+
+$footer_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/footer.php' );
+nvx_block4_assert( false !== strpos( $footer_source, 'nvx_cta_valoracion_modal_contract()' ), 'FOOTER_USES_MODAL_CONTRACT' );
 
 // Inventory guard: immutable request path API must exist for the later consolidation
 // of direct-form request context; do not regress back to an ungoverned request surface.
@@ -91,4 +126,4 @@ $content   = strpos( $bootstrap, "'inc/nvx-content-presentation.php'" );
 nvx_block4_assert( false !== $consent && false !== $direct && $consent < $direct, 'CONSENT_PRECEDES_DIRECT_FORM' );
 nvx_block4_assert( false !== $cta && false !== $content && $cta < $content, 'CTA_PRECEDES_CONTENT_PRESENTATION' );
 
-echo 'PHP_PRESENTATION_FORMS_NAVIGATION=PASS modal_semantics=request_aware valoracion_anchor=direct bootstrap_order=verified' . PHP_EOL;
+echo 'PHP_PRESENTATION_FORMS_NAVIGATION=PASS modal_semantics=request_aware valoracion_anchor=direct bootstrap_order=verified consumers=canonical' . PHP_EOL;

@@ -19,6 +19,10 @@ function nvx_cta_whatsapp_url(): string {
 
 /** Whether valoración CTAs should advertise dialog behavior for this request. */
 function nvx_cta_valoracion_modal_enabled(): bool {
+	if ( function_exists( 'nvx_theme_is_valoracion_form_page' ) && nvx_theme_is_valoracion_form_page() ) {
+		return false;
+	}
+
 	return function_exists( 'nvx_valoracion_modal_enabled' ) && nvx_valoracion_modal_enabled();
 }
 
