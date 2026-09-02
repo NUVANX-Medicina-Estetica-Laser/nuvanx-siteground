@@ -221,7 +221,7 @@ function nvx_journal_tech_article_content( string $content ): string {
 
 	return nvx_journal_tech_article_markup( $slug );
 }
-add_filter( 'the_content', 'nvx_journal_tech_article_content', NVX_HOOK_PRIO_STRATEGY_PAGES + 1 );
+add_filter( 'the_content', 'nvx_journal_tech_article_content', NVX_HOOK_PRIO_JOURNAL_TECH_ARTICLE );
 
 function nvx_journal_tech_article_title( $title, $post_id = 0 ) {
 	$post_id = (int) $post_id;
