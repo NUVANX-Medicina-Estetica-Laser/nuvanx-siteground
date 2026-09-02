@@ -42,13 +42,37 @@ function nvx_signature_valoracion_url(): string {
 }
 
 /**
- * Load raw Signature phase specs from the versioned JSON catalogue.
+ * Load and validate raw Signature phase specs from the versioned JSON catalogue.
+ *
+ * Incomplete records fail closed before renderers can index missing clinical or
+ * SEO fields. The canonical catalog-json owner is loaded by the root bootstrap.
  *
  * @return array<string, array<string, mixed>>
  */
 function nvx_signature_phase_catalog_specs(): array {
+	$catalog = nvx_catalog_json_load( 'nvx-signature-phase-catalog.json' );
 
-	return nvx_catalog_json_load( 'nvx-signature-phase-catalog.json' );
+	if ( ! function_exists( 'nvx_catalog_filter_records' ) ) {
+		return array();
+	}
+
+	return nvx_catalog_filter_records(
+		$catalog,
+		array(
+			'slug',
+			'title',
+			'kicker',
+			'lead',
+			'intro',
+			'assessment',
+			'technology',
+			'limits',
+			'seo_title',
+			'seo_desc',
+			'protocol',
+		),
+		'nvx-signature-phase-catalog.json'
+	);
 }
 
 /**
@@ -141,4 +165,3 @@ function nvx_signature_phase_current_key(): ?string {
 	}
 	return null;
 }
-
