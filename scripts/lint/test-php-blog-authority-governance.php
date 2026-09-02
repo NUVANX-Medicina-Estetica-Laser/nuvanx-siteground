@@ -66,6 +66,6 @@ $bootstrap      = (string) file_get_contents( $root . '/wp-content/themes/nuvanx
 $catalog_owner  = strpos( $bootstrap, "'inc/nvx-catalog-json.php'" );
 $journal_owner  = strpos( $bootstrap, "'inc/nvx-journal-laserlipolisis-vs-lipo.php'" );
 nvx_block6_assert( false !== $catalog_owner && false !== $journal_owner && $catalog_owner < $journal_owner, 'CATALOG_OWNER_PRECEDES_JOURNAL' );
-nvx_block6_assert( false !== strpos( $journal_source, "require_once __DIR__ . '/nvx-catalog-json.php'" ), 'JOURNAL_LATERAL_OWNER_RECORDED_FOR_CONSOLIDATION' );
+nvx_block6_assert( false === strpos( $journal_source, "require_once __DIR__ . '/nvx-catalog-json.php'" ), 'JOURNAL_LATERAL_OWNER_REMOVED_AFTER_CONSOLIDATION' );
 
 echo 'PHP_BLOG_AUTHORITY_GOVERNANCE=PASS reviewer=fail_closed btl_note=idempotent fallback=present' . PHP_EOL;
