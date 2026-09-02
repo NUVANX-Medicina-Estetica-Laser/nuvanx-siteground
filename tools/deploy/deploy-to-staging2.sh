@@ -380,7 +380,12 @@ for required_file in "${SOURCE_REQUIRED_FILES[@]}"; do
 done
 [[ "$(tr -d '\r\n' < "$LIVE_THEME/.nvx-deploy-sha")" == "$DEPLOY_SHA" ]] || fail 'deployed SHA marker does not match'
 grep -Fq 'nvx-patterns-editorial.css' "$LIVE_THEME/functions.php" || fail 'functions.php does not enqueue the canonical editorial stylesheet'
-grep -Fq 'nvx-document-governance.php' "$LIVE_THEME/functions.php" || fail 'functions.php does not load document governance'
+if grep -Fq 'nvx-theme-bootstrap.php' "$LIVE_THEME/functions.php"; then
+  [[ -f "$LIVE_THEME/inc/nvx-theme-bootstrap.php" ]] || fail 'functions.php declares canonical bootstrap ownership but the bootstrap file is missing'
+  grep -Fq "'inc/nvx-document-governance.php'" "$LIVE_THEME/inc/nvx-theme-bootstrap.php" || fail 'canonical bootstrap does not own document governance'
+else
+  grep -Fq 'nvx-document-governance.php' "$LIVE_THEME/functions.php" || fail 'theme does not load document governance'
+fi
 grep -Fq 'nvx_document_governance_print_head_contract' "$LIVE_THEME/inc/nvx-document-governance.php" || fail 'document governance missing head contract emitter'
 grep -Fq 'window.nvxValoracionModal' "$LIVE_THEME/inc/nvx-valoracion-modal.php" || fail 'valoracion modal boot config is missing'
 grep -Fq 'nvx_valoracion_direct_form_markup()' "$LIVE_THEME/inc/nvx-valoracion-modal.php" || fail 'deployed valoración modal is not first-party owned'
