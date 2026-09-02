@@ -141,8 +141,5 @@ function nvx_theme_request_path(): string {
  *
  * @return bool `true` for staging, local, etc.; `false` for production.
  */
-function nvx_seo_is_nonproduction_environment(): bool {
-	$context = nvx_theme_request_context();
-	return ! $context['is_production'];
 }
 nvx_theme_request_context();
