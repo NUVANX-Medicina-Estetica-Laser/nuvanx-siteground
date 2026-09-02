@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
@@ -32,6 +33,9 @@ for (const source of [strategy, aesthetic, journal, catalog]) {
   );
 }
 
+assert.doesNotMatch(aesthetic, /staging-only page seeder/i, 'Aesthetic pages doc must not reference staging-only page seeder');
+assert.doesNotMatch(aesthetic, /Seed governed pages/i, 'Aesthetic pages must not contain stale seed comments');
+
 assert.doesNotMatch(migration, /declare\s*\(\s*strict_types\s*=\s*1\s*\)/, 'wp eval-file migration must not declare strict_types');
 assert.match(migration, /defined\s*\(\s*['"]WP_CLI['"]\s*\)/, 'Migration must be WP-CLI-only');
 assert.match(migration, /['"]dbshcocboodiwr['"]/, 'Migration must pin the canonical Staging2 database');
@@ -43,9 +47,14 @@ assert.match(migration, /existing_editorial/, 'Migration must preserve existing 
 assert.match(migration, /provenance_mismatch/, 'Bridal retirement must fail closed on mixed provenance');
 assert.match(migration, /wp_insert_post\s*\(/, 'Explicit migration must own seed creation');
 assert.match(migration, /wp_update_post\s*\(/, 'Explicit migration must own Bridal retirement');
+assert.match(migration, /wp_delete_post\s*\(/, 'Explicit migration must roll back inserted posts on metadata write failure');
+assert.match(migration, /nvx_h1_has_valid_medical_approval/, 'Migration must detect valid medical approval');
+assert.match(migration, /nvx_h1_update_post_meta_checked/, 'Migration must check update_post_meta return value');
 assert.match(migration, /post_write_verification/, 'Every live mutation path must expose post-write verification failure');
 assert.match(migration, /H1_SEED_RECONCILIATION=PASS/, 'Migration must emit PASS');
 assert.match(migration, /H1_SEED_RECONCILIATION=NOOP/, 'Migration must emit NOOP');
 assert.match(migration, /H1_SEED_RECONCILIATION=FAIL/, 'Migration must emit FAIL');
 
-console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 explicit_migration=1 dry_run_default=1');
+execFileSync('php', ['scripts/lint/test-staging-seed-reconciliation.php'], { stdio: 'inherit' });
+
+console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 explicit_migration=1 dry_run_default=1 approval_preserved=1');

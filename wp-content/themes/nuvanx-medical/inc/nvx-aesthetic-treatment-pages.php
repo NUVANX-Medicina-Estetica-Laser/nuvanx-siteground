@@ -2,8 +2,9 @@
 /**
  * Canonical facial aesthetic treatment pages.
  *
- * One versioned catalogue drives visible content, metadata, FAQ schema and the
- * staging-only page seeder. A later medical-review publish reclaims the slug.
+ * One versioned catalogue drives visible content, metadata, and FAQ schema.
+ * Explicit page seeding is owned exclusively by migration tooling. A later
+ * medical-review publish reclaims the slug.
  *
  * @package nuvanx-medical
  */
@@ -433,5 +434,3 @@ function nvx_aesthetic_treatment_page_content( string $content ): string {
 	return (string) ob_get_clean();
 }
 add_filter( 'the_content', 'nvx_aesthetic_treatment_page_content', NVX_HOOK_PRIO_AESTHETIC_TREATMENT );
-
-/** Seed governed pages on staging only; existing editorial records are never overwritten. */

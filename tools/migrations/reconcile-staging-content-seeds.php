@@ -85,6 +85,69 @@ function nvx_h1_seed_failure( string $scope, string $reason, string $slug, array
 	nvx_h1_seed_event( 'fail', $scope, $reason, $slug );
 }
 
+/**
+ * Safely update post meta, treating update failures as fallible.
+ *
+ * In WordPress, update_post_meta returns false if the update query failed OR if the
+ * passed value matches the existing value in the database.
+ * We consider the operation successful if the meta ID is returned, true is returned,
+ * or the persisted value matches the expected value.
+ */
+function nvx_h1_update_post_meta_checked( int $post_id, string $meta_key, $meta_value ): bool {
+	if ( $post_id <= 0 || '' === $meta_key ) {
+		return false;
+	}
+
+	$current = get_post_meta( $post_id, $meta_key, true );
+	if ( (string) $current === (string) $meta_value ) {
+		return true;
+	}
+
+	$result = update_post_meta( $post_id, $meta_key, $meta_value );
+	if ( false !== $result ) {
+		return true;
+	}
+
+	return (string) get_post_meta( $post_id, $meta_key, true ) === (string) $meta_value;
+}
+
+/**
+ * Whether an aesthetic seed page has complete, valid medical review approval metadata.
+ *
+ * Medical review provenance requires:
+ * - _nvx_medical_review_status === 'approved'
+ * - _nvx_medical_reviewer === registered reviewer key
+ * - _nvx_medical_review_date === valid ISO calendar date
+ */
+function nvx_h1_has_valid_medical_approval( int $post_id ): bool {
+	if ( $post_id <= 0 ) {
+		return false;
+	}
+
+	$status       = strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_review_status', true ) ) );
+	$reviewer_key = strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_reviewer', true ) ) );
+	$date         = trim( (string) get_post_meta( $post_id, '_nvx_medical_review_date', true ) );
+
+	if ( 'approved' !== $status ) {
+		return false;
+	}
+
+	$valid_date = function_exists( 'nvx_medical_review_valid_date' )
+		? nvx_medical_review_valid_date( $date )
+		: ( (bool) preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $date, $match ) && checkdate( (int) $match[2], (int) $match[3], (int) $match[1] ) );
+
+	if ( ! $valid_date ) {
+		return false;
+	}
+
+	if ( function_exists( 'nvx_medical_reviewers' ) ) {
+		$reviewers = nvx_medical_reviewers();
+		return is_array( $reviewers ) && isset( $reviewers[ $reviewer_key ] );
+	}
+
+	return '' !== $reviewer_key;
+}
+
 /** Execute one mutation only in explicit live mode and verify its persisted result. */
 function nvx_h1_seed_mutation(
 	bool $dry_run,
@@ -163,8 +226,7 @@ function nvx_h1_reconcile_strategy( bool $dry_run, array &$stats ): void {
 				'update_seed_review_meta',
 				$slug,
 				static function () use ( $existing, $review_status ): bool {
-					update_post_meta( $existing->ID, '_nvx_strategy_review_status', $review_status );
-					return true;
+					return nvx_h1_update_post_meta_checked( $existing->ID, '_nvx_strategy_review_status', $review_status );
 				},
 				static function () use ( $existing, $review_status ): bool {
 					return $review_status === (string) get_post_meta( $existing->ID, '_nvx_strategy_review_status', true );
@@ -195,7 +257,11 @@ function nvx_h1_reconcile_strategy( bool $dry_run, array &$stats ): void {
 					return false;
 				}
 				$created_id = (int) $result;
-				update_post_meta( $created_id, '_nvx_strategy_review_status', $review_status );
+				if ( ! nvx_h1_update_post_meta_checked( $created_id, '_nvx_strategy_review_status', $review_status ) ) {
+					wp_delete_post( $created_id, true );
+					$created_id = 0;
+					return false;
+				}
 				return true;
 			},
 			static function () use ( $slug, $marker, $review_status, &$created_id ): bool {
@@ -256,7 +322,10 @@ function nvx_h1_reconcile_aesthetic( bool $dry_run, array &$stats ): void {
 
 			$current_key    = (string) get_post_meta( $existing->ID, '_nvx_aesthetic_treatment_key', true );
 			$current_review = (string) get_post_meta( $existing->ID, '_nvx_medical_review_status', true );
-			if ( $key === $current_key && 'pending' === $current_review ) {
+			$is_approved    = nvx_h1_has_valid_medical_approval( $existing->ID );
+			$target_review  = $is_approved ? 'approved' : 'pending';
+
+			if ( $key === $current_key && $target_review === $current_review ) {
 				nvx_h1_seed_noop( 'aesthetic', 'seed_current', $slug, $stats );
 				continue;
 			}
@@ -266,14 +335,24 @@ function nvx_h1_reconcile_aesthetic( bool $dry_run, array &$stats ): void {
 				'aesthetic',
 				'repair_seed_meta',
 				$slug,
-				static function () use ( $existing, $key ): bool {
-					update_post_meta( $existing->ID, '_nvx_aesthetic_treatment_key', $key );
-					update_post_meta( $existing->ID, '_nvx_medical_review_status', 'pending' );
+				static function () use ( $existing, $key, $target_review ): bool {
+					if ( ! nvx_h1_update_post_meta_checked( $existing->ID, '_nvx_aesthetic_treatment_key', $key ) ) {
+						return false;
+					}
+					if ( ! nvx_h1_update_post_meta_checked( $existing->ID, '_nvx_medical_review_status', $target_review ) ) {
+						return false;
+					}
 					return true;
 				},
-				static function () use ( $existing, $key ): bool {
-					return $key === (string) get_post_meta( $existing->ID, '_nvx_aesthetic_treatment_key', true )
-						&& 'pending' === (string) get_post_meta( $existing->ID, '_nvx_medical_review_status', true );
+				static function () use ( $existing, $key, $is_approved ): bool {
+					$key_ok = $key === (string) get_post_meta( $existing->ID, '_nvx_aesthetic_treatment_key', true );
+					if ( ! $key_ok ) {
+						return false;
+					}
+					if ( $is_approved ) {
+						return nvx_h1_has_valid_medical_approval( $existing->ID );
+					}
+					return 'pending' === (string) get_post_meta( $existing->ID, '_nvx_medical_review_status', true );
 				},
 				$stats
 			);
@@ -303,8 +382,16 @@ function nvx_h1_reconcile_aesthetic( bool $dry_run, array &$stats ): void {
 					return false;
 				}
 				$created_id = (int) $result;
-				update_post_meta( $created_id, '_nvx_aesthetic_treatment_key', $key );
-				update_post_meta( $created_id, '_nvx_medical_review_status', 'pending' );
+				if ( ! nvx_h1_update_post_meta_checked( $created_id, '_nvx_aesthetic_treatment_key', $key ) ) {
+					wp_delete_post( $created_id, true );
+					$created_id = 0;
+					return false;
+				}
+				if ( ! nvx_h1_update_post_meta_checked( $created_id, '_nvx_medical_review_status', 'pending' ) ) {
+					wp_delete_post( $created_id, true );
+					$created_id = 0;
+					return false;
+				}
 				return true;
 			},
 			static function () use ( $key, $slug, &$created_id ): bool {
