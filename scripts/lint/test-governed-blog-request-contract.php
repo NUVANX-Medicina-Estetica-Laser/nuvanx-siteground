@@ -108,6 +108,8 @@ $GLOBALS['nvx_test_db_row'] = (object) array(
 );
 $GLOBALS['wpdb'] = new wpdb();
 $_SERVER['REQUEST_URI'] = $GLOBALS['nvx_test_path'];
+nvx_theme_request_context();
+
 
 function add_filter() { return true; }
 function add_action() { return true; }
@@ -159,6 +161,20 @@ function get_post( $post_id ) {
 	);
 }
 function nvx_seo_is_nonproduction_environment() { return false; }
+
+function nvx_theme_request_context(): array {
+	static $context = null;
+	if ( is_array( $context ) ) {
+		return $context;
+	}
+	$uri = $_SERVER['REQUEST_URI'] ?? '/';
+	$context = array(
+		'uri'  => $uri,
+		'path' => rtrim($uri, '/') . '/',
+	);
+	return $context;
+}
+
 function nvx_seo_blog_post_metadata_catalog() {
 	return array(
 		'tratamientos-faciales-sin-cirugia-guia-medica-diagnostico' => array(
