@@ -15,3 +15,5 @@ parameters:
         - '#Filter callback return statement is missing#'
         # Ignore WordPress dynamic function calls
         - '#Function (add_action|add_filter|do_action|apply_filters) invoked with incorrect number of parameters#'
+    parallel:
+        maximumNumberOfProcesses: 1
