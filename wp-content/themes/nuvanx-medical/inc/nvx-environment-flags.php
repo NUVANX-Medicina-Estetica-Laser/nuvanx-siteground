@@ -15,19 +15,35 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/** Determine whether the authoritative request belongs to staging2. */
+/**
+ * Determine whether the authoritative request belongs to staging2.
+ *
+ * The request boundary owns security-sensitive environment identity. This
+ * compatibility filter exists only for presentation/test consumers.
+ */
 if ( ! function_exists( 'nvx_environment_is_staging2' ) ) {
 	function nvx_environment_is_staging2(): bool {
 		if ( ! function_exists( 'nvx_theme_request_context' ) ) {
 			return false;
 		}
 
-		$context = nvx_theme_request_context();
-		return ! empty( $context['is_staging2'] );
+		$context  = nvx_theme_request_context();
+		$detected = ! empty( $context['is_staging2'] );
+
+		return (bool) apply_filters(
+			'nvx_environment_is_staging2',
+			$detected,
+			(string) ( $context['host'] ?? '' )
+		);
 	}
 }
 
-/** Determine whether the authoritative request belongs to production. */
+/**
+ * Determine whether the authoritative request belongs to production.
+ *
+ * Deliberately unfiltered: mutation/indexing boundaries must not be degraded or
+ * promoted by a presentation compatibility hook.
+ */
 if ( ! function_exists( 'nvx_environment_is_production' ) ) {
 	function nvx_environment_is_production(): bool {
 		if ( ! function_exists( 'nvx_theme_request_context' ) ) {
