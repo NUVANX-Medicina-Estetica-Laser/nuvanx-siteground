@@ -629,7 +629,7 @@ function nvx_signature_redirect_short_hub_paths(): void {
 		return;
 	}
 
-	$request_path = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( (string) $_SERVER['REQUEST_URI'], PHP_URL_PATH ) : '';
+	$request_path = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['path'] : '';
 	$request_path = trim( $request_path, '/' );
 	if ( ! nvx_signature_should_redirect_short_hub( $request_path ) ) {
 		return;

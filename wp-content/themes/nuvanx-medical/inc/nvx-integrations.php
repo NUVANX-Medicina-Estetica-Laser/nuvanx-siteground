@@ -12,22 +12,6 @@ require_once __DIR__ . '/nvx-environment-flags.php';
 
 /**
  * Returns the normalized request path from REQUEST_URI.
- *
- * Unslashes and URL-sanitizes $_SERVER['REQUEST_URI'], then strips the query
- * string. Percent-encoded octets are preserved (unlike sanitize_text_field()).
- *
- * @return string Path without query string, or '' when REQUEST_URI is unset.
- */
-function nvx_theme_request_path(): string {
-	if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
-		return '';
-	}
-	$raw = esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) );
-	return (string) strtok( $raw, '?' );
-}
-
-/** Goya sede: evita bucle redirect_canonical. */
-function nvx_theme_is_goya_page(): bool {
 	if ( is_admin() ) {
 		return false;
 	}

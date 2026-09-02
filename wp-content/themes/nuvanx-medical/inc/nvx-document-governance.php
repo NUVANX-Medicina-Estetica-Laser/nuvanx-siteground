@@ -38,7 +38,7 @@ add_filter( 'wpseo_canonical', 'nvx_document_governance_suppress_yoast_canonical
 function nvx_document_governance_request_path(): string {
 	$uri = function_exists( 'nvx_governed_blog_runtime_original_request_uri' )
 		? nvx_governed_blog_runtime_original_request_uri()
-		: ( isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/' );
+		: ( function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '/' );
 	$path = wp_parse_url( $uri, PHP_URL_PATH );
 	$path = is_string( $path ) && '' !== $path ? $path : '/';
 	$path = '/' . trim( $path, '/' );
@@ -276,7 +276,7 @@ function nvx_document_governance_preserve_exact_governed_blog_route( $redirect_u
 		return $redirect_url;
 	}
 
-	$raw_uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '';
+	$raw_uri  = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '';
 	$raw_path = wp_parse_url( $raw_uri, PHP_URL_PATH );
 	if ( ! is_string( $raw_path ) || '' === $raw_path ) {
 		return $redirect_url;

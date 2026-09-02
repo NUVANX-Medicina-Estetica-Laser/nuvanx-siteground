@@ -288,7 +288,7 @@ function nvx_schema_current_path( $page_id = 0 ) {
 		}
 	}
 
-	$request = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '';
+	$request = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '';
 	return nvx_schema_normalize_path( $request );
 }
 

@@ -330,6 +330,11 @@ function nvx_wpsec_first_mutation_offset(string $body): ?int {
     return $first;
 }
 
+function nvx_wpsec_first_capability_offset(string $body): ?int {
+    $offset = strpos($body, 'current_user_can(');
+    return false !== $offset ? $offset : null;
+}
+
 function nvx_wpsec_first_nonce_offset(string $body): ?int {
     $checks = array('check_admin_referer(', 'check_ajax_referer(', 'wp_verify_nonce(');
     $first = null;
@@ -345,7 +350,7 @@ function nvx_wpsec_first_nonce_offset(string $body): ?int {
 /**
  * @return list<string>
  */
-function nvx_wpsec_nonce_violations(string $source, string $label): array {
+function nvx_wpsec_auth_violations(string $source, string $label): array {
     $functions = nvx_wpsec_named_functions($source);
     $violations = array();
 
@@ -364,6 +369,18 @@ function nvx_wpsec_nonce_violations(string $source, string $label): array {
             continue;
         }
 
+        $isAdminAction = str_starts_with($action['hook'], 'admin_post_') || str_starts_with($action['hook'], 'wp_ajax_');
+        $isNoPrivAjax  = str_starts_with($action['hook'], 'wp_ajax_nopriv_');
+
+        if ($isAdminAction && !$isNoPrivAjax) {
+            $capOffset = nvx_wpsec_first_capability_offset($body);
+            if (null === $capOffset) {
+                $violations[] = $label . ':' . $function['line'] . ':missing_capability:' . $action['callback'];
+            } elseif ($capOffset > $mutationOffset) {
+                $violations[] = $label . ':' . $function['line'] . ':late_capability:' . $action['callback'];
+            }
+        }
+
         $nonceOffset = nvx_wpsec_first_nonce_offset($body);
         if (null === $nonceOffset) {
             $violations[] = $label . ':' . $function['line'] . ':missing_nonce:' . $action['callback'];
@@ -375,6 +392,30 @@ function nvx_wpsec_nonce_violations(string $source, string $label): array {
         }
     }
 
+    return $violations;
+}
+
+/**
+ * @return list<string>
+ */
+function nvx_wpsec_template_redirect_contract(string $source, string $label): array {
+    $functions = nvx_wpsec_named_functions($source);
+    $violations = array();
+
+    foreach (nvx_wpsec_action_callbacks($source) as $action) {
+        if ('template_redirect' !== $action['hook']) {
+            continue;
+        }
+        $function = $functions[$action['callback']] ?? null;
+        if (null === $function) {
+            continue;
+        }
+
+        $body = $function['body'];
+        if (str_contains($body, '_wp_page_template') && (str_contains($body, 'update_post_meta') || str_contains($body, 'update_metadata'))) {
+            $violations[] = $label . ':' . $function['line'] . ':illegal_template_migration_in_template_redirect:' . $action['callback'];
+        }
+    }
     return $violations;
 }
 
@@ -449,9 +490,8 @@ function nvx_wpsec_run_self_tests(): void {
     $missingNonce = <<<'PHP'
 <?php
 function save_handler(): void {
-    if (empty($_POST['save'])) {
-        return;
-    }
+    if (!current_user_can('manage_options')) return;
+    if (empty($_POST['save'])) return;
     update_option('x', $_POST['save']);
 }
 add_action('admin_post_nvx_save', 'save_handler');
@@ -459,10 +499,9 @@ PHP;
     $validNonce = <<<'PHP'
 <?php
 function save_handler(): void {
-    if (empty($_POST['save'])) {
-        return;
-    }
+    if (!current_user_can('manage_options')) return;
     check_admin_referer('nvx_save');
+    if (empty($_POST['save'])) return;
     update_option('x', sanitize_text_field(wp_unslash($_POST['save'])));
 }
 add_action('admin_post_nvx_save', 'save_handler');
@@ -470,26 +509,50 @@ PHP;
     $lateNonce = <<<'PHP'
 <?php
 function save_handler(): void {
-    if (empty($_POST['save'])) {
-        return;
-    }
+    if (!current_user_can('manage_options')) return;
+    if (empty($_POST['save'])) return;
     update_option('x', sanitize_text_field(wp_unslash($_POST['save'])));
     check_admin_referer('nvx_save');
 }
 add_action('admin_post_nvx_save', 'save_handler');
 PHP;
+    $missingCap = <<<'PHP'
+<?php
+function save_handler(): void {
+    check_admin_referer('nvx_save');
+    if (empty($_POST['save'])) return;
+    update_option('x', sanitize_text_field(wp_unslash($_POST['save'])));
+}
+add_action('admin_post_nvx_save', 'save_handler');
+PHP;
+    $lateCap = <<<'PHP'
+<?php
+function save_handler(): void {
+    check_admin_referer('nvx_save');
+    if (empty($_POST['save'])) return;
+    update_option('x', sanitize_text_field(wp_unslash($_POST['save'])));
+    if (!current_user_can('manage_options')) return;
+}
+add_action('admin_post_nvx_save', 'save_handler');
+PHP;
 
-    if (array() === nvx_wpsec_nonce_violations($missingNonce, 'fixture-missing-nonce')) {
+    if (array() === nvx_wpsec_auth_violations($missingNonce, 'fixture-missing-nonce')) {
         nvx_wpsec_fail('self_test_expected_missing_nonce_failure');
     }
-    if (array() !== nvx_wpsec_nonce_violations($validNonce, 'fixture-valid-nonce')) {
+    if (array() !== nvx_wpsec_auth_violations($validNonce, 'fixture-valid-nonce')) {
         nvx_wpsec_fail('self_test_valid_nonce_false_positive');
     }
-    if (array() === nvx_wpsec_nonce_violations($lateNonce, 'fixture-late-nonce')) {
+    if (array() === nvx_wpsec_auth_violations($lateNonce, 'fixture-late-nonce')) {
         nvx_wpsec_fail('self_test_expected_late_nonce_failure');
     }
+    if (array() === nvx_wpsec_auth_violations($missingCap, 'fixture-missing-cap')) {
+        nvx_wpsec_fail('self_test_expected_missing_cap_failure');
+    }
+    if (array() === nvx_wpsec_auth_violations($lateCap, 'fixture-late-cap')) {
+        nvx_wpsec_fail('self_test_expected_late_cap_failure');
+    }
 
-    echo 'WORDPRESS_SECURITY_SELF_TEST=PASS cases=8' . PHP_EOL;
+    echo 'WORDPRESS_SECURITY_SELF_TEST=PASS cases=10' . PHP_EOL;
 }
 
 nvx_wpsec_run_self_tests();
@@ -533,7 +596,8 @@ foreach ($iterator as $file) {
 
     $label = ltrim(str_replace($root, '', $path), DIRECTORY_SEPARATOR);
     array_push($violations, ...nvx_wpsec_output_violations($source, $label));
-    array_push($violations, ...nvx_wpsec_nonce_violations($source, $label));
+    array_push($violations, ...nvx_wpsec_auth_violations($source, $label));
+    array_push($violations, ...nvx_wpsec_template_redirect_contract($source, $label));
 }
 
 $valoracionPath = $realTheme . '/inc/nvx-valoracion-direct-form.php';

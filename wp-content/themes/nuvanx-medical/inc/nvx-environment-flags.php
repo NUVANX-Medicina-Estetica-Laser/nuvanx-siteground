@@ -19,17 +19,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return bool `true` if the normalized host is `staging2.nuvanx.com`, `false` otherwise.
  */
 function nvx_environment_is_staging2(): bool {
-	$raw_host    = isset( $_SERVER['HTTP_HOST'] ) ? strtolower( trim( (string) $_SERVER['HTTP_HOST'] ) ) : '';
-	$parsed_host = wp_parse_url( 'https://' . $raw_host, PHP_URL_HOST );
-	$host        = ( $parsed_host !== false && $parsed_host !== null ) ? $parsed_host : $raw_host;
-
-	/**
-	 * Filter whether the request is treated as staging2.
-	 *
-	 * @param bool   $is_staging2 Detected host match.
-	 * @param string $host        Normalized HTTP host without port.
-	 */
-	return (bool) apply_filters( 'nvx_environment_is_staging2', 'staging2.nuvanx.com' === $host, $host );
+	if ( function_exists( 'nvx_theme_request_context' ) ) {
+		$context = nvx_theme_request_context();
+		return ! empty( $context['is_staging'] );
+	}
+	return false;
 }
 
 /**
