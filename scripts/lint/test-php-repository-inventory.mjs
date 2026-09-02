@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
@@ -41,6 +42,19 @@ const classifiedTotal = buckets.theme.length
   + buckets.root.length;
 assert.equal(classifiedTotal, tracked.length, 'Every tracked PHP file must have exactly one owner bucket');
 
+const themeSources = new Map(
+  buckets.theme.map((file) => [file, fs.readFileSync(file, 'utf8')]),
+);
+const strictTypesFiles = [...themeSources]
+  .filter(([, source]) => /declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/.test(source))
+  .map(([file]) => file);
+const directErrorLogFiles = [...themeSources]
+  .filter(([, source]) => /\berror_log\s*\(/.test(source))
+  .map(([file]) => file);
+const directReviewProvenanceFiles = [...themeSources]
+  .filter(([, source]) => /\[['"](?:reviewedBy|lastReviewed)['"]\]\s*=/.test(source))
+  .map(([file]) => file);
+
 console.log(
   `PHP_REPOSITORY_INVENTORY=PASS total=${tracked.length}`
   + ` theme=${buckets.theme.length}`
@@ -50,3 +64,12 @@ console.log(
   + ` root=${buckets.root.length}`
   + ` other=${buckets.other.length}`
 );
+console.log(
+  `PHP_RESIDUAL_AUDIT_METRICS=REPORT theme=${buckets.theme.length}`
+  + ` strict_types=${strictTypesFiles.length}`
+  + ` direct_error_log_files=${directErrorLogFiles.length}`
+  + ` direct_review_provenance_files=${directReviewProvenanceFiles.length}`
+);
+console.log(`PHP_STRICT_TYPES_FILES=${strictTypesFiles.join(',')}`);
+console.log(`PHP_DIRECT_ERROR_LOG_FILES=${directErrorLogFiles.join(',')}`);
+console.log(`PHP_DIRECT_REVIEW_PROVENANCE_FILES=${directReviewProvenanceFiles.join(',')}`);
