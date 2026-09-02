@@ -34,6 +34,7 @@ assert.ok(buckets.theme.length >= 100,
 assert.ok(buckets.scripts.length > 0, 'Expected tracked PHP QA scripts');
 assert.ok(buckets.tools.length > 0, 'Expected tracked PHP tooling/migrations');
 assert.ok(buckets.lib.length > 0, 'Expected tracked shared PHP libraries');
+assert.ok(buckets.root.length > 0, 'Expected tracked repository-root PHP files');
 
 const classifiedTotal = buckets.theme.length
   + buckets.scripts.length
