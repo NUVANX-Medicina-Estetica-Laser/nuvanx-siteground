@@ -17,6 +17,30 @@ function nvx_cta_whatsapp_url(): string {
 	return nvx_whatsapp_url( 'primary' );
 }
 
+/** Whether valoración CTAs should advertise dialog behavior for this request. */
+function nvx_cta_valoracion_modal_enabled(): bool {
+	if ( function_exists( 'nvx_theme_is_valoracion_form_page' ) && nvx_theme_is_valoracion_form_page() ) {
+		return false;
+	}
+
+	return function_exists( 'nvx_valoracion_modal_enabled' ) && nvx_valoracion_modal_enabled();
+}
+
+/** Return modal-only class/attributes for a valoración CTA. */
+function nvx_cta_valoracion_modal_contract(): array {
+	if ( ! nvx_cta_valoracion_modal_enabled() ) {
+		return array(
+			'class' => '',
+			'attrs' => '',
+		);
+	}
+
+	return array(
+		'class' => ' nvx-open-valoracion-modal',
+		'attrs' => ' data-nvx-valoracion-modal="1" aria-haspopup="dialog"',
+	);
+}
+
 /** Secondary WhatsApp CTA. */
 function nvx_cta_whatsapp_markup( string $class = 'nvx-brand-btn nvx-brand-btn--secondary' ): string {
 	return sprintf(
@@ -29,15 +53,16 @@ function nvx_cta_whatsapp_markup( string $class = 'nvx-brand-btn nvx-brand-btn--
 
 /** Dual CTA cluster. */
 function nvx_cta_pair_markup( string $extra_class = '' ): string {
-	$class      = trim( 'nvx-cta-cluster ' . $extra_class );
-	$valoracion = nvx_cta_valoracion_url();
+	$class          = trim( 'nvx-cta-cluster ' . $extra_class );
+	$valoracion     = nvx_cta_valoracion_url();
+	$modal_contract = nvx_cta_valoracion_modal_contract();
 
 	if ( function_exists( 'nvx_theme_is_valoracion_form_page' ) && nvx_theme_is_valoracion_form_page() ) {
 		$valoracion = trailingslashit( get_permalink() ) . '#nvx-hubspot-form';
 	}
 
 	return '<div class="' . esc_attr( $class ) . '">
-		<a href="' . esc_url( $valoracion ) . '" class="nvx-brand-btn nvx-brand-btn--primary nvx-open-valoracion-modal" data-nvx-valoracion-modal="1" aria-haspopup="dialog" data-gtag="click-reserve">
+		<a href="' . esc_url( $valoracion ) . '" class="nvx-brand-btn nvx-brand-btn--primary' . $modal_contract['class'] . '"' . $modal_contract['attrs'] . ' data-gtag="click-reserve">
 			<span>Valoración gratuita — sin compromiso</span>
 		</a>
 		<a href="' . esc_url( nvx_cta_whatsapp_url() ) . '" class="nvx-brand-btn nvx-brand-btn--secondary" target="_blank" rel="noopener noreferrer" data-gtag="click-whatsapp">
@@ -49,8 +74,9 @@ function nvx_cta_pair_markup( string $extra_class = '' ): string {
 
 /** Canonical site-wide closing conversion band (pre-footer). */
 function nvx_site_closing_cta_markup(): string {
-	$valoracion = nvx_cta_valoracion_url();
-	$whatsapp   = nvx_cta_whatsapp_url();
+	$valoracion     = nvx_cta_valoracion_url();
+	$whatsapp       = nvx_cta_whatsapp_url();
+	$modal_contract = nvx_cta_valoracion_modal_contract();
 
 	if ( function_exists( 'nvx_theme_is_valoracion_form_page' ) && nvx_theme_is_valoracion_form_page() ) {
 		$valoracion = trailingslashit( get_permalink() ) . '#nvx-hubspot-form';
@@ -65,8 +91,10 @@ function nvx_site_closing_cta_markup(): string {
 	$html .= '</div>';
 	$html .= '<div class="nvx-cta-pair nvx-cta-banner__actions">';
 	$html .= sprintf(
-		'<a class="nvx-brand-btn nvx-btn--light nvx-open-valoracion-modal" id="nvx-footer-cta" href="%1$s" data-nvx-valoracion-modal="1" aria-haspopup="dialog">%2$s</a>',
+		'<a class="nvx-brand-btn nvx-btn--light%1$s" id="nvx-footer-cta" href="%2$s"%3$s>%4$s</a>',
+		$modal_contract['class'],
 		esc_url( $valoracion ),
+		$modal_contract['attrs'],
 		esc_html__( 'Valoración gratuita — sin compromiso', 'nuvanx-medical' )
 	);
 	$html .= sprintf(
