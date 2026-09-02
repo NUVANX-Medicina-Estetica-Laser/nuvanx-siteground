@@ -97,6 +97,7 @@ function wp_get_attachment_url( $attachment_id ): string {
 
 // Reproduce the runtime state in which canonical clinic and staff registries
 // are available when the public media modules are evaluated.
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php';
 require $root . '/wp-content/themes/nuvanx-medical/inc/nvx-gbp-local.php';
 require $root . '/wp-content/themes/nuvanx-medical/inc/nvx-authentic-page-photography.php';
 

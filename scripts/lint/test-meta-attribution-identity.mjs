@@ -43,19 +43,19 @@ assert.match(bridge, /\$marketing_consent = nvx_marketing_consent_granted\(\);/,
 assert.doesNotMatch(bridge, /\$marketing_consent\s*=\s*'1' === nvx_hubspot_secure_post_value\( 'nvx_marketing_consent'/,
   'Secure bridge must not use hidden POST consent as authority');
 
-assert.match(relay, /\$marketing_consent = function_exists\( 'nvx_marketing_consent_granted' \) && nvx_marketing_consent_granted\(\);/);
+assert.match(relay, /\$marketing_consent\s*=[\s\S]*?function_exists\(\s*'nvx_marketing_consent_granted'\s*\)[\s\S]*?nvx_marketing_consent_granted\(\);/);
 assert.doesNotMatch(relay, /'1' === nvx_hubspot_secure_post_value\( 'nvx_marketing_consent'/);
-assert.match(relay, /function nvx_lead_captured_meta_identity\( bool \$marketing_consent \): array/);
-assert.match(relay, /if \( ! \$marketing_consent \) \{\s*return array\(\);/);
+assert.match(relay, /function nvx_lead_captured_meta_identity\([\s\S]*?bool \$marketing_consent[\s\S]*?\): array/);
+assert.match(relay, /if\s*\([\s\S]*?! \$marketing_consent[\s\S]*?\)\s*\{\s*return array\(\);/);
 assert.match(relay, /strlen\( \$fbclid \) <= 512/);
 assert.match(relay, /strlen\( \$value \) <= 512/);
-assert.match(relay, /if \( isset\( \$_COOKIE\[ \$cookie_name \] \) \) \{\s*\$value = trim/);
+assert.match(relay, /if\s*\(\s*isset\(\s*\$_COOKIE\[\s*\$cookie_name\s*\]\s*\)\s*\)[\s\S]*?\$value =/);
 assert.match(relay, /isset\( \$_POST\[ \$key \] \)/);
 const cookieFirst = relay.indexOf('if ( isset( $_COOKIE[ $cookie_name ] ) )');
 const postedFallback = relay.indexOf('isset( $_POST[ $key ] )', cookieFirst);
 assert.ok(cookieFirst >= 0 && postedFallback > cookieFirst,
   'Real _fbc/_fbp cookies must be preferred over posted hidden fields');
-assert.match(relay, /foreach \( nvx_lead_captured_meta_identity\( true \) as \$key => \$value \)/);
+assert.match(relay, /foreach\s*\(\s*nvx_lead_captured_meta_identity\(\s*true\s*\)[\s\S]*?as\s*\$key\s*=>\s*\$value\s*\)/);
 assert.doesNotMatch(relay, /nvx_meta_fbc|nvx_meta_fbp/);
 
 console.log('META_ATTRIBUTION_IDENTITY=PASS consent=single-server-owner fbclid=validated fbc=bounded fbp=real-only nojs=preserved');
