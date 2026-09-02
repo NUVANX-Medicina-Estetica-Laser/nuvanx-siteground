@@ -50,10 +50,17 @@ function nvx_medical_review_supported_page( int $post_id ): bool {
 	return null !== nvx_schema_resolve_treatment_key( $post_id );
 }
 
-/** Normalize a public path for exact managed-page approval lookup. */
+/** Normalize a request/permalink path for exact managed-page lookup. */
 function nvx_medical_review_normalize_path( string $path ): string {
 	$path = '/' . trim( $path, '/' );
 	return '/' === $path ? '/' : $path . '/';
+}
+
+/** Whether a registry key is already in the exact canonical public-path form. */
+function nvx_medical_review_registry_path_is_canonical( string $raw_path ): bool {
+	return '' !== $raw_path
+		&& trim( $raw_path ) === $raw_path
+		&& nvx_medical_review_normalize_path( $raw_path ) === $raw_path;
 }
 
 /** Resolve the current canonical request path without trusting a second raw URI read. */
@@ -82,9 +89,11 @@ function nvx_medical_review_current_path( int $post_id = 0 ): string {
 /**
  * Load structurally registered managed-page provenance records.
  *
- * Registration defines the governance perimeter. Approval is evaluated later,
- * so a registered page with pending/invalid approval still fails closed and has
- * earlier provenance stripped by the canonical schema owner.
+ * Registration defines the governance perimeter. Registry keys must already be
+ * exact canonical paths; malformed near-equivalents are rejected rather than
+ * normalized into authority. Approval is evaluated later, so a registered page
+ * with pending/invalid approval still fails closed and has earlier provenance
+ * stripped by the canonical schema owner.
  *
  * @return array<string,array{status:string,reviewer:string,date:string}>
  */
@@ -100,12 +109,11 @@ function nvx_medical_review_managed_registry(): array {
 
 	$records = array();
 	foreach ( $catalog['managed_pages'] as $raw_path => $record ) {
-		if ( ! is_string( $raw_path ) || '' === trim( $raw_path ) || ! is_array( $record ) ) {
+		if ( ! is_string( $raw_path ) || ! is_array( $record ) || ! nvx_medical_review_registry_path_is_canonical( $raw_path ) ) {
 			continue;
 		}
 
-		$path = nvx_medical_review_normalize_path( $raw_path );
-		$records[ $path ] = array(
+		$records[ $raw_path ] = array(
 			'status'   => strtolower( trim( (string) ( $record['status'] ?? '' ) ) ),
 			'reviewer' => strtolower( trim( (string) ( $record['reviewer'] ?? '' ) ) ),
 			'date'     => trim( (string) ( $record['date'] ?? '' ) ),
@@ -115,46 +123,56 @@ function nvx_medical_review_managed_registry(): array {
 	return $records;
 }
 
+/** Return the exact managed registry record for the current canonical path. */
+function nvx_medical_review_managed_record( int $post_id = 0 ): ?array {
+	$path     = nvx_medical_review_current_path( $post_id );
+	$registry = nvx_medical_review_managed_registry();
+	return '' !== $path && isset( $registry[ $path ] ) ? $registry[ $path ] : null;
+}
+
 /** Whether the current page belongs to the canonical medical provenance perimeter. */
 function nvx_medical_review_governed_page( int $post_id = 0 ): bool {
 	$post_id = $post_id > 0 ? $post_id : (int) get_queried_object_id();
-	if ( nvx_medical_review_supported_page( $post_id ) ) {
+
+	// Explicit managed-page registration wins over generic treatment routing.
+	if ( null !== nvx_medical_review_managed_record( $post_id ) ) {
 		return true;
 	}
 
-	$path     = nvx_medical_review_current_path( $post_id );
-	$registry = nvx_medical_review_managed_registry();
-	return '' !== $path && isset( $registry[ $path ] );
+	return nvx_medical_review_supported_page( $post_id );
 }
 
 /**
  * Resolve one approval source without allowing page modules to author provenance.
  *
+ * Exact managed-page registration has deterministic precedence over the generic
+ * treatment classifier. This matters for routes such as the papada decision hub,
+ * which can be classified under the treatment schema group while still owning a
+ * versioned managed-page approval record.
+ *
  * @return array{status:string,reviewer:string,date:string,source:string}|null
  */
 function nvx_medical_review_approval( int $post_id = 0 ): ?array {
 	$post_id = $post_id > 0 ? $post_id : (int) get_queried_object_id();
-
-	if ( nvx_medical_review_supported_page( $post_id ) ) {
+	$managed = nvx_medical_review_managed_record( $post_id );
+	if ( null !== $managed ) {
 		return array(
-			'status'   => strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_review_status', true ) ) ),
-			'reviewer' => strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_reviewer', true ) ) ),
-			'date'     => trim( (string) get_post_meta( $post_id, '_nvx_medical_review_date', true ) ),
-			'source'   => 'post_meta',
+			'status'   => $managed['status'],
+			'reviewer' => $managed['reviewer'],
+			'date'     => $managed['date'],
+			'source'   => 'managed_registry',
 		);
 	}
 
-	$path     = nvx_medical_review_current_path( $post_id );
-	$registry = nvx_medical_review_managed_registry();
-	if ( '' === $path || ! isset( $registry[ $path ] ) ) {
+	if ( ! nvx_medical_review_supported_page( $post_id ) ) {
 		return null;
 	}
 
 	return array(
-		'status'   => $registry[ $path ]['status'],
-		'reviewer' => $registry[ $path ]['reviewer'],
-		'date'     => $registry[ $path ]['date'],
-		'source'   => 'managed_registry',
+		'status'   => strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_review_status', true ) ) ),
+		'reviewer' => strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_reviewer', true ) ) ),
+		'date'     => trim( (string) get_post_meta( $post_id, '_nvx_medical_review_date', true ) ),
+		'source'   => 'post_meta',
 	);
 }
 
@@ -228,17 +246,26 @@ function nvx_medical_review_byline_markup( array $record ): string {
 }
 
 /**
- * Remove unconditional bylines so a single provenance block can be re-injected.
+ * Remove every legacy visible provenance wrapper used by governed renderers.
  *
- * Covers both the `<div>`-wrapped bylines emitted by page modules and the
- * `<address>`-wrapped hero byline emitted by BTL detail pages; the closing tag
- * is matched by backreference so the alternation never over-captures.
+ * Supports the div/address nvx-medical-byline variants and the historical
+ * p.nvx-medical-review helper. Unrelated content is preserved.
  */
 function nvx_medical_review_strip_unconditional_bylines( string $content ): string {
-	$pattern = '#<(div|address)\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>\s*</\1>#iu';
-	$clean   = preg_replace( $pattern, '', $content );
+	$patterns = array(
+		'#<(div|address)\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>\s*</\1>#iu',
+		'#<p\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-review\b[^"\']*["\'][^>]*>[\s\S]*?</p>#iu',
+	);
 
-	return is_string( $clean ) ? $clean : $content;
+	$clean = $content;
+	foreach ( $patterns as $pattern ) {
+		$updated = preg_replace( $pattern, '', $clean );
+		if ( is_string( $updated ) ) {
+			$clean = $updated;
+		}
+	}
+
+	return $clean;
 }
 
 /** Enforce fail-closed visible provenance after all page builders have run. */
