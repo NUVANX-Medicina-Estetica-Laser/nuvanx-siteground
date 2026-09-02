@@ -1218,26 +1218,29 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			// after the publish. If another process acquired the lease and also published between
 			// our renew() and wp_update_post(), both posts become pending. We detect and remove
 			// our now-redundant pending post and return the surviving item instead.
+			//
+			// A lost reservation on its own does not imply a duplicate exists: the lease may have
+			// simply expired, or a successor may have reserved without publishing yet. In those
+			// cases our published item is the only drainable copy and must be kept, otherwise the
+			// accepted event is lost.
 			if ( ! nvx_supabase_relay_queue_dedupe_reservation_valid( $reservation['key'], $reservation['token'] ) ) {
-				wp_delete_post( $post_id, true );
-
-				nvx_supabase_relay_log(
-					$endpoint,
-					'DEAD',
-					0,
-					'dedupe_reservation_lost_post_publish'
-				);
-
 				$surviving = nvx_supabase_relay_existing_item( $dedupe_key );
 				if ( $surviving > 0 && $surviving !== $post_id ) {
+					wp_delete_post( $post_id, true );
+
+					nvx_supabase_relay_log(
+						$endpoint,
+						'DEAD',
+						0,
+						'dedupe_reservation_lost_post_publish'
+					);
+
 					return nvx_supabase_relay_queue_record_existing_attempt(
 						$surviving,
 						$endpoint,
 						$attempts
 					);
 				}
-
-				return 0;
 			}
 		} finally {
 			nvx_supabase_relay_queue_unlock_dedupe(
