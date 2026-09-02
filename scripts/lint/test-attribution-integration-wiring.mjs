@@ -6,6 +6,7 @@ const syncPath = 'wp-content/themes/nuvanx-medical/assets/js/nvx-hubspot-attribu
 const integrationPath = 'wp-content/themes/nuvanx-medical/inc/nvx-attribution-integration.php';
 const gtmPath = 'wp-content/themes/nuvanx-medical/inc/nvx-gtm-integration.php';
 const directPath = 'wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php';
+const bootstrapPath = 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php';
 
 for (const path of [syncPath, integrationPath, gtmPath, directPath]) {
   assert.ok(fs.existsSync(path), `Missing attribution integration dependency: ${path}`);
@@ -15,6 +16,7 @@ const syncSource = fs.readFileSync(syncPath, 'utf8');
 const integration = fs.readFileSync(integrationPath, 'utf8');
 const gtm = fs.readFileSync(gtmPath, 'utf8');
 const direct = fs.readFileSync(directPath, 'utf8');
+const bootstrap = fs.readFileSync(bootstrapPath, 'utf8');
 
 assert.match(syncSource, /buildFormPayload\(new Set\(index\.keys\(\)\)\)/);
 assert.match(syncSource, /form\.setFieldValue\(actualName,/);
@@ -88,7 +90,10 @@ assert.doesNotMatch(collectorPayload, /applied_lead_id/);
 assert.match(integration, /'Origin'\s*=>\s*\$origin/);
 assert.match(integration, /origin_not_allowed/);
 assert.match(gtm, /nvx_hubspot_secure_form_id/);
-assert.match(gtm, /require_once __DIR__ \. '\/nvx-attribution-integration\.php'/);
+assert.doesNotMatch(gtm, /require_once.*nvx-attribution-integration/,
+  'GTM integration must not laterally load attribution integration (bootstrap manifest owns this)');
+assert.match(bootstrap, /'inc\/nvx-attribution-integration\.php'/,
+  'Attribution integration must be loaded from bootstrap manifest');
 assert.match(direct, /nvx_lead_id/);
 
 const listeners = new Map();

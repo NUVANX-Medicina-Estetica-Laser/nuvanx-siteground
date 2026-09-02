@@ -14,6 +14,8 @@ const captureRelay = fs.readFileSync('wp-content/themes/nuvanx-medical/inc/nvx-l
 const placementRuntime = fs.readFileSync('scripts/staging2/valoracion-placement-resilient.mjs', 'utf8');
 const placementOrchestrator = fs.readFileSync('scripts/staging2/valoracion-placement.mjs', 'utf8');
 const firstPartyA11y = fs.readFileSync('scripts/staging2/first-party-valoracion-a11y.mjs', 'utf8');
+const bootstrap = fs.readFileSync('wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php', 'utf8');
+const gtmIntegration = fs.readFileSync('wp-content/themes/nuvanx-medical/inc/nvx-gtm-integration.php', 'utf8');
 
 assert.match(managedPage, /id="nvx-hubspot-form"/, 'Managed valoración page must retain its stable conversion-section anchor');
 assert.match(managedPage, /id="nvx-valoracion-first-party-form"/, 'Managed valoración page must render the canonical first-party owner directly');
@@ -21,6 +23,10 @@ assert.match(managedPage, /data-nvx-first-party-owner="1"/, 'Managed first-party
 assert.match(managedPage, /nvx_valoracion_direct_form_markup\(\)/, 'Managed landing must render the canonical direct form');
 assert.doesNotMatch(managedPage, /nvx-hubspot-native-form|hs-form-frame|forms\/embed\//, 'Managed source must define zero browser HubSpot forms');
 assert.doesNotMatch(managedPage, /nvx_valoracion_hubspot_bootstrap_markup/, 'Retired inline HubSpot bootstrap must be removed');
+
+// Verify HubSpot is loaded from bootstrap manifest, not laterally
+assert.match(bootstrap, /'inc\/nvx-hubspot-secure-attribution\.php'/, 'HubSpot secure attribution must be loaded from bootstrap manifest');
+assert.doesNotMatch(gtmIntegration, /require_once.*nvx-hubspot-secure-attribution/, 'GTM integration must not laterally load HubSpot');
 
 assert.doesNotMatch(ctaComponents, /nvx-valoracion-first-party-owner\.php/, 'CTA components must not load a compatibility owner module');
 assert.match(heroGovernance, /function nvx_hero_insert_media_figure\( string \$content, string \$figure \): string/, 'Canonical hero media helper must remain present');

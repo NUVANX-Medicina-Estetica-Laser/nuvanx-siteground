@@ -7,6 +7,7 @@ const authPath = 'wp-content/themes/nuvanx-medical/inc/nvx-google-attribution-re
 const behaviorPath = 'scripts/lint/test-google-attribution-relay-auth.php';
 const gtmPath = 'wp-content/themes/nuvanx-medical/inc/nvx-gtm-integration.php';
 const integrationPath = 'wp-content/themes/nuvanx-medical/inc/nvx-attribution-integration.php';
+const bootstrapPath = 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php';
 
 for (const path of [authPath, behaviorPath, gtmPath, integrationPath]) {
   assert.ok(fs.existsSync(path), `Missing Google attribution relay dependency: ${path}`);
@@ -15,8 +16,12 @@ for (const path of [authPath, behaviorPath, gtmPath, integrationPath]) {
 const auth = fs.readFileSync(authPath, 'utf8');
 const gtm = fs.readFileSync(gtmPath, 'utf8');
 const integration = fs.readFileSync(integrationPath, 'utf8');
+const bootstrap = fs.readFileSync(bootstrapPath, 'utf8');
 
-assert.match(gtm, /require_once __DIR__ \. '\/nvx-google-attribution-relay-auth\.php';/);
+assert.doesNotMatch(gtm, /require_once.*nvx-google-attribution-relay-auth/,
+  'GTM integration must not laterally load Google auth (bootstrap manifest owns this)');
+assert.match(bootstrap, /'inc\/nvx-google-attribution-relay-auth\.php'/,
+  'Google attribution relay auth must be loaded from bootstrap manifest');
 assert.match(integration, /google-click-attribution/);
 assert.match(integration, /nvx_supabase_relay_dispatch/);
 
