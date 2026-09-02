@@ -47,6 +47,12 @@ foreach ( array_keys( $complete ) as $field ) {
 	nvx_block6_assert( ! nvx_medical_review_reviewer_complete( $invalid ), 'EMPTY_REVIEWER_FIELD_REJECTED_' . $field );
 }
 
+$div_byline     = '<div class="nvx-medical-byline"><div class="nvx-medical-byline__text"><strong>X</strong></div></div>';
+$address_byline = '<address class="nvx-medical-byline"><div class="nvx-medical-byline__text"><strong>Y</strong></div></address>';
+$stripped       = nvx_medical_review_strip_unconditional_bylines( '<p>keep</p>' . $div_byline . $address_byline );
+nvx_block6_assert( false === strpos( $stripped, 'nvx-medical-byline' ), 'UNCONDITIONAL_BYLINES_STRIPPED' );
+nvx_block6_assert( false !== strpos( $stripped, '<p>keep</p>' ), 'NON_BYLINE_CONTENT_PRESERVED' );
+
 $base = '<article><p>Contenido BTL</p><!-- nvx:clinical-note-anchor --></article>';
 $once = nvx_btl_govern_rendered_content( $base );
 nvx_block6_assert( 1 === substr_count( $once, 'data-nvx-btl-clinical-note="1"' ), 'BTL_NOTE_INSERTED_ONCE' );

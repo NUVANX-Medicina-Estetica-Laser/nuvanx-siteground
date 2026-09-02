@@ -119,9 +119,15 @@ function nvx_medical_review_byline_markup( array $record ): string {
 	return $html;
 }
 
-/** Remove unconditional bylines so a single provenance block can be re-injected. */
+/**
+ * Remove unconditional bylines so a single provenance block can be re-injected.
+ *
+ * Covers both the `<div>`-wrapped bylines emitted by page modules and the
+ * `<address>`-wrapped hero byline emitted by BTL detail pages; the closing tag
+ * is matched by backreference so the alternation never over-captures.
+ */
 function nvx_medical_review_strip_unconditional_bylines( string $content ): string {
-	$pattern = '#<div\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>\s*</div>#iu';
+	$pattern = '#<(div|address)\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>\s*</\1>#iu';
 	$clean   = preg_replace( $pattern, '', $content );
 
 	return is_string( $clean ) ? $clean : $content;
