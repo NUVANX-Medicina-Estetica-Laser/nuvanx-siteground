@@ -287,28 +287,121 @@ function nvx_medical_review_byline_markup( array $record ): string {
 	return $html;
 }
 
+/** Whether one opening tag carries the requested class token. */
+function nvx_medical_review_tag_has_class( string $tag_html, string $class_name ): bool {
+	if ( 1 !== preg_match( '/\bclass\s*=\s*(["\'])(.*?)\1/isu', $tag_html, $match ) ) {
+		return false;
+	}
+
+	$classes = preg_split( '/\s+/u', trim( (string) $match[2] ) );
+	return is_array( $classes ) && in_array( $class_name, $classes, true );
+}
+
 /**
- * Remove every legacy visible provenance wrapper used by governed renderers.
+ * Locate complete legacy provenance wrappers with balanced tag ownership.
  *
- * Nested wrappers are removed before flat wrappers so a complete canonical
- * block is never left partially behind. Address and paragraph legacy variants
- * are handled separately to avoid cross-wrapper over-capture.
+ * Fixed-depth regex removal is unsafe because a legacy wrapper may contain
+ * arbitrary nested div blocks. This parser tracks div/address/p nesting and
+ * returns only outermost governed wrapper ranges. If a governed wrapper is
+ * malformed and never closes, the range extends to the end of the fragment so
+ * unapproved provenance cannot fail open.
+ *
+ * @return array<int,array{start:int,length:int}>
  */
+function nvx_medical_review_legacy_wrapper_ranges( string $content ): array {
+	$matched = preg_match_all(
+		'#</?(?:div|address|p)\b[^>]*>#iu',
+		$content,
+		$tokens,
+		PREG_OFFSET_CAPTURE
+	);
+	if ( false === $matched || 0 === $matched ) {
+		return array();
+	}
+
+	$stack  = array();
+	$ranges = array();
+
+	foreach ( $tokens[0] as $token ) {
+		$tag_html = (string) $token[0];
+		$offset   = (int) $token[1];
+
+		if ( 1 === preg_match( '#^</\s*(div|address|p)\s*>#iu', $tag_html, $closing_match ) ) {
+			$closing_tag = strtolower( (string) $closing_match[1] );
+			$match_index = null;
+			for ( $index = count( $stack ) - 1; $index >= 0; --$index ) {
+				if ( $closing_tag === $stack[ $index ]['tag'] ) {
+					$match_index = $index;
+					break;
+				}
+			}
+			if ( null === $match_index ) {
+				continue;
+			}
+
+			$entry = $stack[ $match_index ];
+			$stack = array_slice( $stack, 0, $match_index );
+			if ( $entry['remove'] ) {
+				$ranges[] = array(
+					'start'  => $entry['start'],
+					'length' => $offset + strlen( $tag_html ) - $entry['start'],
+				);
+			}
+			continue;
+		}
+
+		if ( 1 !== preg_match( '#^<\s*(div|address|p)\b#iu', $tag_html, $opening_match ) ) {
+			continue;
+		}
+
+		$tag       = strtolower( (string) $opening_match[1] );
+		$is_target = ( 'p' === $tag && nvx_medical_review_tag_has_class( $tag_html, 'nvx-medical-review' ) )
+			|| ( in_array( $tag, array( 'div', 'address' ), true ) && nvx_medical_review_tag_has_class( $tag_html, 'nvx-medical-byline' ) );
+		$inside_target = false;
+		foreach ( $stack as $ancestor ) {
+			if ( $ancestor['target'] ) {
+				$inside_target = true;
+				break;
+			}
+		}
+
+		$stack[] = array(
+			'tag'    => $tag,
+			'start'  => $offset,
+			'target' => $is_target,
+			'remove' => $is_target && ! $inside_target,
+		);
+	}
+
+	foreach ( $stack as $entry ) {
+		if ( $entry['remove'] ) {
+			$ranges[] = array(
+				'start'  => $entry['start'],
+				'length' => strlen( $content ) - $entry['start'],
+			);
+		}
+	}
+
+	return $ranges;
+}
+
+/** Remove every legacy visible provenance wrapper used by governed renderers. */
 function nvx_medical_review_strip_unconditional_bylines( string $content ): string {
-	$patterns = array(
-		'#<div\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>\s*</div>#iu',
-		'#<address\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>\s*</address>#iu',
-		'#<div\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>#iu',
-		'#<address\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</address>#iu',
-		'#<p\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-review\b[^"\']*["\'][^>]*>[\s\S]*?</p>#iu',
+	$ranges = nvx_medical_review_legacy_wrapper_ranges( $content );
+	if ( empty( $ranges ) ) {
+		return $content;
+	}
+
+	usort(
+		$ranges,
+		static function ( array $left, array $right ): int {
+			return $right['start'] <=> $left['start'];
+		}
 	);
 
 	$clean = $content;
-	foreach ( $patterns as $pattern ) {
-		$updated = preg_replace( $pattern, '', $clean );
-		if ( is_string( $updated ) ) {
-			$clean = $updated;
-		}
+	foreach ( $ranges as $range ) {
+		$clean = substr_replace( $clean, '', $range['start'], $range['length'] );
 	}
 
 	return $clean;
