@@ -15,7 +15,7 @@
     "lint:function-collisions": "php scripts/lint/test-theme-function-collisions.php",
     "lint:integrations-runtime": "php scripts/lint/test-integrations-runtime-contract.php",
     "lint:bootstrap": "node scripts/lint/test-theme-bootstrap-single-owner.mjs && php scripts/lint/test-theme-request-boundary.php",
-    "lint:outbox-concurrency": "php scripts/lint/test-relay-concurrency-v2.php",
+    "lint:outbox-concurrency": "php -d display_errors=1 scripts/lint/test-relay-concurrency-v2.php",
     "lint:complianz": "node scripts/lint/test-complianz-a11y-sanitizer.mjs && node scripts/lint/test-complianz-policy-routing.mjs && php scripts/lint/test-complianz-policy-routing.php",
     "lint:schema": "node scripts/lint/test-schema-semantic-contract.mjs && php scripts/lint/test-robots-txt-governance.php && php scripts/lint/test-treatment-faqpage-contract.php",
     "lint:endolaser-approval": "node scripts/lint/test-endolaser-claim-approval.mjs",
