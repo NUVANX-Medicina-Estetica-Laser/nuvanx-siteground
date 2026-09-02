@@ -14,10 +14,10 @@ if ( ! defined( 'NVX_HOOK_PRIO_MEDICAL_REVIEW' ) ) {
 	define( 'NVX_HOOK_PRIO_MEDICAL_REVIEW', 60 );
 }
 
-$GLOBALS['nvx_test_path']       = '/madrid/valoracion/';
-$GLOBALS['nvx_test_treatment']  = false;
-$GLOBALS['nvx_test_post_meta']  = array();
-$GLOBALS['nvx_test_approvals']  = array(
+$GLOBALS['nvx_test_path']      = '/madrid/valoracion/';
+$GLOBALS['nvx_test_treatment'] = false;
+$GLOBALS['nvx_test_post_meta'] = array();
+$GLOBALS['nvx_test_approvals'] = array(
 	'managed_pages' => array(
 		'/madrid/valoracion/' => array(
 			'status'   => 'approved',
@@ -69,6 +69,7 @@ nvx_provenance_assert( is_array( $managed ), 'MANAGED_APPROVAL_RESOLVES' );
 nvx_provenance_assert( 'managed_registry' === ( $managed['source'] ?? '' ), 'MANAGED_APPROVAL_SOURCE' );
 nvx_provenance_assert( '2026-08-01' === ( $managed['date'] ?? '' ), 'MANAGED_APPROVAL_DATE' );
 nvx_provenance_assert( 'Dr. José Javier Rivera Tejeda' === ( $managed['name'] ?? '' ), 'MANAGED_APPROVAL_REVIEWER' );
+nvx_provenance_assert( nvx_medical_review_governed_page(), 'MANAGED_PAGE_IS_GOVERNED' );
 
 $rogue_graph = array(
 	array(
@@ -85,12 +86,21 @@ nvx_provenance_assert(
 );
 nvx_provenance_assert( '2026-08-01' === ( $governed[0]['lastReviewed'] ?? '' ), 'ROGUE_DATE_REPLACED_BY_APPROVED_DATE' );
 
-$GLOBALS['nvx_test_path'] = '/unapproved-managed-page/';
-$unapproved = nvx_medical_review_record();
-nvx_provenance_assert( null === $unapproved, 'UNAPPROVED_MANAGED_PAGE_FAILS_CLOSED' );
+// A registered managed page remains inside the governance perimeter even when
+// its approval becomes pending: rogue provenance is removed and nothing is emitted.
+$GLOBALS['nvx_test_approvals']['managed_pages']['/madrid/valoracion/']['status'] = 'pending';
+$pending = nvx_medical_review_record();
+nvx_provenance_assert( null === $pending, 'REGISTERED_PENDING_PAGE_FAILS_CLOSED' );
+nvx_provenance_assert( nvx_medical_review_governed_page(), 'REGISTERED_PENDING_PAGE_STAYS_GOVERNED' );
 $clean = nvx_medical_review_schema_graph( $rogue_graph );
-nvx_provenance_assert( ! isset( $clean[0]['reviewedBy'] ), 'UNAPPROVED_ROGUE_REVIEWER_REMOVED' );
-nvx_provenance_assert( ! isset( $clean[0]['lastReviewed'] ), 'UNAPPROVED_ROGUE_DATE_REMOVED' );
+nvx_provenance_assert( ! isset( $clean[0]['reviewedBy'] ), 'PENDING_ROGUE_REVIEWER_REMOVED' );
+nvx_provenance_assert( ! isset( $clean[0]['lastReviewed'] ), 'PENDING_ROGUE_DATE_REMOVED' );
+
+// An unrelated page is outside this owner's perimeter and must remain untouched.
+$GLOBALS['nvx_test_path'] = '/unrelated-page/';
+$unrelated = nvx_medical_review_schema_graph( $rogue_graph );
+nvx_provenance_assert( 'https://rogue.example/#doctor' === ( $unrelated[0]['reviewedBy']['@id'] ?? '' ), 'UNRELATED_PAGE_GRAPH_LEFT_UNTOUCHED' );
+nvx_provenance_assert( '1999-01-01' === ( $unrelated[0]['lastReviewed'] ?? '' ), 'UNRELATED_PAGE_DATE_LEFT_UNTOUCHED' );
 
 $GLOBALS['nvx_test_treatment'] = true;
 $GLOBALS['nvx_test_post_meta'] = array(
@@ -107,6 +117,7 @@ $GLOBALS['nvx_test_post_meta']['_nvx_medical_review_status'] = 'pending';
 nvx_provenance_assert( null === nvx_medical_review_record( 42 ), 'TREATMENT_PENDING_FAILS_CLOSED' );
 
 $registry_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/data/medical-review-approvals.json' );
+nvx_provenance_assert( false !== strpos( $registry_source, '"version": 1' ), 'MANAGED_APPROVAL_REGISTRY_VERSIONED' );
 nvx_provenance_assert( false !== strpos( $registry_source, '"/madrid/valoracion/"' ), 'VALORACION_APPROVAL_VERSIONED' );
 nvx_provenance_assert( false !== strpos( $registry_source, '"/papada-definicion-mandibular-madrid/"' ), 'PAPADA_APPROVAL_VERSIONED' );
 
@@ -114,4 +125,4 @@ $medical_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx
 nvx_provenance_assert( false !== strpos( $medical_source, "unset( \$graph[ \$index ]['reviewedBy'], \$graph[ \$index ]['lastReviewed'] )" ), 'CANONICAL_OWNER_SANITIZES_EARLIER_PROVENANCE' );
 nvx_provenance_assert( false !== strpos( $medical_source, "\$graph[ \$index ]['lastReviewed'] = \$record['date']" ), 'CANONICAL_OWNER_EMITS_APPROVED_DATE' );
 
-echo 'PHP_MEDICAL_PROVENANCE_OWNER=PASS managed_registry=approved treatment_meta=preserved rogue_provenance=fail_closed' . PHP_EOL;
+echo 'PHP_MEDICAL_PROVENANCE_OWNER=PASS managed_registry=approved treatment_meta=preserved rogue_provenance=fail_closed scope=governed_only' . PHP_EOL;
