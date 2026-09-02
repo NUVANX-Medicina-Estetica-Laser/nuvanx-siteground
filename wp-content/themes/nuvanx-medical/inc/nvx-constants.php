@@ -46,6 +46,7 @@ const NVX_HOOK_PRIO_HERO_MEDIA         = 12;
 const NVX_HOOK_PRIO_INTERNAL_LINKS        = 13;
 const NVX_HOOK_PRIO_VALORACION_FORM_FIRST = 14;
 const NVX_HOOK_PRIO_VALORACION_FORM_CLASS = 15;
+const NVX_HOOK_PRIO_EXTERNAL_LINKS_REL    = 15; // Intentional collision: performance rel hardening follows registration order.
 const NVX_HOOK_PRIO_VALORACION_ENHANCE    = 16;
 const NVX_HOOK_PRIO_TREATMENTS_INDEX      = 18;
 
@@ -91,5 +92,12 @@ const NVX_HOOK_PRIO_QUE_EXIGIR       = 122;
 const NVX_HOOK_PRIO_EXION_INVESTMENT = 126;
 const NVX_HOOK_PRIO_MEDICAL_REVIEW   = 144;
 
+// Late Editorial / Media Governance
+const NVX_HOOK_PRIO_AUTHENTIC_PHOTOGRAPHY = 175;
+const NVX_HOOK_PRIO_PUBLIC_VENDOR_IMAGES   = 198;
+const NVX_HOOK_PRIO_CLINIC_VENDOR_PACKSHOTS = 199;
+
 // Extreme Late Normalization
-const NVX_HOOK_PRIO_SIGNATURE_NAMES = 219;
+const NVX_HOOK_PRIO_SIGNATURE_NAMES                 = 219;
+const NVX_HOOK_PRIO_BRAND_WRAPPER_NORMALIZE         = PHP_INT_MAX;
+const NVX_HOOK_PRIO_MANAGED_COMPONENT_PROSE_WRAPPER = PHP_INT_MAX; // Intentional collision; load order determines final normalizer order.
