@@ -57,7 +57,7 @@ function nvx_aesthetic_schema_euro_amounts( string $price_text ): array {
 		return array();
 	}
 
-	$pattern = '/(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*(?:€|EUR)/iu';
+	$pattern = '/(?<![\d.,])(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*(?:€|EUR)/iu';
 	if ( ! preg_match_all( $pattern, $price_text, $matches ) || empty( $matches[1] ) ) {
 		return array();
 	}
