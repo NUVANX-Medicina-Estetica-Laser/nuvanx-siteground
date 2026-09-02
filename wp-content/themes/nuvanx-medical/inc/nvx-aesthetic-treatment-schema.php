@@ -42,6 +42,48 @@ function nvx_aesthetic_schema_named_nodes( array $names, string $type ): array {
 }
 
 /**
+ * Extract explicit EUR amounts from a public price string.
+ *
+ * Only numbers directly associated with € / EUR are accepted. This prevents
+ * session counts, durations or dosage numbers in the same copy from becoming
+ * an accidental schema.org Offer price.
+ *
+ * Spanish thousands/decimal notation is normalized (1.064,80 € -> 1064.80).
+ *
+ * @return float[]
+ */
+function nvx_aesthetic_schema_euro_amounts( string $price_text ): array {
+	if ( '' === trim( $price_text ) ) {
+		return array();
+	}
+
+	$pattern = '/(\d+(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*(?:€|EUR)/iu';
+	if ( ! preg_match_all( $pattern, $price_text, $matches ) || empty( $matches[1] ) ) {
+		return array();
+	}
+
+	$prices = array();
+	foreach ( $matches[1] as $match ) {
+		$raw = (string) $match;
+		if ( false !== strpos( $raw, ',' ) ) {
+			$normalized = str_replace( '.', '', $raw );
+			$normalized = str_replace( ',', '.', $normalized );
+		} elseif ( 1 === preg_match( '/^\d{1,3}(?:\.\d{3})+$/D', $raw ) ) {
+			$normalized = str_replace( '.', '', $raw );
+		} else {
+			$normalized = $raw;
+		}
+
+		$amount = (float) $normalized;
+		if ( $amount > 0 ) {
+			$prices[] = $amount;
+		}
+	}
+
+	return $prices;
+}
+
+/**
  * Build the MedicalProcedure/Service node for a facial treatment page.
  *
  * @param array<string,mixed> $schema Schema catalog entry.
@@ -77,33 +119,14 @@ function nvx_aesthetic_schema_procedure_node(
 	// Note: performer property removed - belongs to Event, not MedicalProcedure/Service
 	// MedicalProcedure uses provider relationship instead
 
-	// Extract numeric price from price_range string for schema.org Offer.
-	// Spanish tariffs use '.' as thousands separator and ',' as decimal
-	// (e.g. "1.200,50 €"), so strip thousands dots before casting to float
-	// to avoid publishing "1.200" as 1.2 in the schema.org Offer.
 	if ( ! empty( $entry['price_range'] ) ) {
 		$price_text = (string) $entry['price_range'];
-		$numeric_price = null;
-		$high_price = null;
+		$prices     = nvx_aesthetic_schema_euro_amounts( $price_text );
 
-		// Extract all numeric values from the price text
-		if ( preg_match_all( '/(\d[\d.]*(?:,\d+)?)/', $price_text, $matches ) ) {
-			$prices = array();
-			foreach ( $matches[1] as $match ) {
-				if ( false !== strpos( $match, ',' ) ) {
-					$normalized = str_replace( '.', '', $match );
-					$normalized = str_replace( ',', '.', $normalized );
-				} else {
-					$normalized = preg_replace( '/\.(?=\d{3}(?!\d))/', '', $match );
-				}
-				$prices[] = (float) $normalized;
-			}
-
+		if ( array() !== $prices ) {
 			$numeric_price = min( $prices );
-			$high_price = max( $prices );
-		}
+			$high_price    = max( $prices );
 
-		if ( null !== $numeric_price && $numeric_price > 0 ) {
 			$offer = array(
 				'@type'         => 'Offer',
 				'price'         => function_exists( 'nvx_schema_price_string' ) ? nvx_schema_price_string( $numeric_price ) : (string) $numeric_price,
@@ -112,7 +135,7 @@ function nvx_aesthetic_schema_procedure_node(
 				'description'   => $price_text,
 			);
 
-			if ( null !== $high_price && $high_price > $numeric_price ) {
+			if ( $high_price > $numeric_price ) {
 				$offer['priceSpecification'] = array(
 					'@type'         => 'PriceSpecification',
 					'price'         => function_exists( 'nvx_schema_price_string' ) ? nvx_schema_price_string( $numeric_price ) : (string) $numeric_price,
@@ -171,7 +194,6 @@ function nvx_aesthetic_treatment_extend_yoast_graph( $graph, $context = null ) {
 
 	$catalog        = nvx_aesthetic_treatment_catalog();
 	$schema_catalog = nvx_aesthetic_treatment_schema_catalog();
-	$faq_catalog    = nvx_aesthetic_treatment_faq_catalog();
 	if ( empty( $catalog[ $key ] ) || empty( $schema_catalog[ $key ] ) ) {
 		return $graph;
 	}
