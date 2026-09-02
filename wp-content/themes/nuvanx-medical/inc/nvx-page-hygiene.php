@@ -80,7 +80,7 @@ function nvx_redirect_valoracion_aliases(): void {
 	$query_args = is_array( $context ) ? $context['query_args'] : array();
 	$target     = home_url( '/madrid/valoracion/' );
 	if ( ! empty( $query_args ) ) {
-		$target = add_query_arg( urlencode_deep( $query_args ), $target );
+		$target = add_query_arg( $query_args, $target );
 	}
 
 	wp_safe_redirect( $target, 301, 'NUVANX' );
