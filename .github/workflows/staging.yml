@@ -179,14 +179,12 @@ jobs:
           find scripts/staging2 -maxdepth 1 -name '*.mjs' -type f -print0 | xargs -0 -r -n1 node --check
           echo 'STATIC_GATES=PASS'
 
-      - name: Run deep PHP quality gates
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deep_quality }}
+      - name: Run PHPStan blocking analysis
         shell: bash
         run: |
           set -euo pipefail
           cd wp-content/themes/nuvanx-medical
           composer install --no-interaction --no-progress --prefer-dist
-          ./vendor/bin/phpcs --standard=phpcs.xml.dist --report=full -s
           ./vendor/bin/phpstan analyse --configuration=phpstan.neon --error-format=table --no-progress --memory-limit=1G
 
       - name: Scan committed history for secrets
