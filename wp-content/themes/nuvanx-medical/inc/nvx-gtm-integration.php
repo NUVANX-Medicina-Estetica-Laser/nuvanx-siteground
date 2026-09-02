@@ -12,8 +12,12 @@
  * GTM loader makes it available before Site Kit's container executes, including
  * when third-party scripts are delayed by the theme performance layer.
  *
+ * Dependencies are loaded exclusively by nvx-theme-bootstrap.php.
+ *
  * @package nuvanx-medical
  */
+
+declare(strict_types=1);
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -43,9 +47,7 @@ function nvx_gtm_context_route(): array {
 	return $route;
 }
 
-/**
- * Resolve the canonical NUVANX analytics page type for the current request.
- */
+/** Resolve the canonical NUVANX analytics page type for the current request. */
 function nvx_gtm_context_page_type(): string {
 	if ( is_front_page() ) {
 		return 'home';
@@ -92,12 +94,6 @@ function nvx_gtm_context_page_type(): string {
 /**
  * Resolve non-Google business configuration consumed by nvx-conversion-events.js.
  *
- * This deliberately excludes GTM container IDs and form conversion-action IDs.
- * Site Kit owns Google tag configuration. Theme-owned click conversions are
- * injected separately from ads-conversion-catalog.json. The theme exposes the
- * canonical HubSpot form identity required by the NUVANX event classifier.
- * The secure bridge is the single source of truth for that form identity.
- *
  * @return array{env:string,forms:array{valoracion:string}}
  */
 function nvx_gtm_client_context(): array {
@@ -141,14 +137,7 @@ function nvx_attribution_qa_context(): array {
 	);
 }
 
-/**
- * Whether the current public request contains a canonical valoración form.
- *
- * The full valoración landing owns the form directly. Most other public pages
- * own it through the site-wide valoración modal. Contacto and post-conversion
- * pages intentionally remain form-free. If the modal module is unavailable,
- * fail open to the previous global behavior rather than dropping attribution.
- */
+/** Whether the current public request contains a canonical valoración form. */
 function nvx_attribution_browser_runtime_required(): bool {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || is_feed() ) {
 		return false;
@@ -169,10 +158,7 @@ function nvx_attribution_browser_runtime_required(): bool {
 	return true;
 }
 
-/**
- * Enqueue the attribution contract runtime before conversion events.
- * Priority 9 ensures it loads before the conversion relay at priority 10.
- */
+/** Enqueue the attribution contract runtime before conversion events. */
 function nvx_gtm_enqueue_attribution_contract(): void {
 	if ( ! nvx_attribution_browser_runtime_required() ) {
 		return;
@@ -191,13 +177,7 @@ function nvx_gtm_enqueue_attribution_contract(): void {
 }
 add_action( 'wp_enqueue_scripts', 'nvx_gtm_enqueue_attribution_contract', 9 );
 
-/**
- * Keep the HubSpot attribution synchronizer off pages without any form surface.
- *
- * The synchronizer is registered by nvx-attribution-integration.php at the same
- * enqueue priority. A later dequeue makes the ownership explicit and avoids an
- * unresolved dependency when the contract itself was intentionally not loaded.
- */
+/** Keep attribution synchronizers off pages without a form surface. */
 function nvx_gtm_scope_attribution_form_assets(): void {
 	if ( nvx_attribution_browser_runtime_required() ) {
 		return;
@@ -208,10 +188,7 @@ function nvx_gtm_scope_attribution_form_assets(): void {
 }
 add_action( 'wp_enqueue_scripts', 'nvx_gtm_scope_attribution_form_assets', 99 );
 
-/**
- * Push NUVANX business context before Site Kit executes the GTM container.
- * Includes the server-owned QA context exposed to the browser runtime.
- */
+/** Push NUVANX business context before Site Kit executes the GTM container. */
 function nvx_gtm_push_context(): void {
 	if ( is_admin() ) {
 		return;
@@ -263,18 +240,3 @@ function nvx_gtm_push_context(): void {
 	wp_print_inline_script_tag( $script );
 }
 add_action( 'wp_head', 'nvx_gtm_push_context', 1 );
-
-require_once __DIR__ . '/nvx-ads-conversion-catalog.php';
-
-// Load the secure HubSpot attribution bridge (Runtime Contract v2).
-require_once __DIR__ . '/nvx-hubspot-secure-attribution.php';
-require_once __DIR__ . '/nvx-attribution-integration.php';
-
-// Persistent at-least-once outbox shared by both Supabase relays.
-require_once __DIR__ . '/nvx-supabase-relay-queue.php';
-
-// Mirror successful secure HubSpot submissions into the canonical first-party capture ledger.
-require_once __DIR__ . '/nvx-lead-captured-relay.php';
-
-// Authenticate server-side Google click attribution relay requests before transport.
-require_once __DIR__ . '/nvx-google-attribution-relay-auth.php';
