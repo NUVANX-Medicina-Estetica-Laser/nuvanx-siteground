@@ -1,148 +1,627 @@
 <?php
 /**
- * Canonical Request Context Boundary.
+ * Canonical immutable HTTP request context.
  *
- * Provides a single, early source of truth for the incoming HTTP request.
- * Normalizes and sanitizes paths, query strings, and hosts, and resolves
- * the environment without exclusively trusting client headers.
+ * Captures the incoming request once during theme bootstrap and exposes
+ * normalized, bounded, server-governed request metadata to the rest of NUVANX.
+ *
+ * Environment classification never trusts arbitrary Host headers.
  *
  * @package nuvanx-medical
  */
+
+declare(strict_types=1);
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * Returns the centralized, immutable request context.
+if ( ! defined( 'NVX_REQUEST_MAX_URI_BYTES' ) ) {
+	define( 'NVX_REQUEST_MAX_URI_BYTES', 8192 );
+}
+
+if ( ! defined( 'NVX_REQUEST_MAX_QUERY_DEPTH' ) ) {
+	define( 'NVX_REQUEST_MAX_QUERY_DEPTH', 4 );
+}
+
+if ( ! defined( 'NVX_REQUEST_MAX_QUERY_ITEMS' ) ) {
+	define( 'NVX_REQUEST_MAX_QUERY_ITEMS', 100 );
+}
+
+if ( ! defined( 'NVX_REQUEST_MAX_QUERY_VALUE_BYTES' ) ) {
+	define( 'NVX_REQUEST_MAX_QUERY_VALUE_BYTES', 2048 );
+}
+
+/*
+ * Capture the browser-owned request values once, before peer theme modules
+ * can mutate $_SERVER.
  *
- * @return array {
- *     @type string $uri             Immutable original URI (unslashed and URL-sanitized).
- *     @type string $path            Normalized path (without query string), e.g., '/foo/bar/'.
- *     @type array  $query_args      Structured, sanitized query arguments.
- *     @type string $host            Configured/validated host.
- *     @type bool   $is_production   True if strictly classified as production.
- *     @type bool   $is_staging2     True if strictly classified as staging2.
- * }
+ * These constants are internal request snapshots. They are never rendered
+ * or logged directly.
  */
-function nvx_theme_request_context(): array {
-	static $context = null;
+if ( ! defined( 'NVX_REQUEST_BOOT_URI' ) ) {
+	$nvx_request_boot_uri = isset( $_SERVER['REQUEST_URI'] )
+		? wp_unslash(
+			(string) $_SERVER['REQUEST_URI']
+		)
+		: '';
 
-	if ( is_array( $context ) ) {
-		return $context;
-	}
-
-	// 1. Immutable URI & Path
-	$raw_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-	$uri     = esc_url_raw( $raw_uri );
-	$parsed  = wp_parse_url( $uri );
-	$path    = is_array( $parsed ) && isset( $parsed['path'] ) ? '/' . trim( $parsed['path'], '/' ) . '/' : '/';
-
-	// 2. Query Args
-	$query_string = isset( $_SERVER['QUERY_STRING'] ) ? wp_unslash( $_SERVER['QUERY_STRING'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-	$query_args   = array();
-	wp_parse_str( $query_string, $query_args );
-	// We do deep sanitization of query args.
-	$query_args = nvx_theme_request_sanitize_query_args( $query_args );
-
-	// 3. Host
-	$site_host   = wp_parse_url( get_option( 'home' ), PHP_URL_HOST );
-	$site_host   = is_string( $site_host ) ? strtolower( trim( $site_host ) ) : '';
-	$client_host = isset( $_SERVER['HTTP_HOST'] ) ? strtolower( trim( wp_unslash( $_SERVER['HTTP_HOST'] ) ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-	$client_host = wp_parse_url( 'https://' . $client_host, PHP_URL_HOST );
-	$client_host = is_string( $client_host ) ? $client_host : '';
-	
-	// Default to configured site host. Use client host only if it matches expected variants.
-	$host = $site_host;
-	if ( '' !== $client_host ) {
-		if ( ( str_ends_with( $client_host, '.sg-host.com' ) && preg_match( '/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.sg-host\.com$/', $client_host ) ) || 'staging2.nuvanx.com' === $client_host || $client_host === $site_host ) {
-			$host = $client_host;
-		}
-	}
-
-	// 4. Environment
-	$is_production = true;
-	$is_staging2   = false;
-
-	if ( defined( 'WP_CLI' ) && WP_CLI && '1' === getenv( 'NVX_ALLOW_STAGING_YOAST_INDEXABLE_REBUILD' ) ) {
-		// Retain exception for WP-CLI Yoast reindex
-		$is_production = true;
-	} else {
-		if ( defined( 'NVX_ENV' ) && 'production' !== NVX_ENV ) {
-			$is_production = false;
-		}
-		if ( false !== strpos( $host, '.sg-host.com' ) || false !== strpos( $host, 'staging' ) ) {
-			$is_production = false;
-		}
-		
-		if ( 'staging2.nuvanx.com' === $host || ( defined( 'NVX_ENV' ) && 'staging2' === NVX_ENV ) ) {
-			$is_staging2 = true;
-			// Allow filter for backward compatibility with the old function
-			$is_staging2 = (bool) apply_filters( 'nvx_environment_is_staging2', $is_staging2, $host );
-		}
-	}
-
-	$context = array(
-		'uri'           => $uri,
-		'path'          => $path,
-		'query_args'    => $query_args,
-		'host'          => $host,
-		'is_production' => $is_production,
-		'is_staging2'   => $is_staging2,
+	$nvx_request_boot_uri = substr(
+		$nvx_request_boot_uri,
+		0,
+		NVX_REQUEST_MAX_URI_BYTES
 	);
 
-	return $context;
+	define(
+		'NVX_REQUEST_BOOT_URI',
+		sanitize_url(
+			$nvx_request_boot_uri
+		)
+	);
+
+	unset( $nvx_request_boot_uri );
+}
+
+if ( ! defined( 'NVX_REQUEST_BOOT_HOST' ) ) {
+	$nvx_request_boot_host = isset( $_SERVER['HTTP_HOST'] )
+		? sanitize_text_field(
+			wp_unslash(
+				(string) $_SERVER['HTTP_HOST']
+			)
+		)
+		: '';
+
+	define(
+		'NVX_REQUEST_BOOT_HOST',
+		strtolower(
+			trim(
+				$nvx_request_boot_host
+			)
+		)
+	);
+
+	unset( $nvx_request_boot_host );
 }
 
 /**
- * Deeply sanitize query arguments, preserving attribution parameters.
- *
- * @param array $args Parsed query arguments.
- * @return array Sanitized query arguments.
+ * Bound one scalar query value.
  */
-function nvx_theme_request_sanitize_query_args( array $args ): array {
-	$sanitized = array();
-	foreach ( $args as $key => $value ) {
-		$safe_key = sanitize_key( $key );
-		if ( '' === $safe_key ) {
-			continue;
+if ( ! function_exists( 'nvx_theme_request_bound_query_value' ) ) {
+	function nvx_theme_request_bound_query_value(
+		mixed $value
+	): string {
+		if (
+			! is_scalar( $value )
+			&& null !== $value
+		) {
+			return '';
 		}
-		
-		if ( is_array( $value ) ) {
-			$sanitized[ $safe_key ] = nvx_theme_request_sanitize_query_args( $value );
-		} else {
-			// For attribution parameters, we might want to be careful with formatting,
-			// but sanitize_text_field is usually safe and sufficient for these.
-			$sanitized[ $safe_key ] = sanitize_text_field( $value );
+
+		$value = sanitize_text_field(
+			(string) $value
+		);
+
+		if (
+			strlen( $value )
+			<= NVX_REQUEST_MAX_QUERY_VALUE_BYTES
+		) {
+			return $value;
 		}
+
+		if ( function_exists( 'mb_substr' ) ) {
+			return (string) mb_substr(
+				$value,
+				0,
+				NVX_REQUEST_MAX_QUERY_VALUE_BYTES,
+				'UTF-8'
+			);
+		}
+
+		return substr(
+			$value,
+			0,
+			NVX_REQUEST_MAX_QUERY_VALUE_BYTES
+		);
 	}
-	return $sanitized;
 }
 
 /**
- * Returns the normalized request path from REQUEST_URI.
+ * Recursively sanitize query arguments with strict complexity limits.
  *
- * @return string Path without query string, or '' when REQUEST_URI is unset.
+ * @param array<mixed> $args Input query arguments.
+ * @return array<string,mixed>
  */
-function nvx_theme_request_path(): string {
-	$context = nvx_theme_request_context();
-	// Keep compatibility with older nvx_theme_request_path returning '' for empty.
-	if ( '/' === $context['path'] && ! isset( $_SERVER['REQUEST_URI'] ) ) {
-		return '';
+if ( ! function_exists( 'nvx_theme_request_sanitize_query_args_recursive' ) ) {
+	function nvx_theme_request_sanitize_query_args_recursive(
+		array $args,
+		int $depth,
+		int &$remaining
+	): array {
+		if (
+			$depth >= NVX_REQUEST_MAX_QUERY_DEPTH
+			|| $remaining <= 0
+		) {
+			return array();
+		}
+
+		$output = array();
+
+		foreach ( $args as $key => $value ) {
+			if ( $remaining <= 0 ) {
+				break;
+			}
+
+			$raw_key = strtolower(
+				trim(
+					(string) $key
+				)
+			);
+
+			$safe_key =
+				sanitize_key(
+					$raw_key
+				);
+
+			/*
+			 * Do not silently transform malformed names into a different
+			 * trusted parameter name.
+			 */
+			if (
+				'' === $safe_key
+				|| $safe_key !== $raw_key
+			) {
+				continue;
+			}
+
+			--$remaining;
+
+			if ( is_array( $value ) ) {
+				$output[ $safe_key ] =
+					nvx_theme_request_sanitize_query_args_recursive(
+						$value,
+						$depth + 1,
+						$remaining
+					);
+
+				continue;
+			}
+
+			$output[ $safe_key ] =
+				nvx_theme_request_bound_query_value(
+					$value
+				);
+		}
+
+		return $output;
 	}
-	// Note: previous implementation returned string WITHOUT trailing/leading slash for trim,
-	// wait, it returned (string) strtok( $raw, '?' ); which kept leading/trailing slashes.
-	// We'll return the exact path with slashes.
-	return $context['path'];
 }
 
 /**
- * Determines whether the current installation should be treated as non-production.
+ * Sanitize structured query arguments.
  *
- * @return bool `true` for staging, local, etc.; `false` for production.
+ * @param array<mixed> $args Parsed arguments.
+ * @return array<string,mixed>
  */
-function nvx_seo_is_nonproduction_environment(): bool {
-	$context = nvx_theme_request_context();
-	return ! $context['is_production'];
+if ( ! function_exists( 'nvx_theme_request_sanitize_query_args' ) ) {
+	function nvx_theme_request_sanitize_query_args(
+		array $args
+	): array {
+		$remaining =
+			NVX_REQUEST_MAX_QUERY_ITEMS;
+
+		return nvx_theme_request_sanitize_query_args_recursive(
+			$args,
+			0,
+			$remaining
+		);
+	}
 }
-nvx_theme_request_context();
+
+/**
+ * Configured production hosts.
+ *
+ * @return string[]
+ */
+if ( ! function_exists( 'nvx_theme_request_production_hosts' ) ) {
+	function nvx_theme_request_production_hosts(): array {
+		return array(
+			'nuvanx.com',
+			'www.nuvanx.com',
+		);
+	}
+}
+
+/**
+ * Configured non-production hosts.
+ *
+ * SiteGround hostnames are accepted ONLY when wp-config.php explicitly
+ * defines NVX_SITEGROUND_STAGING_HOST.
+ *
+ * @return string[]
+ */
+if ( ! function_exists( 'nvx_theme_request_staging_hosts' ) ) {
+	function nvx_theme_request_staging_hosts(): array {
+		$hosts = array(
+			'staging2.nuvanx.com',
+		);
+
+		if (
+			defined( 'NVX_SITEGROUND_STAGING_HOST' )
+		) {
+			$host = strtolower(
+				trim(
+					sanitize_text_field(
+						(string)
+							NVX_SITEGROUND_STAGING_HOST
+					)
+				)
+			);
+
+			if (
+				1 === preg_match(
+					'/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.sg-host\.com$/D',
+					$host
+				)
+			) {
+				$hosts[] = $host;
+			}
+		}
+
+		return array_values(
+			array_unique( $hosts )
+		);
+	}
+}
+
+/**
+ * Resolve the configured WordPress host.
+ */
+if ( ! function_exists( 'nvx_theme_request_configured_host' ) ) {
+	function nvx_theme_request_configured_host(): string {
+		$home_host = wp_parse_url(
+			home_url( '/' ),
+			PHP_URL_HOST
+		);
+
+		if ( ! is_string( $home_host ) ) {
+			return '';
+		}
+
+		return strtolower(
+			trim( $home_host )
+		);
+	}
+}
+
+/**
+ * Resolve the trusted effective host.
+ *
+ * The configured WordPress home is authoritative.
+ * HTTP_HOST can only be used as a fallback when no configured host exists
+ * and the value is explicitly in the NUVANX allowlist.
+ */
+if ( ! function_exists( 'nvx_theme_request_trusted_host' ) ) {
+	function nvx_theme_request_trusted_host(): string {
+		$production =
+			nvx_theme_request_production_hosts();
+
+		$staging =
+			nvx_theme_request_staging_hosts();
+
+		$allowed =
+			array_merge(
+				$production,
+				$staging
+			);
+
+		$configured =
+			nvx_theme_request_configured_host();
+
+		if (
+			in_array(
+				$configured,
+				$allowed,
+				true
+			)
+		) {
+			return $configured;
+		}
+
+		/*
+		 * Fail closed when WordPress has an unexpected configured host.
+		 * An arbitrary client Host must never override it.
+		 */
+		if ( '' !== $configured ) {
+			return '';
+		}
+
+		$client_host = wp_parse_url(
+			'https://'
+				. NVX_REQUEST_BOOT_HOST,
+			PHP_URL_HOST
+		);
+
+		$client_host =
+			is_string( $client_host )
+				? strtolower(
+					trim(
+						$client_host
+					)
+				)
+				: '';
+
+		return in_array(
+			$client_host,
+			$allowed,
+			true
+		)
+			? $client_host
+			: '';
+	}
+}
+
+/**
+ * Resolve canonical environment classification.
+ *
+ * @return 'production'|'staging2'|'nonproduction'|'unknown'
+ */
+if ( ! function_exists( 'nvx_theme_request_environment' ) ) {
+	function nvx_theme_request_environment(
+		string $host
+	): string {
+		$configured_env = defined( 'NVX_ENV' )
+			? sanitize_key(
+				strtolower(
+					trim(
+						(string) NVX_ENV
+					)
+				)
+			)
+			: '';
+
+		$host_environment = 'unknown';
+
+		if (
+			in_array(
+				$host,
+				nvx_theme_request_production_hosts(),
+				true
+			)
+		) {
+			$host_environment =
+				'production';
+		} elseif (
+			'staging2.nuvanx.com'
+			=== $host
+		) {
+			$host_environment =
+				'staging2';
+		} elseif (
+			in_array(
+				$host,
+				nvx_theme_request_staging_hosts(),
+				true
+			)
+		) {
+			$host_environment =
+				'nonproduction';
+		}
+
+		if ( '' === $configured_env ) {
+			return $host_environment;
+		}
+
+		if (
+			'production'
+			=== $configured_env
+		) {
+			return 'production'
+				=== $host_environment
+					? 'production'
+					: 'unknown';
+		}
+
+		if (
+			'staging2'
+			=== $configured_env
+		) {
+			return in_array(
+				$host_environment,
+				array(
+					'staging2',
+					'nonproduction',
+				),
+				true
+			)
+				? 'staging2'
+				: 'unknown';
+		}
+
+		if (
+			in_array(
+				$configured_env,
+				array(
+					'staging',
+					'development',
+					'local',
+					'test',
+				),
+				true
+			)
+		) {
+			return 'production'
+				=== $host_environment
+					? 'unknown'
+					: 'nonproduction';
+		}
+
+		return 'unknown';
+	}
+}
+
+/**
+ * Return centralized immutable request context.
+ *
+ * @return array{
+ *   has_request_uri:bool,
+ *   uri:string,
+ *   path:string,
+ *   query_args:array<string,mixed>,
+ *   client_host:string,
+ *   host:string,
+ *   environment:string,
+ *   is_production:bool,
+ *   is_staging2:bool,
+ *   is_nonproduction:bool
+ * }
+ */
+if ( ! function_exists( 'nvx_theme_request_context' ) ) {
+	function nvx_theme_request_context(): array {
+		static $context = null;
+
+		if ( is_array( $context ) ) {
+			return $context;
+		}
+
+		$has_request_uri =
+			'' !== NVX_REQUEST_BOOT_URI;
+
+		$uri = $has_request_uri
+			? NVX_REQUEST_BOOT_URI
+			: '';
+
+		$path = '/';
+
+		if ( $has_request_uri ) {
+			$parsed_path =
+				wp_parse_url(
+					$uri,
+					PHP_URL_PATH
+				);
+
+			if ( is_string( $parsed_path ) ) {
+				$trimmed =
+					trim(
+						$parsed_path,
+						'/'
+					);
+
+				$path = ''
+					=== $trimmed
+						? '/'
+						: '/'
+							. $trimmed
+							. '/';
+			}
+		}
+
+		$query_args = array();
+
+		if ( $has_request_uri ) {
+			$query_string =
+				wp_parse_url(
+					$uri,
+					PHP_URL_QUERY
+				);
+
+			if (
+				is_string(
+					$query_string
+				)
+				&& ''
+				!== $query_string
+			) {
+				$parsed_query =
+					array();
+
+				wp_parse_str(
+					$query_string,
+					$parsed_query
+				);
+
+				$query_args =
+					nvx_theme_request_sanitize_query_args(
+						$parsed_query
+					);
+			}
+		}
+
+		$client_host =
+			wp_parse_url(
+				'https://'
+					. NVX_REQUEST_BOOT_HOST,
+				PHP_URL_HOST
+			);
+
+		$client_host =
+			is_string( $client_host )
+				? strtolower(
+					trim(
+						$client_host
+					)
+				)
+				: '';
+
+		$host =
+			nvx_theme_request_trusted_host();
+
+		$environment =
+			nvx_theme_request_environment(
+				$host
+			);
+
+		$context = array(
+			'has_request_uri' =>
+				$has_request_uri,
+
+			'uri' =>
+				$uri,
+
+			'path' =>
+				$path,
+
+			'query_args' =>
+				$query_args,
+
+			'client_host' =>
+				$client_host,
+
+			'host' =>
+				$host,
+
+			'environment' =>
+				$environment,
+
+			'is_production' =>
+				'production'
+				=== $environment,
+
+			'is_staging2' =>
+				'staging2'
+				=== $environment,
+
+			'is_nonproduction' =>
+				'production'
+				!== $environment,
+		);
+
+		return $context;
+	}
+}
+
+/**
+ * Canonical request path.
+ */
+if ( ! function_exists( 'nvx_theme_request_path' ) ) {
+	function nvx_theme_request_path(): string {
+		$context =
+			nvx_theme_request_context();
+
+		return $context[
+			'has_request_uri'
+		]
+			? (string)
+				$context['path']
+			: '';
+	}
+}

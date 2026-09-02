@@ -12,10 +12,11 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/inc/nvx-governed-blog-runtime.php';
+
 // Load the DB-authoritative guard at the final single-post entrypoint. This is
 // intentionally before get_header()/Yoast so both the body loop and document
 // head are rebuilt from the actual governed public path.
-require_once __DIR__ . '/inc/nvx-governed-blog-runtime.php';
 
 global $wp_query;
 

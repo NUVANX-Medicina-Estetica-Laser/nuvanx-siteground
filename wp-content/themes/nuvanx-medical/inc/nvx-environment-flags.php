@@ -1,73 +1,239 @@
 <?php
 /**
- * Environment-specific presentation and deployment flags.
- *
- * Deploy workflows stamp the exact checked-out commit into `.nvx-deploy-sha`.
- * The public deployment identity is rendered centrally by nvx-deploy-stamp.php;
- * this module only resolves the environment and immutable SHA source.
+ * Environment and deployment identity helpers.
  *
  * @package nuvanx-medical
  */
+
+declare(strict_types=1);
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
 /**
- * Determines whether the current request belongs to the staging2 environment.
+ * Whether the canonical request is staging2.
  *
- * @return bool `true` if the normalized host is `staging2.nuvanx.com`, `false` otherwise.
+ * The request boundary owns the security-sensitive environment identity.
+ * This compatibility filter is intended only for presentation/tests.
  */
-function nvx_environment_is_staging2(): bool {
-	if ( function_exists( 'nvx_theme_request_context' ) ) {
-		$context = nvx_theme_request_context();
-		return ! empty( $context['is_staging2'] );
+if ( ! function_exists( 'nvx_environment_is_staging2' ) ) {
+	function nvx_environment_is_staging2(): bool {
+		if (
+			! function_exists(
+				'nvx_theme_request_context'
+			)
+		) {
+			return false;
+		}
+
+		$context =
+			nvx_theme_request_context();
+
+		$detected =
+			! empty(
+				$context['is_staging2']
+			);
+
+		return (bool) apply_filters(
+			'nvx_environment_is_staging2',
+			$detected,
+			(string) (
+				$context['host']
+				?? ''
+			)
+		);
 	}
-	return false;
 }
 
 /**
- * Resolve the exact deployed Git commit SHA.
+ * Whether the authoritative request context is production.
  *
- * Resolution order supports controlled host configuration while keeping the
- * workflow-generated marker as the normal source of truth. Rendering is owned
- * exclusively by nvx_render_deploy_stamp_meta().
+ * No compatibility filter is applied because this helper can be used by
+ * mutation/indexing gates.
  */
-function nvx_environment_deploy_sha(): string {
-	static $resolved = null;
-
-	if ( is_string( $resolved ) ) {
-		return $resolved;
-	}
-
-	$candidates = array();
-	if ( defined( 'NVX_DEPLOY_SHA' ) ) {
-		$candidates[] = (string) NVX_DEPLOY_SHA;
-	}
-
-	$environment_sha = getenv( 'NVX_DEPLOY_SHA' );
-	if ( is_string( $environment_sha ) ) {
-		$candidates[] = $environment_sha;
-	}
-
-	$marker = get_template_directory() . '/.nvx-deploy-sha';
-	if ( is_readable( $marker ) ) {
-		$marker_sha = file_get_contents( $marker );
-		if ( is_string( $marker_sha ) ) {
-			$candidates[] = $marker_sha;
+if ( ! function_exists( 'nvx_environment_is_production' ) ) {
+	function nvx_environment_is_production(): bool {
+		if (
+			! function_exists(
+				'nvx_theme_request_context'
+			)
+		) {
+			return false;
 		}
-	}
 
-	foreach ( $candidates as $candidate ) {
-		$candidate = strtolower( trim( $candidate ) );
-		if ( 1 === preg_match( '/^[a-f0-9]{40}$/', $candidate ) ) {
-			$resolved = $candidate;
-			return $resolved;
-		}
-	}
+		$context =
+			nvx_theme_request_context();
 
-	$resolved = '';
-	return $resolved;
+		return true
+			=== (
+				$context[
+					'is_production'
+				]
+				?? false
+			);
+	}
 }
 
-require_once __DIR__ . '/nvx-meta-browser-governance.php';
+/**
+ * Resolve exact deployed Git commit SHA.
+ */
+if ( ! function_exists( 'nvx_environment_deploy_sha' ) ) {
+	function nvx_environment_deploy_sha(): string {
+		static $resolved = null;
+
+		if ( is_string( $resolved ) ) {
+			return $resolved;
+		}
+
+		$candidates =
+			array();
+
+		if ( defined( 'NVX_DEPLOY_SHA' ) ) {
+			$candidates[] =
+				(string) NVX_DEPLOY_SHA;
+		}
+
+		$environment_sha =
+			getenv(
+				'NVX_DEPLOY_SHA'
+			);
+
+		if ( is_string( $environment_sha ) ) {
+			$candidates[] =
+				$environment_sha;
+		}
+
+		if (
+			defined( 'ABSPATH' )
+			&& function_exists(
+				'get_template_directory'
+			)
+		) {
+			$git_head_path =
+				get_template_directory()
+				. '/../../.git/HEAD';
+
+			if (
+				file_exists(
+					$git_head_path
+				)
+				&& is_readable(
+					$git_head_path
+				)
+			) {
+				$head_content =
+					file_get_contents(
+						$git_head_path
+					);
+
+				if (
+					is_string(
+						$head_content
+					)
+				) {
+					$head_content =
+						trim(
+							$head_content
+						);
+
+					if (
+						0
+						=== strpos(
+							$head_content,
+							'ref: '
+						)
+					) {
+						$ref_path =
+							get_template_directory()
+							. '/../../.git/'
+							. substr(
+								$head_content,
+								5
+							);
+
+						if (
+							file_exists(
+								$ref_path
+							)
+							&& is_readable(
+								$ref_path
+							)
+						) {
+							$ref_content =
+								file_get_contents(
+									$ref_path
+								);
+
+							if (
+								is_string(
+									$ref_content
+								)
+							) {
+								$candidates[] =
+									trim(
+										$ref_content
+									);
+							}
+						}
+					} elseif (
+						40
+						=== strlen(
+							$head_content
+						)
+					) {
+						$candidates[] =
+							$head_content;
+					}
+				}
+			}
+		}
+
+		foreach (
+			$candidates
+			as $sha
+		) {
+			if (
+				40
+				=== strlen(
+					$sha
+				)
+				&& ctype_xdigit(
+					$sha
+				)
+			) {
+				$resolved =
+					$sha;
+
+				return $resolved;
+			}
+		}
+
+		$resolved =
+			'unknown-commit';
+
+		return $resolved;
+	}
+}
+
+/**
+ * Return a short deploy stamp format for frontend asset busting.
+ */
+if ( ! function_exists( 'nvx_environment_deploy_stamp' ) ) {
+	function nvx_environment_deploy_stamp(): string {
+		$sha = nvx_environment_deploy_sha();
+
+		if (
+			'unknown-commit'
+			=== $sha
+		) {
+			return (string) time();
+		}
+
+		return substr(
+			$sha,
+			0,
+			7
+		);
+	}
+}

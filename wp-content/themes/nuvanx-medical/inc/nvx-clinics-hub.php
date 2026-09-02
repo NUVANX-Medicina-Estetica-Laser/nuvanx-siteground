@@ -9,7 +9,6 @@
 
 defined( 'ABSPATH' ) || exit;
 
-require_once __DIR__ . '/nvx-clinics-dom-helpers.php';
 
 /**
  * Whether hub post_content is theme-owned (marker or empty of visible text).

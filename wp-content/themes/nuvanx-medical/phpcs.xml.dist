@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <ruleset name="Nuvanx Medical Theme">
-    <description>Portable PHP_CodeSniffer baseline for the NUVANX theme. WordPress-specific semantic and security contracts are enforced by the repository lint suite and PHPStan.</description>
+    <description>Portable PHP_CodeSniffer baseline for the NUVANX theme.</description>
 
     <file>.</file>
     <exclude-pattern>*/vendor/*</exclude-pattern>
@@ -10,14 +10,22 @@
     <arg value="ps"/>
     <arg name="parallel" value="8"/>
     <arg name="extensions" value="php"/>
+    <config name="ignore_warnings_on_exit" value="1"/>
 
-    <!-- Reliability and source-integrity rules provided by PHP_CodeSniffer itself. -->
-    <rule ref="Generic.Files.ByteOrderMark"/>
-    <rule ref="Generic.Files.EndFileNewline"/>
-    <rule ref="Generic.PHP.DisallowShortOpenTag"/>
-    <rule ref="Generic.PHP.DeprecatedFunctions"/>
-    <rule ref="Generic.CodeAnalysis.EmptyStatement"/>
-    <rule ref="Generic.CodeAnalysis.UnconditionalIfStatement"/>
-    <rule ref="Generic.CodeAnalysis.UselessOverridingMethod"/>
-    <rule ref="Squiz.PHP.NonExecutableCode"/>
+    
+    <!-- Base standard -->
+    <rule ref="WordPress">
+        <!-- Demote all WPCS errors to warnings temporarily for controlled evolution -->
+        <type>warning</type>
+    </rule>
+
+    <!-- Specific enforced rules for integrity -->
+    <rule ref="Generic.Files.ByteOrderMark"><type>error</type></rule>
+    <rule ref="Generic.Files.EndFileNewline"><type>error</type></rule>
+    <rule ref="Generic.PHP.DisallowShortOpenTag"><type>error</type></rule>
+    <rule ref="Generic.PHP.DeprecatedFunctions"><type>error</type></rule>
+    <rule ref="Generic.CodeAnalysis.EmptyStatement"><type>error</type></rule>
+    <rule ref="Generic.CodeAnalysis.UnconditionalIfStatement"><type>error</type></rule>
+    <rule ref="Generic.CodeAnalysis.UselessOverridingMethod"><type>error</type></rule>
+    <rule ref="Squiz.PHP.NonExecutableCode"><type>error</type></rule>
 </ruleset>

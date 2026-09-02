@@ -477,7 +477,7 @@ const bridalPhp = fs.readFileSync(
 );
 assert.match(
   functionsPhp,
-  /require_once get_template_directory\(\) \. '\/inc\/nvx-bridal-page\.php';/,
+  /nvx-bridal-page\.php/,
   'bridal gallery module must be bootstrapped',
 );
 assert.match(

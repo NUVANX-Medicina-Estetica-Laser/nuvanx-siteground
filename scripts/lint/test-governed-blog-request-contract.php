@@ -326,12 +326,12 @@ if ( false === strpos( $head_contract, 'name="nvx-document-contract"' )
 }
 
 $root = dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/';
-$blog_system = file_get_contents( $root . 'inc/nvx-blog-system.php' );
+$functions_source = file_get_contents( $root . 'functions.php' );
 $runtime_source = file_get_contents( $root . 'inc/nvx-governed-blog-runtime.php' );
 $single_entrypoint = file_get_contents( $root . 'single-post.php' );
 
-$rebind_definition_pos = is_string( $blog_system ) ? strpos( $blog_system, 'function nvx_single_post_rebind_query' ) : false;
-$bootstrap_require_pos = is_string( $blog_system ) ? strpos( $blog_system, "require_once __DIR__ . '/nvx-governed-blog-runtime.php'" ) : false;
+$runtime_manifest_pos = is_string( $functions_source ) ? strpos( $functions_source, "'inc/nvx-governed-blog-runtime.php'" ) : false;
+$blog_manifest_pos = is_string( $functions_source ) ? strpos( $functions_source, "'inc/nvx-blog-system.php'" ) : false;
 $pre_get_posts_hook_pos = is_string( $runtime_source ) ? strpos( $runtime_source, "add_action( 'pre_get_posts', 'nvx_governed_blog_runtime_pre_get_posts', PHP_INT_MAX )" ) : false;
 $the_posts_hook_pos = is_string( $runtime_source ) ? strpos( $runtime_source, "add_filter( 'the_posts', 'nvx_governed_blog_runtime_force_the_posts', PHP_INT_MAX, 2 )" ) : false;
 $wp_hook_pos = is_string( $runtime_source ) ? strpos( $runtime_source, "add_action( 'wp', 'nvx_governed_blog_runtime_rebind_queries_action', PHP_INT_MAX )" ) : false;
@@ -342,9 +342,10 @@ $runtime_require_pos = is_string( $single_entrypoint ) ? strpos( $single_entrypo
 $db_resolver_pos = is_string( $single_entrypoint ) ? strpos( $single_entrypoint, 'nvx_governed_blog_runtime_db_post_by_slug' ) : false;
 $query_name_pos = is_string( $single_entrypoint ) ? strpos( $single_entrypoint, '$wp_query->get( \'name\' )' ) : false;
 
-if ( false === $rebind_definition_pos
-	|| false === $bootstrap_require_pos
-	|| $rebind_definition_pos >= $bootstrap_require_pos
+
+if ( false === $runtime_manifest_pos
+	|| false === $blog_manifest_pos
+	|| $runtime_manifest_pos >= $blog_manifest_pos
 	|| false === $pre_get_posts_hook_pos
 	|| false === $the_posts_hook_pos
 	|| false === $wp_hook_pos

@@ -332,7 +332,7 @@ function nvx_wpsec_first_mutation_offset(string $body): ?int {
 
 function nvx_wpsec_first_capability_guard_offset(string $body): ?int {
     $matches = array();
-    if ( preg_match( '/if\s*\(\s*!\s*current_user_can[^{;]+(?:\{[^\}]*(?:return|exit|die|wp_die)[^\}]*\}|\s*(?:return|exit|die|wp_die)[^;]*;)/', $body, $matches, PREG_OFFSET_CAPTURE ) ) {
+    if ( preg_match( '/if\s*\(\s*!\s*current_user_can\s*\([^)]*\)\s*\)\s*(?:\{\s*(?:return|exit|die|wp_die)\b[^{};]*;\s*\}|(?:return|exit|die|wp_die)\b[^;]*;)/', $body, $matches, PREG_OFFSET_CAPTURE ) ) {
         return $matches[0][1];
     }
     return null;
@@ -559,8 +559,23 @@ function save_handler(): void {
 add_action('admin_post_nvx_save', 'save_handler');
 PHP;
 
+    $nestedCap = <<<'PHP'
+<?php
+function save_handler(): void {
+    if (!current_user_can('manage_options')) {
+        if (isset($_POST['confirm'])) return;
+    }
+    check_admin_referer('nvx_save');
+    update_option('x', sanitize_text_field(wp_unslash($_POST['save'])));
+}
+add_action('admin_post_nvx_save', 'save_handler');
+PHP;
+
     if (array() === nvx_wpsec_auth_violations($ignoredCap, 'fixture-ignored-cap')) {
         nvx_wpsec_fail('self_test_expected_ignored_cap_failure');
+    }
+    if (array() === nvx_wpsec_auth_violations($nestedCap, 'fixture-nested-cap')) {
+        nvx_wpsec_fail('self_test_expected_nested_cap_failure');
     }
     if (array() === nvx_wpsec_auth_violations($missingCap, 'fixture-missing-cap')) {
         nvx_wpsec_fail('self_test_expected_missing_cap_failure');
@@ -569,7 +584,7 @@ PHP;
         nvx_wpsec_fail('self_test_expected_late_cap_failure');
     }
 
-    echo 'WORDPRESS_SECURITY_SELF_TEST=PASS cases=11' . PHP_EOL;
+    echo 'WORDPRESS_SECURITY_SELF_TEST=PASS cases=12' . PHP_EOL;
 }
 
 nvx_wpsec_run_self_tests();

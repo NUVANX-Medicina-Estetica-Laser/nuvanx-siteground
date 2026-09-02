@@ -685,7 +685,7 @@ add_action( NVX_GBP_CRON_HOOK, 'nvx_gbp_send_due_review_requests' );
 
 function nvx_gbp_handle_admin_register(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_die( esc_html__( 'No tienes permisos suficientes.', 'nuvanx-medical' ), 403 );
+		wp_die( esc_html__( 'No tienes permisos suficientes.', 'nuvanx-medical' ), esc_html__( 'Acceso denegado', 'nuvanx-medical' ), array( 'response' => 403 ) );
 	}
 	check_admin_referer( 'nvx_gbp_register_visit' );
 
@@ -718,6 +718,9 @@ function nvx_gbp_admin_register_notice(): void {
 add_action( 'admin_notices', 'nvx_gbp_admin_register_notice' );
 
 function nvx_gbp_admin_register_form(): void {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
 	$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 	if ( ! $screen || NVX_GBP_VISIT_CPT !== $screen->post_type ) {
 		return;

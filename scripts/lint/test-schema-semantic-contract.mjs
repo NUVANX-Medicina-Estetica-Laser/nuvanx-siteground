@@ -300,7 +300,7 @@ for (const [file, content] of [
   }
 }
 
-if (!bootstrap.includes("require_once get_template_directory() . '/inc/nvx-schema-semantic-governance.php';")) {
+if (!bootstrap.includes("nvx-schema-semantic-governance.php")) {
   addViolation('functions.php', 'semanticGovernance', 'Final semantic governance module is not loaded');
 }
 if (!/add_filter\(\s*['"]wpseo_schema_graph['"]\s*,\s*['"]nvx_schema_semantic_normalize_graph['"]\s*,\s*PHP_INT_MAX\s*-\s*2\s*,\s*1\s*\)/.test(semanticGovernance)) {

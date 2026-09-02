@@ -9,7 +9,6 @@
 
 defined( 'ABSPATH' ) || exit;
 
-require_once __DIR__ . '/nvx-cta-components.php';
 
 /**
  * Strip page-level closing conversion bands so only the site footer CTA remains.
@@ -375,7 +374,7 @@ function nvx_content_enrich_treatment_cards( string $content ): string {
  * Director E-E-A-T wherever the Rivera card / leadership copy appears.
  */
 function nvx_content_enhance_director_blocks( string $content ): string {
-	$colegiado = NVX_DIRECTOR_COLEGIADO;
+	$colegiado = defined( 'NVX_DIRECTOR_COLEGIADO' ) ? NVX_DIRECTOR_COLEGIADO : '282869503';
 	$role      = sprintf(
 		/* translators: %s: medical license number */
 		__( 'Director Médico · Colegiado Nº %s', 'nuvanx-medical' ),

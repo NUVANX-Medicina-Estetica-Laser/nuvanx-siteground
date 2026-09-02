@@ -363,6 +363,11 @@ function nvx_seo_current_metadata( string $field, string $fallback = '' ): strin
  * @return bool `true` for staging, local, configured non-production, or unrecognized environments; `false` only when `NVX_ENV` is set to `production`.
  */
 function nvx_seo_is_nonproduction_environment(): bool {
+	if ( function_exists( 'nvx_theme_request_context' ) ) {
+		$context = nvx_theme_request_context();
+		return empty( $context['is_production'] );
+	}
+
 	// The only exception is a guarded WP-CLI reindex operation. It constructs
 	// Yoast indexables for sitemap-contract verification; it never runs in an
 	// HTTP request, does not change blog_public, and therefore cannot make

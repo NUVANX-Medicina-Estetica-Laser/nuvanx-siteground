@@ -12,7 +12,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/nvx-page-render-helpers.php';
 
 /**
  * Authorized CO₂ facial photo. Always use the original 760×510 file as src.

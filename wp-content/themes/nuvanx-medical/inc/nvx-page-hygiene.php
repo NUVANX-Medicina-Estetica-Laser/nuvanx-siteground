@@ -24,8 +24,8 @@ function nvx_redirect_superseded_legal_pages(): void {
 	}
 
 	$page_id = is_page() ? (int) get_queried_object_id() : 0;
-	$uri     = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
-	$path    = trim( (string) wp_parse_url( $uri, PHP_URL_PATH ), '/' );
+	$context = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : array();
+	$path    = trim( (string) ( $context['path'] ?? '' ), '/' );
 
 	if ( in_array( $page_id, array( 18, 31 ), true ) || in_array( $path, array( 'politica-de-cookies', 'mas-informacion-sobre-las-cookies' ), true ) ) {
 		$target = function_exists( 'get_permalink' ) ? get_permalink( 577 ) : '';
@@ -52,9 +52,8 @@ function nvx_redirect_valoracion_aliases(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
-	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
-	$path = '/' . trim( rawurldecode( $path ), '/' ) . '/';
+	$context = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : array();
+	$path    = '/' . trim( rawurldecode( (string) ( $context['path'] ?? '' ) ), '/' ) . '/';
 	$path = function_exists( 'mb_strtolower' ) ? mb_strtolower( $path, 'UTF-8' ) : strtolower( $path );
 
 	$aliases = array(
@@ -96,9 +95,8 @@ function nvx_redirect_goya_alias(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
-	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
-	$path = '/' . trim( rawurldecode( $path ), '/' ) . '/';
+	$context = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : array();
+	$path    = '/' . trim( rawurldecode( (string) ( $context['path'] ?? '' ) ), '/' ) . '/';
 
 	// Exact match for the short alias only.
 	if ( '/medicina-estetica-goya/' !== $path ) {
@@ -112,12 +110,8 @@ function nvx_redirect_goya_alias(): void {
 	}
 
 	// Preserve query strings (gclid, UTM, etc.) - parse and reconstruct.
-	$parsed_uri   = wp_parse_url( $uri );
-	$query_params = array();
-
-	if ( isset( $parsed_uri['query'] ) && '' !== $parsed_uri['query'] ) {
-		parse_str( $parsed_uri['query'], $query_params );
-	}
+	$context      = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : array();
+	$query_params = is_array( $context['query_args'] ?? null ) ? $context['query_args'] : array();
 
 	$target = home_url( $canonical_path );
 
@@ -182,8 +176,8 @@ function nvx_redirect_unpublished_public_routes(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
-	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
+	$context = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : array();
+	$path    = (string) ( $context['path'] ?? '' );
 	$slug = sanitize_title( trim( rawurldecode( $path ), '/' ) );
 	$map  = nvx_unpublished_public_route_redirects();
 

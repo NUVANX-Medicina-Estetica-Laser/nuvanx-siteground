@@ -13,7 +13,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/nvx-endolift-authority-graph.php';
 
 /**
  * Load and validate the Clinical Matrix catalog.

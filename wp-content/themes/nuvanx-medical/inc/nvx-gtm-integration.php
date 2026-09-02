@@ -264,17 +264,11 @@ function nvx_gtm_push_context(): void {
 }
 add_action( 'wp_head', 'nvx_gtm_push_context', 1 );
 
-require_once __DIR__ . '/nvx-ads-conversion-catalog.php';
 
 // Load the secure HubSpot attribution bridge (Runtime Contract v2).
-require_once __DIR__ . '/nvx-hubspot-secure-attribution.php';
-require_once __DIR__ . '/nvx-attribution-integration.php';
 
 // Persistent at-least-once outbox shared by both Supabase relays.
-require_once __DIR__ . '/nvx-supabase-relay-queue.php';
 
 // Mirror successful secure HubSpot submissions into the canonical first-party capture ledger.
-require_once __DIR__ . '/nvx-lead-captured-relay.php';
 
 // Authenticate server-side Google click attribution relay requests before transport.
-require_once __DIR__ . '/nvx-google-attribution-relay-auth.php';

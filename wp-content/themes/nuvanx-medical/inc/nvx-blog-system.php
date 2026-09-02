@@ -785,4 +785,3 @@ function nvx_single_post_rebind_query( WP_Query $query, WP_Post $exact_post, str
 // Register the governed-blog runtime during theme bootstrap, not from the
 // single-post template. Its `wp` hook must run before template loading/Yoast
 // presentation so a stale neighbouring singular context cannot survive.
-require_once __DIR__ . '/nvx-governed-blog-runtime.php';

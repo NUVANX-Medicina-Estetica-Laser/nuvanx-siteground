@@ -8,10 +8,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/nvx-environment-flags.php';
 
-/**
- * Returns the normalized request path from REQUEST_URI.
+	/**
+	 * Whether the current request is the Goya clinic page.
+	 */
+	function nvx_theme_is_goya_page(): bool {
 	if ( is_admin() ) {
 		return false;
 	}
