@@ -396,7 +396,7 @@ function nvx_clinics_hub_append_approved_equipment( string $content ): string {
 
 	return str_replace( '<!-- NVX_APPROVED_EQUIPMENT_SECTION:clinic-hub-v1 -->', $section, $content );
 }
-add_filter( 'the_content', 'nvx_clinics_hub_append_approved_equipment', 220 );
+add_filter( 'the_content', 'nvx_clinics_hub_append_approved_equipment', NVX_HOOK_PRIO_CLINICS_APPROVED_EQUIPMENT );
 
 /**
  * Register clinics hub as page owner to prevent shell hero duplication.
