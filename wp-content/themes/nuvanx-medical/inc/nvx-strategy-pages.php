@@ -353,32 +353,3 @@ add_filter( 'the_content', 'nvx_strategy_page_content_filter', NVX_HOOK_PRIO_STR
  * Create strategy pages only in staging2. Production requires a deliberate
  * editorial publication step.
  */
-function nvx_strategy_seed_staging2_pages(): void {
-	if ( ! function_exists( 'nvx_environment_is_staging2' ) || ! nvx_environment_is_staging2() ) {
-		return;
-	}
-
-	foreach ( nvx_strategy_page_catalog() as $key => $page ) {
-		$stored = get_page_by_path( $page['slug'] );
-		if ( $stored ) {
-			update_post_meta( (int) $stored->ID, '_nvx_strategy_review_status', $page['review_status'] );
-			continue;
-		}
-
-		$page_id = wp_insert_post(
-			array(
-				'post_type'    => 'page',
-				'post_status'  => 'publish',
-				'post_title'   => $page['title'],
-				'post_name'    => $page['slug'],
-				'post_content' => '<!-- NUVANX_STRATEGY_PAGE:' . $key . ' -->',
-			),
-			true
-		);
-
-		if ( ! is_wp_error( $page_id ) ) {
-			update_post_meta( (int) $page_id, '_nvx_strategy_review_status', $page['review_status'] );
-		}
-	}
-}
-add_action( 'init', 'nvx_strategy_seed_staging2_pages', 31 );
