@@ -330,9 +330,12 @@ function nvx_wpsec_first_mutation_offset(string $body): ?int {
     return $first;
 }
 
-function nvx_wpsec_first_capability_offset(string $body): ?int {
-    $offset = strpos($body, 'current_user_can(');
-    return false !== $offset ? $offset : null;
+function nvx_wpsec_first_capability_guard_offset(string $body): ?int {
+    $matches = array();
+    if ( preg_match( '/if\s*\(\s*!\s*current_user_can[^{;]+(?:\{[^\}]*(?:return|exit|die|wp_die)[^\}]*\}|\s*(?:return|exit|die|wp_die)[^;]*;)/', $body, $matches, PREG_OFFSET_CAPTURE ) ) {
+        return $matches[0][1];
+    }
+    return null;
 }
 
 function nvx_wpsec_first_nonce_offset(string $body): ?int {
@@ -373,7 +376,7 @@ function nvx_wpsec_auth_violations(string $source, string $label): array {
         $isNoPrivAjax  = str_starts_with($action['hook'], 'wp_ajax_nopriv_');
 
         if ($isAdminAction && !$isNoPrivAjax) {
-            $capOffset = nvx_wpsec_first_capability_offset($body);
+            $capOffset = nvx_wpsec_first_capability_guard_offset($body);
             if (null === $capOffset) {
                 $violations[] = $label . ':' . $function['line'] . ':missing_capability:' . $action['callback'];
             } elseif ($capOffset > $mutationOffset) {
@@ -545,6 +548,20 @@ PHP;
     if (array() === nvx_wpsec_auth_violations($lateNonce, 'fixture-late-nonce')) {
         nvx_wpsec_fail('self_test_expected_late_nonce_failure');
     }
+    $ignoredCap = <<<'PHP'
+<?php
+function save_handler(): void {
+    current_user_can('manage_options');
+    check_admin_referer('nvx_save');
+    if (empty($_POST['save'])) return;
+    update_option('x', sanitize_text_field(wp_unslash($_POST['save'])));
+}
+add_action('admin_post_nvx_save', 'save_handler');
+PHP;
+
+    if (array() === nvx_wpsec_auth_violations($ignoredCap, 'fixture-ignored-cap')) {
+        nvx_wpsec_fail('self_test_expected_ignored_cap_failure');
+    }
     if (array() === nvx_wpsec_auth_violations($missingCap, 'fixture-missing-cap')) {
         nvx_wpsec_fail('self_test_expected_missing_cap_failure');
     }
@@ -552,7 +569,7 @@ PHP;
         nvx_wpsec_fail('self_test_expected_late_cap_failure');
     }
 
-    echo 'WORDPRESS_SECURITY_SELF_TEST=PASS cases=10' . PHP_EOL;
+    echo 'WORDPRESS_SECURITY_SELF_TEST=PASS cases=11' . PHP_EOL;
 }
 
 nvx_wpsec_run_self_tests();
