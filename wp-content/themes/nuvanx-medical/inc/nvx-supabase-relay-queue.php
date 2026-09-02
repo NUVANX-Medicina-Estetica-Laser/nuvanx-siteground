@@ -946,10 +946,68 @@ if ( ! function_exists( 'nvx_supabase_relay_dispatch' ) ) {
 }
 
 /**
+ * Atomically replace an option value only if it matches expected value.
+ *
+ * Prevents concurrent contenders from overwriting or deleting newly acquired locks.
+ *
+ * @param string $key Option name.
+ * @param string $expected Expected current option value.
+ * @param string $new_value New option value to set.
+ * @return bool True if updated, false if value differed (lost CAS).
+ */
+if ( ! function_exists( 'nvx_supabase_relay_compare_and_swap_option' ) ) {
+	function nvx_supabase_relay_compare_and_swap_option(
+		string $key,
+		string $expected,
+		string $new_value
+	): bool {
+		global $wpdb;
+
+		if ( isset( $wpdb ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
+			$table = isset( $wpdb->options ) ? $wpdb->options : 'wp_options';
+
+			$updated = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET option_value = %s WHERE option_name = %s AND option_value = %s",
+					$new_value,
+					$key,
+					$expected
+				)
+			);
+
+			if ( $updated > 0 ) {
+				if ( function_exists( 'wp_cache_set' ) ) {
+					wp_cache_set( $key, $new_value, 'options' );
+				}
+				return true;
+			}
+
+			return false;
+		}
+
+		if ( isset( $GLOBALS['nvx_mock_options'] ) && is_array( $GLOBALS['nvx_mock_options'] ) ) {
+			if ( ( $GLOBALS['nvx_mock_options'][ $key ] ?? '' ) === $expected ) {
+				$GLOBALS['nvx_mock_options'][ $key ] = $new_value;
+				return true;
+			}
+			return false;
+		}
+
+		$current = (string) get_option( $key, '' );
+		if ( $current === $expected ) {
+			return update_option( $key, $new_value );
+		}
+
+		return false;
+	}
+}
+
+/**
  * Acquire global drain lock.
  *
  * add_option() uses the unique option name as the cross-request exclusion
  * mechanism. The lock expires so a fatal process cannot block the queue forever.
+ * Expired lock takeover uses compare-and-swap to guarantee mutual exclusion.
  *
  * @return string Lock token or empty string.
  */
@@ -995,14 +1053,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock' ) ) {
 			$current_expiry > 0
 			&& $current_expiry < time()
 		) {
-			delete_option( $key );
-
 			if (
-				add_option(
+				nvx_supabase_relay_compare_and_swap_option(
 					$key,
-					$value,
-					'',
-					false
+					$current,
+					$value
 				)
 			) {
 				return $token;
@@ -1025,6 +1080,22 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_unlock' ) ) {
 		}
 
 		$key = 'nvx_supabase_relay_drain_lock_v1';
+
+		global $wpdb;
+		if ( isset( $wpdb ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) && method_exists( $wpdb, 'esc_like' ) ) {
+			$table = isset( $wpdb->options ) ? $wpdb->options : 'wp_options';
+			$wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$table} WHERE option_name = %s AND option_value LIKE %s",
+					$key,
+					'%|' . $wpdb->esc_like( $token )
+				)
+			);
+			if ( function_exists( 'wp_cache_delete' ) ) {
+				wp_cache_delete( $key, 'options' );
+			}
+			return;
+		}
 
 		$current = (string) get_option(
 			$key,

@@ -52,6 +52,7 @@ assert.match(queue, /nvx_supabase_relay_google_click_post_signed\(\s*\$url,\s*\$
 assert.match(queue, /nvx_supabase_relay_queue_backoff_seconds\(/, 'ENQUEUE_NEXT_ATTEMPT_BACKOFF');
 assert.match(queue, /\$next_attempt = time\(\)\s*\+\s*nvx_supabase_relay_queue_backoff_seconds/, 'NO_IMMEDIATE_SHUTDOWN_RETRY');
 assert.match(queue, /add_option\(\s*\$key,\s*\$value,\s*'',\s*false\s*\)/, 'DRAIN_GLOBAL_LOCK');
+assert.match(queue, /nvx_supabase_relay_compare_and_swap_option/, 'ATOMIC_EXPIRED_LOCK_CAS');
 assert.match(queue, /nvx_supabase_relay_existing_item\(/, 'DUPLICATE_PENDING_REUSES_ITEM');
 assert.match(queue, /json_decode\(\s*\$body,\s*true\s*\)/, 'INVALID_JSON_NOT_QUEUED');
 assert.match(queue, /wp_slash\(\s*\$body\s*\)/, 'PAYLOAD_SLASH_PRESERVED');

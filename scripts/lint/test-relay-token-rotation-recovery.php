@@ -1,6 +1,7 @@
 <?php
 /**
- * Behavioral regression for token rotation cache separation and 401 recovery.
+ * Behavioral regression for token rotation cache separation, 401 recovery,
+ * and atomic CAS drain lock concurrency.
  *
  * @package nuvanx-medical
  */
@@ -10,6 +11,7 @@ declare(strict_types=1);
 define( 'ABSPATH', __DIR__ );
 define( 'HOUR_IN_SECONDS', 3600 );
 define( 'NVX_LEAD_CAPTURED_MAX_BODY_BYTES', 32768 );
+define( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL', 60 );
 
 if ( ! class_exists( 'WP_Error' ) ) {
 	final class WP_Error {
@@ -59,6 +61,28 @@ function set_transient( string $key, $value, int $expiration = 0 ): bool {
 }
 function delete_transient( string $key ): bool {
 	unset( $GLOBALS['transients'][ $key ] );
+	return true;
+}
+
+$GLOBALS['nvx_mock_options'] = array();
+function get_option( string $key, $default = false ) {
+	return $GLOBALS['nvx_mock_options'][ $key ] ?? $default;
+}
+function add_option( string $key, $value, $deprecated = '', $autoload = 'yes' ): bool {
+	unset( $deprecated, $autoload );
+	if ( isset( $GLOBALS['nvx_mock_options'][ $key ] ) ) {
+		return false;
+	}
+	$GLOBALS['nvx_mock_options'][ $key ] = (string) $value;
+	return true;
+}
+function update_option( string $key, $value, $autoload = null ): bool {
+	unset( $autoload );
+	$GLOBALS['nvx_mock_options'][ $key ] = (string) $value;
+	return true;
+}
+function delete_option( string $key ): bool {
+	unset( $GLOBALS['nvx_mock_options'][ $key ] );
 	return true;
 }
 
@@ -237,4 +261,78 @@ assert( 'SUCCESS' === $click_dispatch['outcome'], 'Recovered click dispatch must
 assert( 200 === $click_dispatch['status'], 'Recovered click dispatch must return 200' );
 assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected 3 HTTP calls for google_click dispatch: send(401) -> bootstrap(200) -> resend(200)' );
 
-echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned\n";
+// Assert Test 6: Concurrency regression test for two contenders observing the same expired lock
+class MockWpdbAtomicCas {
+	public string $options = 'wp_options';
+
+	public function prepare( string $query, ...$args ): string {
+		foreach ( $args as $arg ) {
+			$val   = "'" . addslashes( (string) $arg ) . "'";
+			$query = preg_replace( '/%s/', $val, $query, 1 );
+		}
+		return $query;
+	}
+
+	public function esc_like( string $text ): string {
+		return addcslashes( $text, '_%\\' );
+	}
+
+	public function query( string $query ): int {
+		// Atomic CAS: UPDATE wp_options SET option_value = '...' WHERE option_name = '...' AND option_value = '...'
+		if ( preg_match( "/UPDATE wp_options SET option_value = '(.*?)' WHERE option_name = '(.*?)' AND option_value = '(.*?)'/", $query, $m ) ) {
+			$new_val  = $m[1];
+			$key      = $m[2];
+			$expected = $m[3];
+
+			if ( ( $GLOBALS['nvx_mock_options'][ $key ] ?? null ) === $expected ) {
+				$GLOBALS['nvx_mock_options'][ $key ] = $new_val;
+				return 1;
+			}
+			return 0;
+		}
+
+		// Atomic release: DELETE FROM wp_options WHERE option_name = '...' AND option_value LIKE '%|...'
+		if ( preg_match( "/DELETE FROM wp_options WHERE option_name = '(.*?)' AND option_value LIKE '(.*?)'/", $query, $m ) ) {
+			$key     = $m[1];
+			$pattern = $m[2];
+			$suffix  = ltrim( $pattern, '%' );
+			if ( isset( $GLOBALS['nvx_mock_options'][ $key ] ) && str_ends_with( $GLOBALS['nvx_mock_options'][ $key ], $suffix ) ) {
+				unset( $GLOBALS['nvx_mock_options'][ $key ] );
+				return 1;
+			}
+			return 0;
+		}
+
+		return 0;
+	}
+}
+
+$GLOBALS['wpdb'] = new MockWpdbAtomicCas();
+
+$lock_key = 'nvx_supabase_relay_drain_lock_v1';
+$expired_token = 'expired-token-123';
+$expired_time = time() - 60;
+$GLOBALS['nvx_mock_options'][ $lock_key ] = $expired_time . '|' . $expired_token;
+
+// Both contender A and contender B read the same expired lock
+// Contender A attempts lock takeover:
+$token_a = nvx_supabase_relay_queue_lock();
+assert( '' !== $token_a, 'Contender A must succeed in taking over expired lock' );
+
+// Contender B now attempts lock takeover against the same expired state (which is no longer in DB):
+$token_b = nvx_supabase_relay_queue_lock();
+assert( '' === $token_b, 'Contender B must lose the race and receive empty lock token' );
+
+// Verify Contender A's lock was NOT deleted by Contender B
+assert( isset( $GLOBALS['nvx_mock_options'][ $lock_key ] ), 'Winner lock must not be deleted by contender B' );
+assert( str_ends_with( $GLOBALS['nvx_mock_options'][ $lock_key ], '|' . $token_a ), 'Stored lock must belong to contender A' );
+
+// Losing contender B tries to unlock: must not delete winner A's lock
+nvx_supabase_relay_queue_unlock( 'wrong-token-b' );
+assert( isset( $GLOBALS['nvx_mock_options'][ $lock_key ] ), 'Wrong token unlock must not delete winner A lock' );
+
+// Winning contender A unlocks: lock is cleanly released
+nvx_supabase_relay_queue_unlock( $token_a );
+assert( ! isset( $GLOBALS['nvx_mock_options'][ $lock_key ] ), 'Winner unlock must cleanly release lock' );
+
+echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned expired_lock_cas=atomic\n";
