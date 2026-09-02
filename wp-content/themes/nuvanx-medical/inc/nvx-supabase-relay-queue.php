@@ -64,6 +64,17 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock_ttl' ) ) {
 	}
 }
 
+/**
+ * Current Unix timestamp with mock override support for deterministic concurrency tests.
+ *
+ * @return int Timestamp.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_time' ) ) {
+	function nvx_supabase_relay_time(): int {
+		return isset( $GLOBALS['nvx_mock_time'] ) ? (int) $GLOBALS['nvx_mock_time'] : time();
+	}
+}
+
 if ( ! defined( 'NVX_GOOGLE_CLICK_HMAC_CONTEXT' ) ) {
 	define(
 		'NVX_GOOGLE_CLICK_HMAC_CONTEXT',
@@ -1053,7 +1064,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock' ) ) {
 				? nvx_supabase_relay_queue_lock_ttl()
 				: (int) NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL );
 
-		$expires = time() + $lease;
+		$expires = nvx_supabase_relay_time() + $lease;
 
 		$value = $expires . '|' . $token;
 
@@ -1085,7 +1096,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock' ) ) {
 
 		if (
 			$current_expiry > 0
-			&& $current_expiry < time()
+			&& $current_expiry < nvx_supabase_relay_time()
 		) {
 			if (
 				nvx_supabase_relay_compare_and_swap_option(
@@ -1140,7 +1151,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_renew_lock' ) ) {
 				? nvx_supabase_relay_queue_lock_ttl()
 				: (int) NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL );
 
-		$new_value = ( time() + $lease ) . '|' . $token;
+		$new_value = ( nvx_supabase_relay_time() + $lease ) . '|' . $token;
 
 		return nvx_supabase_relay_compare_and_swap_option(
 			$key,

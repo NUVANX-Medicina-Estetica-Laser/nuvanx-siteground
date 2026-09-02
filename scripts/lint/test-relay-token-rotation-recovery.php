@@ -474,24 +474,43 @@ assert( 2 === count( $GLOBALS['remote_post_log'] ), 'Expected 2 HTTP calls: 1 in
 // Assert Test 11: Drain lock renewal across worst-case batch (150s) prevents second worker from acquiring lock
 unset( $GLOBALS['nvx_mock_options']['nvx_supabase_relay_drain_lock_v1'] );
 
-$batch_limit = 10;
-$derived_ttl = nvx_supabase_relay_queue_lock_ttl( $batch_limit );
+$start_time = 1700000000;
+$GLOBALS['nvx_mock_time'] = $start_time;
+
+// Baseline verification: prove that without renewal, advancing clock past lease expiry allows Worker B to take over
+$baseline_token = nvx_supabase_relay_queue_lock( 60 );
+assert( '' !== $baseline_token, 'Worker A acquires 60s lease' );
+$GLOBALS['nvx_mock_time'] = $start_time + 70; // 10s past 60s expiry
+$takeover_token = nvx_supabase_relay_queue_lock( 60 );
+assert( '' !== $takeover_token, 'Without renewal, advancing clock past expiry must permit takeover' );
+nvx_supabase_relay_queue_unlock( $takeover_token );
+
+// Now test batch with renewal: 10 items taking 15s each (total 150s)
+$GLOBALS['nvx_mock_time'] = $start_time;
+$batch_limit              = 10;
+$derived_ttl              = nvx_supabase_relay_queue_lock_ttl( $batch_limit );
 assert( $derived_ttl >= 180, 'Derived lease for 10 items must be >= 180s' );
 
 // Worker 1 acquires lock
 $worker1_lock = nvx_supabase_relay_queue_lock( $derived_ttl );
 assert( '' !== $worker1_lock, 'Worker 1 must acquire initial drain lock' );
 
-// Simulate 10 items in a worst-case batch where each item takes 15s (total 150s)
-// During the batch, lock is renewed at each step.
-// Even after 135s (which exceeds the old 120s static TTL), Worker 2 CANNOT acquire the lock.
+// Simulate 10 items in a worst-case batch advancing mock clock by 15s per item (total 150s)
 for ( $i = 1; $i <= 10; $i++ ) {
+	// Advance clock by 15 seconds simulating delivery, bootstrap, and retry transport
+	$GLOBALS['nvx_mock_time'] += 15;
+
+	// Worker 1 renews lease while draining:
 	$renewed = nvx_supabase_relay_queue_renew_lock( $worker1_lock, $derived_ttl );
 	assert( $renewed, "Lock renewal must succeed at batch step {$i}" );
 
+	// Concurrently, Worker 2 attempts acquisition during draining:
 	$worker2_attempt = nvx_supabase_relay_queue_lock( $derived_ttl );
-	assert( '' === $worker2_attempt, "Worker 2 must NOT acquire lock while Worker 1 is draining at step {$i}" );
+	assert( '' === $worker2_attempt, "Worker 2 must NOT acquire lock while Worker 1 is draining at step {$i} (elapsed: " . ( $GLOBALS['nvx_mock_time'] - $start_time ) . "s)" );
 }
+
+// Verify that 150 seconds elapsed during the batch
+assert( ( $start_time + 150 ) === $GLOBALS['nvx_mock_time'], 'Mock clock must have advanced 150s' );
 
 // After batch completes, Worker 1 releases lock cleanly:
 nvx_supabase_relay_queue_unlock( $worker1_lock );
@@ -501,5 +520,7 @@ assert( ! isset( $GLOBALS['nvx_mock_options']['nvx_supabase_relay_drain_lock_v1'
 $worker2_lock = nvx_supabase_relay_queue_lock( $derived_ttl );
 assert( '' !== $worker2_lock, 'Worker 2 can acquire lock once Worker 1 unlocks' );
 nvx_supabase_relay_queue_unlock( $worker2_lock );
+
+unset( $GLOBALS['nvx_mock_time'] );
 
 echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned expired_lock_cas=atomic drain_bootstrap_fail_accounting=1 dispatch_retry_accounting=aligned drain_lock_renewal=verified\n";
