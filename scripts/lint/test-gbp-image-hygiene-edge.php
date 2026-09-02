@@ -32,6 +32,7 @@ function nvx_schema_current_path( int $page_id = 0 ): string {
 	return (string) ( $GLOBALS['nvx_test_path'] ?? '' );
 }
 
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php';
 require $root . '/wp-content/themes/nuvanx-medical/inc/nvx-gbp-local.php';
 
 $abdomen = '<img src="https://staging2.nuvanx.com/wp-content/uploads/2026/06/laser-medico-nuvanx-madrid.webp" alt="Laserlipólisis médica en NUVANX Madrid">';
