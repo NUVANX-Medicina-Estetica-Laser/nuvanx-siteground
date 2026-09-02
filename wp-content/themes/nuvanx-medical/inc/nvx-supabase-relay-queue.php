@@ -686,6 +686,40 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		);
 
 		if ( $existing > 0 ) {
+			$current_attempts = absint(
+				get_post_meta(
+					$existing,
+					'_nvx_relay_attempts',
+					true
+				)
+			);
+			$new_attempts = $current_attempts + $attempts;
+
+			update_post_meta(
+				$existing,
+				'_nvx_relay_attempts',
+				(string) $new_attempts
+			);
+
+			if ( $new_attempts >= (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES ) {
+				nvx_supabase_relay_queue_mark_dead(
+					$existing,
+					$endpoint,
+					0,
+					'max_retries_exceeded'
+				);
+			} else {
+				$next_attempt = time()
+					+ nvx_supabase_relay_queue_backoff_seconds(
+						$new_attempts
+					);
+				update_post_meta(
+					$existing,
+					'_nvx_relay_next_attempt',
+					(string) $next_attempt
+				);
+			}
+
 			return $existing;
 		}
 

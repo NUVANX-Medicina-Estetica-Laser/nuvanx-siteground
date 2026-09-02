@@ -523,4 +523,24 @@ nvx_supabase_relay_queue_unlock( $worker2_lock );
 
 unset( $GLOBALS['nvx_mock_time'] );
 
-echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned expired_lock_cas=atomic drain_bootstrap_fail_accounting=1 dispatch_retry_accounting=aligned drain_lock_renewal=verified\n";
+// Assert Test 12: Duplicate enqueue accumulates attempts and enforces max retry limits
+$dedupe_test_body = '{"lead_id":"dedupe-test-99"}';
+$existing_item_id = 3001;
+$GLOBALS['post_meta'][$existing_item_id] = array(
+	'_nvx_relay_attempts' => '2',
+);
+$GLOBALS['mock_get_posts'] = array( $existing_item_id );
+
+// Enqueue with 2 attempts:
+$res1 = nvx_supabase_relay_queue_enqueue( 'lead_captured', $dedupe_test_body, array(), 2 );
+assert( $res1 === $existing_item_id, 'Must return existing item ID' );
+assert( '4' === (string) get_post_meta( $existing_item_id, '_nvx_relay_attempts', true ), 'Attempts must accumulate from 2 to 4' );
+
+// Enqueue again with 4 attempts (4 + 4 = 8, reaching max tries):
+$res2 = nvx_supabase_relay_queue_enqueue( 'lead_captured', $dedupe_test_body, array(), 4 );
+assert( $res2 === $existing_item_id, 'Must return existing item ID' );
+assert( '8' === (string) get_post_meta( $existing_item_id, '_nvx_relay_attempts', true ), 'Attempts must reach 8 and trigger mark_dead' );
+
+$GLOBALS['mock_get_posts'] = array();
+
+echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned expired_lock_cas=atomic drain_bootstrap_fail_accounting=1 dispatch_retry_accounting=aligned drain_lock_renewal=verified duplicate_enqueue_accounting=aligned\n";
