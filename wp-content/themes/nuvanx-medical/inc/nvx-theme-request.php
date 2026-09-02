@@ -37,10 +37,10 @@ if ( ! defined( 'NVX_REQUEST_MAX_QUERY_VALUE_BYTES' ) ) {
  */
 if ( ! defined( 'NVX_REQUEST_BOOT_URI' ) ) {
 	$nvx_request_boot_uri = isset( $_SERVER['REQUEST_URI'] )
-		? wp_unslash( (string) $_SERVER['REQUEST_URI'] )
+		? esc_url_raw( wp_unslash( (string) $_SERVER['REQUEST_URI'] ) )
 		: '';
 	$nvx_request_boot_uri = substr( $nvx_request_boot_uri, 0, NVX_REQUEST_MAX_URI_BYTES );
-	define( 'NVX_REQUEST_BOOT_URI', esc_url_raw( $nvx_request_boot_uri ) );
+	define( 'NVX_REQUEST_BOOT_URI', $nvx_request_boot_uri );
 	unset( $nvx_request_boot_uri );
 }
 
@@ -213,7 +213,8 @@ if ( ! function_exists( 'nvx_theme_request_environment' ) ) {
 		}
 
 		$configured_env = defined( 'NVX_ENV' )
-			? sanitize_key( strtolower( trim( (string) NVX_ENV ) ) )
+			? sanitize_key( strtolower( trim( (string) NVX_ENV ) )
+			)
 			: '';
 
 		if ( '' === $configured_env ) {
