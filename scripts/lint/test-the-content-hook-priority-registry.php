@@ -164,7 +164,14 @@ foreach ($iterator as $file) {
         }
 
         $arguments = nvx_lint_parse_call_arguments($tokens, $next);
-        if (null === $arguments || count($arguments) < 3) {
+        $relative  = str_replace($root . '/', '', $path);
+
+        if (null === $arguments) {
+            $violations[] = sprintf('%s:%d has unparseable add_filter call', $relative, $line);
+            continue;
+        }
+
+        if (count($arguments) < 1) {
             continue;
         }
 
@@ -173,9 +180,13 @@ foreach ($iterator as $file) {
             continue;
         }
 
+        if (count($arguments) < 3) {
+            $violations[] = sprintf('%s:%d omits explicit NVX_HOOK_PRIO_* priority argument', $relative, $line);
+            continue;
+        }
+
         $checked++;
         $priority = trim($arguments[2]);
-        $relative = str_replace($root . '/', '', $path);
 
         if (1 !== preg_match('/^NVX_HOOK_PRIO_[A-Z0-9_]+$/', $priority)) {
             $violations[] = sprintf('%s:%d uses non-canonical the_content priority `%s`', $relative, $line, $priority);
