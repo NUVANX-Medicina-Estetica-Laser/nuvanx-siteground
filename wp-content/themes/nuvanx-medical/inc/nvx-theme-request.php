@@ -108,8 +108,8 @@ if ( ! function_exists( 'nvx_theme_request_bound_query_value' ) ) {
 			return $value;
 		}
 
-		if ( function_exists( 'mb_substr' ) ) {
-			return (string) mb_substr(
+		if ( function_exists( 'mb_strcut' ) ) {
+			return (string) mb_strcut(
 				$value,
 				0,
 				NVX_REQUEST_MAX_QUERY_VALUE_BYTES,
