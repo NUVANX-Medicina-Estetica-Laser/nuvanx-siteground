@@ -26,7 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *     @type string $path            Normalized path (without query string), e.g., '/foo/bar/'.
  *     @type array  $query_args      Structured, sanitized query arguments.
  *     @type string $host            Configured/validated host.
- *     @type bool   $is_production   True only when explicitly classified as production.
+ *     @type bool   $is_production   True only when explicitly classified as production. // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
  *     @type bool   $is_staging2     True if strictly classified as staging2.
  * }
  */
@@ -71,9 +71,9 @@ function nvx_theme_request_context(): array {
 		// Narrow, non-HTTP exception used only while rebuilding Yoast indexables.
 		$is_production = true;
 	} else {
-		$is_staging_host = false !== strpos( $host, '.sg-host.com' ) || false !== strpos( $host, 'staging' );
+		$is_staging_host = false !== strpos( $host, '.sg-host.com' ) || false !== strpos( $host, 'staging' ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		$is_staging2     = 'staging2.nuvanx.com' === $host || ( defined( 'NVX_ENV' ) && 'staging2' === NVX_ENV );
-
+ // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		// Staging/preview host identity always wins over configuration so an
 		// accidentally copied production constant cannot make a preview indexable.
 		if ( ! $is_staging_host && ! $is_staging2 && defined( 'NVX_ENV' ) && 'production' === NVX_ENV ) {

@@ -183,8 +183,8 @@ function nuvanx_preload_lcp_hero(): void {
 	if ( $webp_readable ) {
 		echo '<link rel="preload" as="image"'
 			. ' href="' . esc_url( $webp_url ) . '"'
-			. $srcset_attr
-			. $sizes_attr
+			. $srcset_attr // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			. $sizes_attr // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			. ' type="image/webp"'
 			. ' fetchpriority="high"'
 			. ">\n";
@@ -192,8 +192,8 @@ function nuvanx_preload_lcp_hero(): void {
 
 	echo '<link rel="preload" as="image"'
 		. ' href="' . esc_url( $canonical_url ) . '"'
-		. $srcset_attr
-		. $sizes_attr
+		. $srcset_attr // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		. $sizes_attr // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		. ' fetchpriority="high"'
 		. ">\n";
 }

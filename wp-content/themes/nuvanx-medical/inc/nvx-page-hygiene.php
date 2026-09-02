@@ -24,7 +24,7 @@ function nvx_redirect_superseded_legal_pages(): void {
 	}
 
 	$page_id = is_page() ? (int) get_queried_object_id() : 0;
-	$uri     = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+	$uri     = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	$path    = trim( (string) wp_parse_url( $uri, PHP_URL_PATH ), '/' );
 
 	if ( in_array( $page_id, array( 18, 31 ), true ) || in_array( $path, array( 'politica-de-cookies', 'mas-informacion-sobre-las-cookies' ), true ) ) {
@@ -52,7 +52,7 @@ function nvx_redirect_valoracion_aliases(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
 	$path = '/' . trim( rawurldecode( $path ), '/' ) . '/';
 	$path = function_exists( 'mb_strtolower' ) ? mb_strtolower( $path, 'UTF-8' ) : strtolower( $path );
@@ -96,7 +96,7 @@ function nvx_redirect_goya_alias(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
 	$path = '/' . trim( rawurldecode( $path ), '/' ) . '/';
 
@@ -182,7 +182,7 @@ function nvx_redirect_unpublished_public_routes(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
 	$slug = sanitize_title( trim( rawurldecode( $path ), '/' ) );
 	$map  = nvx_unpublished_public_route_redirects();

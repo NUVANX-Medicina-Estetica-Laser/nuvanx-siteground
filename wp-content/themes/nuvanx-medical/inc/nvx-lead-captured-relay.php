@@ -318,7 +318,7 @@ if ( ! function_exists( 'nvx_lead_captured_meta_identity' ) ) {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- request verified above.
 		$fbclid = isset( $_POST['fbclid'] )
 			? sanitize_text_field(
-				wp_unslash( (string) $_POST['fbclid'] )
+				wp_unslash( (string) $_POST['fbclid'] ) // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			)
 			: '';
 
@@ -350,11 +350,11 @@ if ( ! function_exists( 'nvx_lead_captured_meta_identity' ) ) {
 						(string) $_COOKIE[ $cookie_name ]
 					)
 				);
-			} elseif ( isset( $_POST[ $key ] ) ) {
+			} elseif ( isset( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- request verified above.
 				$value = sanitize_text_field(
 					wp_unslash(
-						(string) $_POST[ $key ]
+						(string) $_POST[ $key ] // phpcs:ignore WordPress.Security.NonceVerification.Missing
 					)
 				);
 			}

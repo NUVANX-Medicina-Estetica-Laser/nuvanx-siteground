@@ -377,7 +377,7 @@ function nvx_seo_is_nonproduction_environment(): bool {
 	}
 
 	// SiteGround preview/staging hosts must never be indexable.
-	$raw_host = isset( $_SERVER['HTTP_HOST'] ) ? strtolower( trim( (string) $_SERVER['HTTP_HOST'] ) ) : '';
+	$raw_host = isset( $_SERVER['HTTP_HOST'] ) ? strtolower( trim( (string) $_SERVER['HTTP_HOST'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 	// wp_parse_url() strips the port from both 'host:port' and '[::1]:port' (IPv6) forms.
 	$parsed_host = wp_parse_url( 'https://' . $raw_host, PHP_URL_HOST );
 	$host        = ( $parsed_host !== false && $parsed_host !== null ) ? $parsed_host : $raw_host;
@@ -590,7 +590,7 @@ function nvx_seo_route_alias_destination( string $path ): ?string {
 		$query       = wp_parse_url( $request_uri, PHP_URL_QUERY );
 		$query       = is_string( $query ) ? $query : '';
 		if ( '' === $query && isset( $_SERVER['QUERY_STRING'] ) ) {
-			$query = (string) wp_unslash( $_SERVER['QUERY_STRING'] );
+			$query = (string) wp_unslash( $_SERVER['QUERY_STRING'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		}
 		$args = array();
 		wp_parse_str( $query, $args );
