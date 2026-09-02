@@ -111,7 +111,7 @@ function nvx_render_solutions_page( $content ): string {
 	$markup = nvx_solutions_hub_markup();
 	return '' !== trim( $markup ) ? $markup : $content;
 }
-add_filter( 'the_content', 'nvx_render_solutions_page', 11 );
+add_filter( 'the_content', 'nvx_render_solutions_page', NVX_HOOK_PRIO_SOLUTIONS_PAGE );
 
 /**
  * Enqueue the canonical medical solutions page stylesheet on its route.
