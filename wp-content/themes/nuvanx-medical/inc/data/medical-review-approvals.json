@@ -1,0 +1,14 @@
+{
+  "managed_pages": {
+    "/madrid/valoracion/": {
+      "status": "approved",
+      "reviewer": "rivera",
+      "date": "2026-08-01"
+    },
+    "/papada-definicion-mandibular-madrid/": {
+      "status": "approved",
+      "reviewer": "rivera",
+      "date": "2026-08-01"
+    }
+  }
+}
