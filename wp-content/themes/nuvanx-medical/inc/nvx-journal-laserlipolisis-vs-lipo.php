@@ -236,31 +236,3 @@ function nvx_journal_tech_article_title( $title, $post_id = 0 ) {
 }
 add_filter( 'the_title', 'nvx_journal_tech_article_title', 20, 2 );
 
-function nvx_journal_tech_article_seed_staging2(): void {
-	if ( ! function_exists( 'nvx_environment_is_staging2' ) || ! nvx_environment_is_staging2() ) {
-		return;
-	}
-	if ( ! function_exists( 'get_page_by_path' ) ) {
-		return;
-	}
-
-	foreach ( nvx_journal_tech_article_map() as $slug => $meta ) {
-		$existing = get_page_by_path( $slug, OBJECT, 'post' );
-		if ( $existing instanceof WP_Post ) {
-			continue;
-		}
-		$data = nvx_journal_tech_article_catalog( $slug );
-		wp_insert_post(
-			array(
-				'post_type'    => 'post',
-				'post_status'  => 'publish',
-				'post_title'   => (string) ( $data['title'] ?? $slug ),
-				'post_excerpt' => (string) ( $data['excerpt'] ?? '' ),
-				'post_name'    => $slug,
-				'post_content' => (string) $meta['marker'],
-			),
-			true
-		);
-	}
-}
-add_action( 'init', 'nvx_journal_tech_article_seed_staging2', 32 );
