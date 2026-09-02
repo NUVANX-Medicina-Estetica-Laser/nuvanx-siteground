@@ -18,7 +18,7 @@ const integration = fs.readFileSync(integrationPath, 'utf8');
 
 assert.match(gtm, /require_once __DIR__ \. '\/nvx-google-attribution-relay-auth\.php';/);
 assert.match(integration, /google-click-attribution/);
-assert.match(integration, /'blocking'\s*=>\s*true/);
+assert.match(integration, /nvx_supabase_relay_dispatch/);
 
 assert.match(auth, /nuvanx-google-click-attribution-hmac-key-v1/);
 assert.match(auth, /hash_hmac\( 'sha256', nvx_google_attribution_hmac_context\(\), \$credential, true \)/);

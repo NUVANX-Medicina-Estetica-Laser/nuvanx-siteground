@@ -67,9 +67,9 @@ assert.match(queue, /add_action\(\s*'switch_theme',\s*'nvx_supabase_relay_queue_
 assert.doesNotMatch(queue, /email|phone|firstname|authorization/i);
 
 assert.match(integration, /nvx_supabase_relay_dispatch\(\s*'google_click'/);
-assert.match(integration, /'timeout'\s*=>\s*3/);
-assert.match(integration, /'blocking'\s*=>\s*true/);
-assert.match(relay, /nvx_supabase_relay_queue_enqueue\(\s*'lead_captured'/);
+assert.match(queue, /'timeout'\s*=>\s*5/);
+assert.match(queue, /'blocking'\s*=>\s*true/);
+assert.match(relay, /nvx_supabase_relay_dispatch\(\s*'lead_captured'/);
 
 assert.match(staging, /attribution-lineage-e2e\.mjs/, 'Staging must own a dedicated attribution lineage phase');
 
