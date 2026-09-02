@@ -476,9 +476,11 @@ if (
 // By unsetting the primary location, we force the canonical fallback to be used.
 $menu_locations = get_theme_mod( 'nav_menu_locations' );
 if ( is_array( $menu_locations ) && isset( $menu_locations['primary'] ) ) {
-    unset( $menu_locations['primary'] );
-    set_theme_mod( 'nav_menu_locations', $menu_locations );
-    printf( "STAGING_MENU_SYNC: Unset primary menu location to force canonical fallback.\n" );
+    if ( ! $dry_run ) {
+        unset( $menu_locations['primary'] );
+        set_theme_mod( 'nav_menu_locations', $menu_locations );
+    }
+    printf( "STAGING_MENU_SYNC: Unset primary menu location to force canonical fallback%s.\n", $dry_run ? ' (dry-run)' : '' );
 }
 // ── Summary ───────────────────────────────────────────────────────────────────
 
