@@ -121,7 +121,12 @@ if ( ! function_exists( 'nvx_lead_captured_bootstrap_runtime' ) ) {
 			return false;
 		}
 
-		$transient = 'nvx_runtime_bootstrap_ok_v1';
+		$token_hash = substr(
+			hash( 'sha256', 'nvx_runtime_bootstrap|' . $token ),
+			0,
+			16
+		);
+		$transient  = 'nvx_rt_boot_' . $token_hash;
 
 		if (
 			! $force
@@ -881,10 +886,5 @@ if ( ! function_exists( 'nvx_lead_captured_on_http_response' ) ) {
 }
 
 if ( function_exists( 'add_filter' ) ) {
-	add_filter(
-		'http_response',
-		'nvx_lead_captured_on_http_response',
-		10,
-		3
-	);
+	add_filter( 'http_response', 'nvx_lead_captured_on_http_response', 10, 3 );
 }

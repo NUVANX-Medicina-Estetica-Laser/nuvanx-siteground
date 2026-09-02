@@ -503,7 +503,8 @@ if ( ! function_exists( 'nvx_supabase_relay_google_click_hmac_key' ) ) {
  */
 if ( ! function_exists( 'nvx_supabase_relay_ensure_runtime_bootstrap' ) ) {
 	function nvx_supabase_relay_ensure_runtime_bootstrap(
-		string $token
+		string $token,
+		bool $force = false
 	): true|WP_Error {
 		if ( '' === $token ) {
 			return new WP_Error(
@@ -525,7 +526,8 @@ if ( ! function_exists( 'nvx_supabase_relay_ensure_runtime_bootstrap' ) ) {
 
 		if (
 			! nvx_lead_captured_bootstrap_runtime(
-				$token
+				$token,
+				$force
 			)
 		) {
 			return new WP_Error(
@@ -774,7 +776,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 	function nvx_supabase_relay_queue_send(
 		string $endpoint,
 		string $body,
-		string $origin = ''
+		string $origin = '',
+		bool $force_bootstrap = false
 	): array|WP_Error {
 		$endpoint = sanitize_key( $endpoint );
 
@@ -800,7 +803,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 		$token = nvx_supabase_relay_google_click_token();
 
 		$bootstrap = nvx_supabase_relay_ensure_runtime_bootstrap(
-			$token
+			$token,
+			$force_bootstrap
 		);
 
 		if ( is_wp_error( $bootstrap ) ) {
@@ -819,13 +823,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 				);
 			}
 
-			return nvx_lead_captured_post_signed(
+			$response = nvx_lead_captured_post_signed(
 				$body,
 				$token
 			);
-		}
-
-		if ( 'google_click' === $endpoint ) {
+		} elseif ( 'google_click' === $endpoint ) {
 			$origin = nvx_supabase_relay_sanitize_origin(
 				$origin
 			);
@@ -837,18 +839,47 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 				);
 			}
 
-			return nvx_supabase_relay_google_click_post_signed(
+			$response = nvx_supabase_relay_google_click_post_signed(
 				$url,
 				$body,
 				$origin,
 				$token
 			);
+		} else {
+			return new WP_Error(
+				'nvx_relay_endpoint_unsupported',
+				'Unsupported relay endpoint.'
+			);
 		}
 
-		return new WP_Error(
-			'nvx_relay_endpoint_unsupported',
-			'Unsupported relay endpoint.'
-		);
+		/*
+		 * Bounded forced-bootstrap recovery path for authentication rejection (HTTP 401).
+		 * If token rotated or Supabase runtime key was lost, force-refresh the runtime bootstrap
+		 * and retry signed delivery once before declaring the record dead.
+		 */
+		if (
+			! $force_bootstrap
+			&& ! is_wp_error( $response )
+			&& 401 === absint( wp_remote_retrieve_response_code( $response ) )
+		) {
+			$forced_bootstrap = nvx_supabase_relay_ensure_runtime_bootstrap(
+				$token,
+				true
+			);
+
+			if ( is_wp_error( $forced_bootstrap ) ) {
+				return $forced_bootstrap;
+			}
+
+			return nvx_supabase_relay_queue_send(
+				$endpoint,
+				$body,
+				$origin,
+				true
+			);
+		}
+
+		return $response;
 	}
 }
 
@@ -890,6 +921,28 @@ if ( ! function_exists( 'nvx_supabase_relay_dispatch' ) ) {
 		$class = nvx_supabase_relay_classify(
 			$response
 		);
+
+		if ( 401 === $class['status'] ) {
+			try {
+				$retry_response = nvx_supabase_relay_queue_send(
+					$endpoint,
+					$body,
+					$origin,
+					true
+				);
+			} catch ( Throwable $retry_error ) {
+				unset( $retry_error );
+
+				$retry_response = new WP_Error(
+					'nvx_relay_unexpected_transport',
+					'Relay transport failed unexpectedly.'
+				);
+			}
+
+			$class = nvx_supabase_relay_classify(
+				$retry_response
+			);
+		}
 
 		nvx_supabase_relay_log(
 			$endpoint,
@@ -1153,6 +1206,28 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 				$class = nvx_supabase_relay_classify(
 					$response
 				);
+
+				if ( 401 === $class['status'] ) {
+					try {
+						$retry_response = nvx_supabase_relay_queue_send(
+							$endpoint,
+							$body,
+							$origin,
+							true
+						);
+					} catch ( Throwable $retry_error ) {
+						unset( $retry_error );
+
+						$retry_response = new WP_Error(
+							'nvx_relay_unexpected_transport',
+							'Relay transport failed unexpectedly.'
+						);
+					}
+
+					$class = nvx_supabase_relay_classify(
+						$retry_response
+					);
+				}
 
 				if ( 'SUCCESS' === $class['outcome'] ) {
 					wp_delete_post(
