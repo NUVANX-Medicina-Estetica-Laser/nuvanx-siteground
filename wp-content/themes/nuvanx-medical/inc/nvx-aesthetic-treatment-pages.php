@@ -2,8 +2,9 @@
 /**
  * Canonical facial aesthetic treatment pages.
  *
- * One versioned catalogue drives visible content, metadata, FAQ schema and the
- * staging-only page seeder. A later medical-review publish reclaims the slug.
+ * One versioned catalogue drives visible content, metadata, and FAQ schema.
+ * Explicit page seeding is owned exclusively by migration tooling. A later
+ * medical-review publish reclaims the slug.
  *
  * @package nuvanx-medical
  */
@@ -433,35 +434,3 @@ function nvx_aesthetic_treatment_page_content( string $content ): string {
 	return (string) ob_get_clean();
 }
 add_filter( 'the_content', 'nvx_aesthetic_treatment_page_content', NVX_HOOK_PRIO_AESTHETIC_TREATMENT );
-
-/** Seed governed pages on staging only; existing editorial records are never overwritten. */
-function nvx_aesthetic_treatment_seed_pages(): void {
-	if ( ! function_exists( 'nvx_environment_is_staging2' ) || ! nvx_environment_is_staging2() ) {
-		return;
-	}
-
-	foreach ( nvx_aesthetic_treatment_catalog() as $key => $page ) {
-		$existing = get_page_by_path( (string) $page['slug'], OBJECT, 'page' );
-		if ( $existing instanceof WP_Post ) {
-			continue;
-		}
-
-		$post_id = wp_insert_post(
-			array(
-				'post_title'   => wp_strip_all_tags( (string) $page['h1'] ),
-				'post_name'    => (string) $page['slug'],
-				'post_excerpt' => (string) $page['description'],
-				'post_content' => '<div class="nvx-aesthetic-treatment-source" data-nvx-treatment="' . esc_attr( (string) $key ) . '"></div>',
-				'post_status'  => 'publish',
-				'post_type'    => 'page',
-			),
-			true
-		);
-		if ( is_wp_error( $post_id ) ) {
-			continue;
-		}
-		update_post_meta( (int) $post_id, '_nvx_aesthetic_treatment_key', (string) $key );
-		update_post_meta( (int) $post_id, '_nvx_medical_review_status', 'pending' );
-	}
-}
-add_action( 'init', 'nvx_aesthetic_treatment_seed_pages', 30 );

@@ -209,7 +209,6 @@ function nvx_catalog_apply_tariff_truth( array $catalog, string $safe_name, ?arr
 			);
 		}
 
-		// The Endolift® catalog schema reserves FAQ item 0 for the pricing question.
 		$faq_idx = $config['endolift']['price_faq_index'] ?? 0;
 		if ( isset( $catalog['faq']['items'][ $faq_idx ] ) && is_array( $catalog['faq']['items'][ $faq_idx ] ) && '' !== $ojeras && '' !== $papada ) {
 			$catalog['faq']['items'][ $faq_idx ]['a'] = sprintf(
@@ -248,7 +247,6 @@ function nvx_catalog_apply_tariff_truth( array $catalog, string $safe_name, ?arr
 			);
 		}
 
-		// The EXION® catalog schema reserves FAQ item 0 for the pricing question.
 		$faq_idx = $config['exion']['price_faq_index'] ?? 0;
 		if ( isset( $catalog['faq']['items'][ $faq_idx ] ) && is_array( $catalog['faq']['items'][ $faq_idx ] ) ) {
 			$catalog['faq']['items'][ $faq_idx ]['a'] = sprintf(
@@ -285,7 +283,6 @@ function nvx_catalog_apply_tariff_truth( array $catalog, string $safe_name, ?arr
 			);
 		}
 
-		// The Endoláser catalog schema reserves FAQ item 7 for the pricing question.
 		$faq_idx = $config['endolaser']['price_faq_index'] ?? 7;
 		if ( isset( $catalog['faq']['items'][ $faq_idx ] ) && is_array( $catalog['faq']['items'][ $faq_idx ] ) && '' !== $rodillas && '' !== $abdomen ) {
 			$catalog['faq']['items'][ $faq_idx ]['a'] = sprintf(
@@ -414,55 +411,15 @@ function nvx_catalog_disable_legacy_exion_investment_override(): void {
 add_action( 'wp', 'nvx_catalog_disable_legacy_exion_investment_override', 1 );
 
 /**
- * Retire the temporary Bridal seed on staging when it was created by the
- * aesthetic-page seeder. Editorial pages with stale historical seed metadata
- * but without the seed marker are never modified.
+ * Determine whether both independent signals prove legacy Bridal seed provenance.
+ *
+ * This predicate is pure: it never mutates WordPress state. Persistent retirement
+ * is owned exclusively by the explicit Staging2 migration in tools/migrations.
  */
-function nvx_catalog_retire_unapproved_bridal_seed(): void {
-	if ( ! function_exists( 'nvx_environment_is_staging2' ) || ! nvx_environment_is_staging2() ) {
-		return;
-	}
-
-	$page = get_page_by_path( 'protocolo-novias-madrid', OBJECT, 'page' );
-	if ( ! ( $page instanceof WP_Post ) ) {
-		return;
-	}
-
-	$seed_key       = (string) get_post_meta( $page->ID, '_nvx_aesthetic_treatment_key', true );
-	$content        = (string) $page->post_content;
-	$has_seed_marker = false !== strpos( $content, 'data-nvx-treatment="bridal_protocol"' )
-		|| false !== strpos( $content, "data-nvx-treatment='bridal_protocol'" );
-	$has_meta_key  = 'bridal_protocol' === $seed_key;
-	$is_seed        = $has_meta_key && $has_seed_marker;
-
-	// Log when signals don't match for visibility into potential sync/edit issues
-	if ( $has_meta_key !== $has_seed_marker ) {
-		error_log( sprintf(
-			'NUVANX: bridal_protocol signal mismatch (meta=%s, marker=%s) for page %d. Seed status: %s.',
-			$has_meta_key ? 'present' : 'missing',
-			$has_seed_marker ? 'present' : 'missing',
-			$page->ID,
-			$is_seed ? 'treated as seed' : 'not treated as seed'
-		) );
-	}
-
-	if ( ! $is_seed || 'draft' === $page->post_status || 'trash' === $page->post_status ) {
-		return;
-	}
-
-	$result = wp_update_post(
-		array(
-			'ID'          => $page->ID,
-			'post_status' => 'draft',
-		),
-		true
-	);
-
-	if ( is_wp_error( $result ) ) {
-		nvx_catalog_log_error( 'Unable to retire the staging Bridal seed.' );
-	}
+function nvx_catalog_is_legacy_bridal_seed( bool $has_meta_key, bool $has_seed_marker ): bool {
+	$is_seed = $has_meta_key && $has_seed_marker;
+	return $is_seed;
 }
-add_action( 'init', 'nvx_catalog_retire_unapproved_bridal_seed', 40 );
 
 /**
  * Resolve a single catalog string token via prefix resolvers and claim tokens.
