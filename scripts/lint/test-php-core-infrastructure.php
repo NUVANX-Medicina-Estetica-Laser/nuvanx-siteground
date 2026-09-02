@@ -26,7 +26,7 @@ nvx_block9_assert( false !== strpos( $request, "'query_args'" ), 'REQUEST_CONTEX
 
 // Confirmed follow-up debt: page-hygiene still has several direct URI reads and
 // will be migrated as one redirect/hygiene consolidation rather than piecemeal.
-nvx_block9_assert( false !== strpos( $hygiene, "$_SERVER['REQUEST_URI']" ), 'PAGE_HYGIENE_DIRECT_URI_DEBT_RECORDED' );
+nvx_block9_assert( false !== strpos( $hygiene, '$_SERVER[\'REQUEST_URI\']' ), 'PAGE_HYGIENE_DIRECT_URI_DEBT_RECORDED' );
 
 $core = array(
 	'nvx-page-registry.php',
