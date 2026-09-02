@@ -39,6 +39,20 @@ assert.match(orchestrator, /H1_SEED_RECONCILIATION=NOOP/);
 assert.match(orchestrator, /H1_SEED_RECONCILIATION=FAIL/);
 assert.match(orchestrator, /\/wp-content\/\.nuvanx-deployments\//, 'Canonical release path must own implicit live mode');
 assert.match(orchestrator, /Ad-hoc\/manual executions default to dry-run/);
+
+// Bridal partial provenance is repairable only in two exact, bounded states:
+// stale legacy meta without marker, or exact legacy marker with an empty meta.
+// A conflicting non-empty key must remain fail-closed and dry-run must not write.
+assert.match(orchestrator, /function\s+nvx_h1_bridal_partial_provenance_repair\s*\(/);
+assert.match(orchestrator, /'clear_stale_meta'/);
+assert.match(orchestrator, /'restore_seed_meta'/);
+assert.match(orchestrator, /delete_post_meta\s*\(\s*\$post_id\s*,\s*'_nvx_aesthetic_treatment_key'\s*\)/);
+assert.match(orchestrator, /update_post_meta\s*\(\s*\$post_id\s*,\s*'_nvx_aesthetic_treatment_key'\s*,\s*'bridal_protocol'\s*\)/);
+assert.match(orchestrator, /bridal_partial_provenance_ambiguous/);
+assert.match(orchestrator, /H1_BRIDAL_PROVENANCE_REPAIR=%s action=%s writes=%d/);
+assert.match(orchestrator, /\$nvx_dry_run\s*\?\s*0\s*:\s*1/);
+assert.match(orchestrator, /!\s*empty\s*\(\s*\$nvx_other_errors\s*\)/, 'Unrelated H1 errors must block before Bridal repair');
+assert.match(orchestrator, /\$nvx_h1_plan\s*=\s*nvx_h1_build_plan\s*\(\s*\)\s*;/, 'Plan must be rebuilt after live Bridal repair');
 assert.match(core, /Status: MIGRATION_OK/, 'Historical hygiene core must preserve its terminal contract');
 
 assert.match(helper, /nvx_medical_review_record/);
@@ -52,4 +66,4 @@ assert.match(helper, /get_post_meta\s*\(/);
 assert.match(helper, /wp_insert_post\s*\(/);
 assert.match(helper, /wp_update_post\s*\(/);
 
-console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only prevalidate_all=1 transactional_apply=1 approvals=preserved');
+console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only prevalidate_all=1 bridal_partial_provenance=bounded_fail_closed approvals=preserved');
