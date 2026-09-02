@@ -53,25 +53,7 @@ if ( ! function_exists( 'nvx_page_module_owner_map' ) ) {
 	}
 }
 
-/**
- * Supplemental routes not yet represented by the canonical Page Registry.
- *
- * This list should shrink, not grow. New governed pages should be added to
- * nvx-page-registry.php first.
- *
- * @return array<string,string>
- */
-if ( ! function_exists( 'nvx_page_module_supplemental_routes' ) ) {
-	function nvx_page_module_supplemental_routes(): array {
-		return array(
-			'/protocolo-novias-madrid/' =>
-				'inc/nvx-bridal-page.php',
 
-			'/que-exigir-antes-de-operarte/' =>
-				'inc/nvx-que-exigir-page.php',
-		);
-	}
-}
 
 /**
  * Return all conditional renderer modules.
@@ -84,16 +66,7 @@ if ( ! function_exists( 'nvx_page_module_supplemental_routes' ) ) {
 if ( ! function_exists( 'nvx_page_module_all_files' ) ) {
 	function nvx_page_module_all_files(): array {
 		return array_values(
-			array_unique(
-				array_merge(
-					array_values(
-						nvx_page_module_owner_map()
-					),
-					array_values(
-						nvx_page_module_supplemental_routes()
-					)
-				)
-			)
+			nvx_page_module_owner_map()
 		);
 	}
 }
@@ -363,28 +336,7 @@ if ( ! function_exists( 'nvx_page_module_from_registry_path' ) ) {
 	}
 }
 
-/**
- * Resolve a supplemental module from exact path.
- */
-if ( ! function_exists( 'nvx_page_module_from_supplemental_path' ) ) {
-	function nvx_page_module_from_supplemental_path(
-		string $path
-	): string {
-		$routes =
-			nvx_page_module_supplemental_routes();
 
-		return isset(
-			$routes[
-				$path
-			]
-		)
-			? (string)
-				$routes[
-					$path
-				]
-			: '';
-	}
-}
 
 /**
  * Resolve module from the immutable request path.
@@ -398,16 +350,7 @@ if ( ! function_exists( 'nvx_page_module_for_request' ) ) {
 			return '';
 		}
 
-		$file =
-			nvx_page_module_from_registry_path(
-				$path
-			);
-
-		if ( '' !== $file ) {
-			return $file;
-		}
-
-		return nvx_page_module_from_supplemental_path(
+		return nvx_page_module_from_registry_path(
 			$path
 		);
 	}
