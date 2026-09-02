@@ -16,8 +16,8 @@ define( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL', 60 );
 
 if ( ! class_exists( 'WP_Error' ) ) {
 class WP_Post {
-tpublic $ID = 0;
-tpublic $post_status = 'pending';
+	public $ID = 0;
+	public $post_status = 'pending';
 }
 
 	final class WP_Error {
@@ -45,10 +45,10 @@ $GLOBALS['nvx_mock_options'] = array();
 $GLOBALS['nvx_uuid_counter'] = 0;
 
 function get_post( $post_id ) {
-t$post = new WP_Post();
-t$post->ID = (int) $post_id;
-t$post->post_status = 'pending';
-treturn $post;
+	$post = new WP_Post();
+	$post->ID = (int) $post_id;
+	$post->post_status = 'pending';
+	return $post;
 }
 
 function get_option( string $key, $default = false ) {
