@@ -1,18 +1,10 @@
 <?php
+declare(strict_types=1);
+
 defined( 'ABSPATH' ) || exit;
 
-// Register canonical Complianz policy routing before wp_head/wp_footer plugin
-// rendering so translated hash links cannot bypass the server-side finalizer.
-require_once __DIR__ . '/inc/nvx-complianz-policy-routing.php';
-
-// Register canonical brand-page wrapper governance before the_content runs so
-// managed renderers cannot create a second .nvx-brand-page inside the global frame.
-require_once __DIR__ . '/inc/nvx-brand-page-wrapper-governance.php';
-
-// Public-media runtime callbacks are registered from functions.php before any
-// template can emit attachment markup. No output-buffer rewrite is used here.
-// SiteGround Optimizer + Complianz own
-// the front-end buffer stack. Head contract is emitted via wp_head filters.
+// Runtime governance modules are loaded by the canonical theme bootstrap before
+// templates render. Header owns document markup only.
 ?><!doctype html>
 <html <?php language_attributes(); ?>>
 <head>

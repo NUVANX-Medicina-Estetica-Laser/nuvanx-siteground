@@ -5,6 +5,7 @@ import path from 'node:path';
 const catalogPath = 'wp-content/themes/nuvanx-medical/inc/data/ads-conversion-catalog.json';
 const catalogPhp = 'wp-content/themes/nuvanx-medical/inc/nvx-ads-conversion-catalog.php';
 const gtmPath = 'wp-content/themes/nuvanx-medical/inc/nvx-gtm-integration.php';
+const bootstrapPath = 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php';
 
 assert.equal(fs.existsSync(catalogPath), true, 'Ads conversion catalog must exist');
 assert.equal(fs.existsSync(catalogPhp), true, 'Ads conversion catalog loader must exist');
@@ -15,7 +16,11 @@ assert.equal(catalog.schema, 2);
 assert.match(sendTo, /^AW-[0-9]{8,12}\/[A-Za-z0-9_-]+$/);
 
 const gtm = fs.readFileSync(gtmPath, 'utf8');
-assert.match(gtm, /require_once __DIR__ \. '\/nvx-ads-conversion-catalog\.php';/);
+const bootstrap = fs.readFileSync(bootstrapPath, 'utf8');
+assert.doesNotMatch(gtm, /require_once.*nvx-ads-conversion-catalog/,
+  'GTM integration must not laterally load ads catalog (bootstrap manifest owns this)');
+assert.match(bootstrap, /'inc\/nvx-ads-conversion-catalog\.php'/,
+  'Ads conversion catalog must be loaded from bootstrap manifest');
 assert.match(gtm, /nvx_ads_conversion_client_context/);
 
 const sendToPattern = /AW-[0-9]{8,12}\/[A-Za-z0-9_-]+/g;

@@ -6,10 +6,12 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const routingPath = path.join(root, 'wp-content/themes/nuvanx-medical/inc/nvx-complianz-policy-routing.php');
+const bootstrapPath = path.join(root, 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php');
 const headerPath = path.join(root, 'wp-content/themes/nuvanx-medical/header.php');
 
-const [routing, header] = await Promise.all([
+const [routing, bootstrap, header] = await Promise.all([
   fs.readFile(routingPath, 'utf8'),
+  fs.readFile(bootstrapPath, 'utf8'),
   fs.readFile(headerPath, 'utf8'),
 ]);
 
@@ -22,7 +24,18 @@ assert.ok(routing.includes("remove_filter( 'cmplz_banner_html', 'nvx_sanitize_co
 assert.ok(routing.includes("remove_filter( 'cmplz_template', 'nvx_sanitize_complianz_banner_html', 20 )"), 'legacy template owner must be retired');
 assert.ok(routing.includes("add_filter( 'cmplz_banner_html', 'nvx_rewrite_complianz_policy_links', 20 )"), 'canonical banner owner must be registered');
 assert.ok(routing.includes("add_filter( 'cmplz_template', 'nvx_rewrite_complianz_policy_links', 20 )"), 'canonical template owner must be registered');
-assert.ok(header.includes("require_once __DIR__ . '/inc/nvx-complianz-policy-routing.php';"), 'canonical routing owner must load before wp_head');
-assert.ok(header.indexOf("require_once __DIR__ . '/inc/nvx-complianz-policy-routing.php';") < header.indexOf('wp_head();'), 'routing owner must load before wp_head');
 
-console.log('COMPLIANZ_POLICY_ROUTING_STATIC=PASS owner=canonical metadata=authoritative translated_hash_links=covered');
+const complianzModule = "'inc/nvx-complianz-policy-routing.php'";
+const modulePosition = bootstrap.indexOf(complianzModule);
+const bootstrapHookPosition = bootstrap.indexOf("add_action( 'after_setup_theme', 'nvx_theme_bootstrap_modules', -1000 );");
+
+assert.ok(modulePosition >= 0, 'canonical routing owner must be declared in bootstrap manifest');
+assert.ok(bootstrapHookPosition >= 0, 'canonical bootstrap must run at after_setup_theme priority -1000');
+assert.doesNotMatch(
+  header,
+  /require_once[^\n]*nvx-complianz-policy-routing\.php/,
+  'header.php must not laterally load Complianz routing',
+);
+assert.ok(header.includes('wp_head();'), 'header.php must retain wp_head');
+
+console.log('COMPLIANZ_POLICY_ROUTING_STATIC=PASS owner=bootstrap-manifest lifecycle=after_setup_theme:-1000 metadata=authoritative translated_hash_links=covered');

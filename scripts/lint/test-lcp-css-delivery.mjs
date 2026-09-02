@@ -6,6 +6,7 @@ const conversionEvents = fs.readFileSync(
   'utf8',
 );
 const functionsPhp = fs.readFileSync('wp-content/themes/nuvanx-medical/functions.php', 'utf8');
+const bootstrap = fs.readFileSync('wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php', 'utf8');
 const governance = fs.readFileSync(
   'wp-content/themes/nuvanx-medical/inc/nvx-native-style-governance.php',
   'utf8',
@@ -476,9 +477,14 @@ const bridalPhp = fs.readFileSync(
   'utf8',
 );
 assert.match(
+  bootstrap,
+  /'inc\/nvx-bridal-page\.php'/,
+  'bridal gallery module must be in bootstrap manifest',
+);
+assert.doesNotMatch(
   functionsPhp,
-  /require_once get_template_directory\(\) \. '\/inc\/nvx-bridal-page\.php';/,
-  'bridal gallery module must be bootstrapped',
+  /require_once.*nvx-bridal-page\.php/,
+  'bridal gallery module must not be laterally loaded from functions.php',
 );
 assert.match(
   bridalPhp,

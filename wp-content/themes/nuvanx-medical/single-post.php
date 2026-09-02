@@ -10,12 +10,9 @@
  * @package nuvanx-medical
  */
 
-defined( 'ABSPATH' ) || exit;
+declare(strict_types=1);
 
-// Load the DB-authoritative guard at the final single-post entrypoint. This is
-// intentionally before get_header()/Yoast so both the body loop and document
-// head are rebuilt from the actual governed public path.
-require_once __DIR__ . '/inc/nvx-governed-blog-runtime.php';
+defined( 'ABSPATH' ) || exit;
 
 global $wp_query;
 
