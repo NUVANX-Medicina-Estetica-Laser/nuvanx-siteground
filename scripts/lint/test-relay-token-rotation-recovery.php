@@ -138,6 +138,19 @@ if ( ! class_exists( 'WP_Query' ) ) {
 	}
 }
 
+function get_post( $post_id ) {
+	foreach ( ($GLOBALS['mock_query_posts'] ?? array()) as $p ) {
+		if ( $p instanceof WP_Post && $p->ID == $post_id ) {
+			$p->post_status = 'pending';
+			return $p;
+		}
+	}
+	$post = new WP_Post();
+	$post->ID = (int) $post_id;
+	$post->post_status = 'pending';
+	return $post;
+}
+
 function get_posts( array $args = array() ): array {
 	return $GLOBALS['mock_get_posts'] ?? array();
 }

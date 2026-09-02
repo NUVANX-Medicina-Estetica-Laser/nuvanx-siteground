@@ -15,6 +15,11 @@ define( 'MINUTE_IN_SECONDS', 60 );
 define( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL', 60 );
 
 if ( ! class_exists( 'WP_Error' ) ) {
+class WP_Post {
+tpublic $ID = 0;
+tpublic $post_status = 'pending';
+}
+
 	final class WP_Error {
 		public function __construct(
 			private string $code = '',
@@ -38,6 +43,13 @@ function absint( $value ): int { return abs( (int) $value ); }
 
 $GLOBALS['nvx_mock_options'] = array();
 $GLOBALS['nvx_uuid_counter'] = 0;
+
+function get_post( $post_id ) {
+t$post = new WP_Post();
+t$post->ID = (int) $post_id;
+t$post->post_status = 'pending';
+treturn $post;
+}
 
 function get_option( string $key, $default = false ) {
 	return $GLOBALS['nvx_mock_options'][ $key ] ?? $default;
