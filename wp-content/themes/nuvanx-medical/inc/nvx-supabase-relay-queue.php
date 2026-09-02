@@ -1213,6 +1213,32 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 
 				return 0;
 			}
+
+			// Post-publish ownership fence: confirm the reservation is still held by this token
+			// after the publish. If another process acquired the lease and also published between
+			// our renew() and wp_update_post(), both posts become pending. We detect and remove
+			// our now-redundant pending post and return the surviving item instead.
+			if ( ! nvx_supabase_relay_queue_dedupe_reservation_valid( $reservation['key'], $reservation['token'] ) ) {
+				wp_delete_post( $post_id, true );
+
+				nvx_supabase_relay_log(
+					$endpoint,
+					'DEAD',
+					0,
+					'dedupe_reservation_lost_post_publish'
+				);
+
+				$surviving = nvx_supabase_relay_existing_item( $dedupe_key );
+				if ( $surviving > 0 && $surviving !== $post_id ) {
+					return nvx_supabase_relay_queue_record_existing_attempt(
+						$surviving,
+						$endpoint,
+						$attempts
+					);
+				}
+
+				return 0;
+			}
 		} finally {
 			nvx_supabase_relay_queue_unlock_dedupe(
 				$reservation['key'],

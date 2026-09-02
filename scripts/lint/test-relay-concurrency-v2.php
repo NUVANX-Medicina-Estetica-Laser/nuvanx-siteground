@@ -567,6 +567,22 @@ $require(
 );
 unset( $GLOBALS['nvx_mock_options'][ $takeover_res_key ] );
 
+// Invariant 13: the post-publish ownership fence must appear in the source, between
+// wp_update_post() to 'pending' and the nvx_supabase_relay_queue_unlock_dedupe() cleanup.
+// This static guard verifies the guard exists so dead-code removal cannot silently drop it.
+// strrpos() locates the call-site unlock in the finally block (last occurrence), not the
+// function definition that precedes the enqueue implementation.
+$src_post_fence = (string) file_get_contents( $queue_path );
+$update_pos     = strpos( $src_post_fence, "'post_status' => 'pending'" );
+$unlock_pos     = strrpos( $src_post_fence, 'nvx_supabase_relay_queue_unlock_dedupe' );
+$fence_pos      = strpos( $src_post_fence, 'dedupe_reservation_lost_post_publish' );
+$require( false !== $fence_pos, 'POSTPUB_FENCE_EXISTS_IN_SOURCE' );
+$require(
+	false !== $update_pos && false !== $fence_pos && false !== $unlock_pos
+	&& $update_pos < $fence_pos && $fence_pos < $unlock_pos,
+	'POSTPUB_FENCE_ORDERED_AFTER_PUBLISH_BEFORE_UNLOCK'
+);
+
 unset( $GLOBALS['nvx_mock_time'] );
 
 if ( ! empty( $failures ) ) {
@@ -577,4 +593,5 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery cache_refresh=1 acquisition=bounded attempts=cas_conflict_safe meta_failure=bounded next_attempt=monotonic due=revalidated publish=two_phase publication_failure=fail_closed fencing=ordered contender_recovery=1 takeover_fenced=1 contention_attempts=1\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery cache_refresh=1 acquisition=bounded attempts=cas_conflict_safe meta_failure=bounded next_attempt=monotonic due=revalidated publish=two_phase publication_failure=fail_closed fencing=ordered contender_recovery=1 takeover_fenced=1 contention_attempts=1 post_publish_fence=1\n";
+
