@@ -42,6 +42,15 @@ const classifiedTotal = buckets.theme.length
   + buckets.root.length;
 assert.equal(classifiedTotal, tracked.length, 'Every tracked PHP file must have exactly one owner bucket');
 
+for (const file of tracked) {
+  try {
+    execFileSync('php', ['-l', file], { stdio: 'pipe' });
+  } catch (error) {
+    const detail = error?.stderr?.toString?.().trim() || error?.message || String(error);
+    assert.fail(`PHP syntax check failed for ${file}: ${detail}`);
+  }
+}
+
 const themeSources = new Map(
   buckets.theme.map((file) => [file, fs.readFileSync(file, 'utf8')]),
 );
@@ -64,6 +73,7 @@ console.log(
   + ` root=${buckets.root.length}`
   + ` other=${buckets.other.length}`
 );
+console.log(`PHP_REPOSITORY_SYNTAX=PASS files=${tracked.length}`);
 console.log(
   `PHP_RESIDUAL_AUDIT_METRICS=REPORT theme=${buckets.theme.length}`
   + ` strict_types=${strictTypesFiles.length}`
