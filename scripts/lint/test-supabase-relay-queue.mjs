@@ -63,8 +63,9 @@ assert.match(queue, /return new WP_Error\(\s*'nvx_relay_endpoint_unsupported'/, 
 assert.match(queue, /nvx_supabase_relay_google_click_post_signed\(/, 'NO_UNSIGNED_GENERIC_POST');
 assert.match(queue, /update_post_meta\(\s*\$post_id,\s*'_nvx_relay_attempts'/, 'META_WRITE_FAILURE_ROLLS_BACK_ITEM');
 assert.match(queue, /add_action\(\s*'switch_theme',\s*'nvx_supabase_relay_queue_unschedule_cron'\s*\)/, 'SWITCH_THEME_CLEARS_ALL_CRON');
-assert.match(queue, /401 === absint\(\s*wp_remote_retrieve_response_code\(\s*\$response\s*\)\s*\)/, 'AUTH_REJECTION_RECOVERY_DETECTED');
-assert.match(queue, /nvx_supabase_relay_ensure_runtime_bootstrap\(\s*\$token,\s*true\s*\)/, 'FORCED_BOOTSTRAP_ON_401');
+assert.match(queue, /401 === \$class\['status'\]/, 'AUTH_REJECTION_RECOVERY_DETECTED');
+assert.match(queue, /nvx_supabase_relay_queue_send\([\s\S]*?true\s*\)/, 'FORCED_BOOTSTRAP_ON_401');
+assert.match(queue, /\$attempts \+= \$delivery_attempts/, 'ATTEMPT_ACCOUNTING_ALIGNED');
 
 assert.doesNotMatch(queue, /email|phone|firstname|authorization/i);
 

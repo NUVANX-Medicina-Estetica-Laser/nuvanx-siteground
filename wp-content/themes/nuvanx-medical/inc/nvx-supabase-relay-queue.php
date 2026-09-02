@@ -777,7 +777,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 		string $endpoint,
 		string $body,
 		string $origin = '',
-		bool $allow_recovery = true
+		bool $force_bootstrap = false
 	): array|WP_Error {
 		$endpoint = sanitize_key( $endpoint );
 
@@ -803,7 +803,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 		$token = nvx_supabase_relay_google_click_token();
 
 		$bootstrap = nvx_supabase_relay_ensure_runtime_bootstrap(
-			$token
+			$token,
+			$force_bootstrap
 		);
 
 		if ( is_wp_error( $bootstrap ) ) {
@@ -822,11 +823,13 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 				);
 			}
 
-			$response = nvx_lead_captured_post_signed(
+			return nvx_lead_captured_post_signed(
 				$body,
 				$token
 			);
-		} elseif ( 'google_click' === $endpoint ) {
+		}
+
+		if ( 'google_click' === $endpoint ) {
 			$origin = nvx_supabase_relay_sanitize_origin(
 				$origin
 			);
@@ -838,47 +841,18 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 				);
 			}
 
-			$response = nvx_supabase_relay_google_click_post_signed(
+			return nvx_supabase_relay_google_click_post_signed(
 				$url,
 				$body,
 				$origin,
 				$token
 			);
-		} else {
-			return new WP_Error(
-				'nvx_relay_endpoint_unsupported',
-				'Unsupported relay endpoint.'
-			);
 		}
 
-		/*
-		 * Bounded forced-bootstrap recovery path for authentication rejection (HTTP 401).
-		 * If token rotated or Supabase runtime key was lost, force-refresh the runtime bootstrap
-		 * and retry signed delivery once before declaring the record dead.
-		 */
-		if (
-			$allow_recovery
-			&& ! is_wp_error( $response )
-			&& 401 === absint( wp_remote_retrieve_response_code( $response ) )
-		) {
-			$forced_bootstrap = nvx_supabase_relay_ensure_runtime_bootstrap(
-				$token,
-				true
-			);
-
-			if ( is_wp_error( $forced_bootstrap ) ) {
-				return $forced_bootstrap;
-			}
-
-			return nvx_supabase_relay_queue_send(
-				$endpoint,
-				$body,
-				$origin,
-				false
-			);
-		}
-
-		return $response;
+		return new WP_Error(
+			'nvx_relay_endpoint_unsupported',
+			'Unsupported relay endpoint.'
+		);
 	}
 }
 
@@ -1202,9 +1176,10 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 					);
 				}
 
-				$class = nvx_supabase_relay_classify(
+				$class             = nvx_supabase_relay_classify(
 					$response
 				);
+				$delivery_attempts = 1;
 
 				if ( 401 === $class['status'] ) {
 					try {
@@ -1223,9 +1198,10 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 						);
 					}
 
-					$class = nvx_supabase_relay_classify(
+					$class             = nvx_supabase_relay_classify(
 						$retry_response
 					);
+					$delivery_attempts = 2;
 				}
 
 				if ( 'SUCCESS' === $class['outcome'] ) {
@@ -1243,7 +1219,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 					continue;
 				}
 
-				++$attempts;
+				$attempts += $delivery_attempts;
 
 				if (
 					! $class['retryable']
