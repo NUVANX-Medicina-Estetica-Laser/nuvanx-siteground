@@ -52,7 +52,7 @@ assert.match(secureBridge, /pre_http_request/, 'HubSpot public submit requests m
 assert.match(secureBridge, /NVX_HUBSPOT_ACCESS_TOKEN/, 'Authenticated HubSpot transport must remain credential-backed');
 assert.match(secureBridge, /nvx_is_test_lead/, 'QA classification must remain server-owned');
 assert.match(secureBridge, /nvx_test_run_id/, 'QA run lineage must remain server-owned');
-assert.match(captureRelay, /add_filter\( 'http_response'/, 'Durable capture relay must observe accepted secure HubSpot responses');
+assert.match(captureRelay, /add_filter\(\s*'http_response',\s*'nvx_lead_captured_on_http_response',\s*10,\s*3\s*\)/, 'Durable capture relay must observe accepted secure HubSpot responses');
 assert.match(captureRelay, /status < 200 \|\| \$status >= 300/, 'Supabase capture must be suppressed unless HubSpot returned 2xx');
 assert.match(captureRelay, /valid nvx_lead_id missing/, 'Durable relay must fail closed without canonical lineage');
 
