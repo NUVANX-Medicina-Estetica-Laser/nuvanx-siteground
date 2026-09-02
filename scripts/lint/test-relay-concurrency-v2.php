@@ -2,19 +2,20 @@
 /**
  * Behavioral contract for Supabase relay outbox — atomic-claim design.
  *
- * Ownership is acquired via add_option() whose option_name UNIQUE index makes the INSERT
- * atomic at the DB level. This harness models that design.
+ * Ownership is acquired via add_option() with an in-flight lease/token ($expiry|$token).
  *
  * Invariants tested:
  *   1. CLAIM_ACQUIRED          — first enqueue wins the add_option claim.
  *   2. CLAIM_IDEMPOTENT        — second enqueue for same body routes to existing item.
  *   3. CLAIM_BOUND_TO_POST_ID  — after publish, claim option value equals post_id.
  *   4. PENDING_SINGLE_PHASE    — post is inserted directly as pending (not draft).
- *   5. METADATA_FAIL_RELEASES  — meta failure deletes post and deletes claim option.
- *   6. ORPHAN_RECOVERY         — enqueue with stale claim=0 deletes orphan and re-owns.
+ *   5. METADATA_FAIL_RELEASES  — meta failure deletes post and releases claim option.
+ *   6. ORPHAN_RECOVERY         — enqueue with expired in-flight claim takes over via CAS.
  *   7. ATTEMPTS_MONOTONIC      — record_existing_attempt never decreases _nvx_relay_attempts.
- *   8. SOURCE_INTEGRITY        — claim_key prefix and atomic acquisition present in source;
- *                                no draft status in enqueue function.
+ *   8. INTERLEAVED_OWNER_SAFE  — active owner lease is never stolen or deleted by contender.
+ *   9. LIFECYCLE_RELEASE       — completed/dead relays release claim so future retries succeed.
+ *  10. ROLLOUT_ADOPTION        — legacy pending posts without claim option are safely adopted.
+ *  11. SOURCE_INTEGRITY        — atomic primitives, release helpers, and single-phase guards in source.
  *
  * @package nuvanx-medical
  */
@@ -59,6 +60,7 @@ function is_wp_error( $value ): bool { return $value instanceof WP_Error; }
 function nvx_lead_captured_endpoint(): string { return 'https://collector.example.test/functions/v1/web-lead-captured'; }
 
 // Mock state
+$GLOBALS['nvx_mock_time']                     = 1000000;
 $GLOBALS['nvx_mock_options']                  = array();
 $GLOBALS['nvx_mock_post_meta']                = array();
 $GLOBALS['nvx_mock_meta_permanent_fail_keys'] = array();
@@ -175,7 +177,6 @@ $require  = static function ( bool $condition, string $name ) use ( &$failures )
 };
 
 // ── Invariant 1: CLAIM_ACQUIRED ──────────────────────────────────────────────
-// First enqueue wins the add_option claim and returns a positive post_id.
 $body1   = '{"submission_id":"inv1"}';
 $post_id = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body1, array(), 1 );
 $require( $post_id > 0, 'CLAIM_ACQUIRED' );
@@ -185,23 +186,19 @@ $claim_key1  = nvx_supabase_relay_queue_claim_key( $dedupe_key1 );
 $require( array_key_exists( $claim_key1, $GLOBALS['nvx_mock_options'] ), 'CLAIM_OPTION_EXISTS' );
 
 // ── Invariant 2: CLAIM_IDEMPOTENT ────────────────────────────────────────────
-// Second enqueue for same body returns the existing post_id; no new post created.
 $post_id2 = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body1, array(), 1 );
 $require( $post_id2 === $post_id, 'CLAIM_IDEMPOTENT_RETURNS_EXISTING' );
 $require( 1 === count( $GLOBALS['nvx_mock_posts'] ), 'NO_DUPLICATE_POST_CREATED' );
 
 // ── Invariant 3: CLAIM_BOUND_TO_POST_ID ──────────────────────────────────────
-// After successful enqueue the claim option value equals the post_id string.
 $claim_val = (string) get_option( $claim_key1, '0' );
 $require( $claim_val === (string) $post_id, 'CLAIM_BOUND_TO_POST_ID' );
 
 // ── Invariant 4: PENDING_SINGLE_PHASE ────────────────────────────────────────
-// Post is inserted directly as pending — no draft intermediate status.
 $post_obj = get_post( $post_id );
 $require( $post_obj instanceof WP_Post && 'pending' === $post_obj->post_status, 'PENDING_SINGLE_PHASE' );
 
 // ── Invariant 5: METADATA_FAIL_RELEASES ──────────────────────────────────────
-// When add_post_meta fails the post is deleted and the claim option is released.
 $body5           = '{"submission_id":"inv5-meta-fail"}';
 $post5_expected  = $GLOBALS['nvx_mock_next_post_id'] + 1;
 $GLOBALS['nvx_mock_meta_failure_on_post'] = $post5_expected;
@@ -217,22 +214,19 @@ $claim_key5  = nvx_supabase_relay_queue_claim_key( $dedupe_key5 );
 $require( ! array_key_exists( $claim_key5, $GLOBALS['nvx_mock_options'] ), 'METADATA_FAIL_RELEASES_CLAIM' );
 
 // ── Invariant 6: ORPHAN_RECOVERY ─────────────────────────────────────────────
-// Claim option present with value '0' and no matching post → enqueue deletes
-// orphan, re-acquires, and publishes successfully.
+// Abandoned claim (expired timestamp) is taken over via CAS and successfully published.
 $body6       = '{"submission_id":"inv6-orphan"}';
 $dedupe_key6 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body6, '' );
 $claim_key6  = nvx_supabase_relay_queue_claim_key( $dedupe_key6 );
 
-// Plant an orphaned claim (value '0', no corresponding post).
-$GLOBALS['nvx_mock_options'][ $claim_key6 ] = '0';
+// Plant an abandoned/expired in-flight claim (expired timestamp in past).
+$GLOBALS['nvx_mock_options'][ $claim_key6 ] = ( $GLOBALS['nvx_mock_time'] - 10 ) . '|crashed_token';
 
 $result6 = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body6, array(), 1 );
 $require( $result6 > 0, 'ORPHAN_RECOVERY_SUCCEEDS' );
 $require( (string) $result6 === (string) get_option( $claim_key6, '0' ), 'ORPHAN_RECOVERY_CLAIM_REBOUND' );
-$require( in_array( $claim_key6, $GLOBALS['nvx_mock_deleted_options'], true ), 'ORPHAN_CLAIM_DELETED_BEFORE_REOWN' );
 
 // ── Invariant 7: ATTEMPTS_MONOTONIC ──────────────────────────────────────────
-// record_existing_attempt accumulates attempts and never decreases the counter.
 $body7 = '{"submission_id":"inv7-monotonic"}';
 $post7 = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body7, array(), 1 );
 $require( $post7 > 0, 'INV7_INITIAL_ENQUEUE' );
@@ -243,14 +237,105 @@ $after = absint( get_post_meta( $post7, '_nvx_relay_attempts', true ) );
 $require( $after >= $before, 'ATTEMPTS_MONOTONIC_NON_DECREASING' );
 $require( $after === $before + 2, 'ATTEMPTS_MONOTONIC_CORRECT_INCREMENT' );
 
-// ── Invariant 8: SOURCE_INTEGRITY ────────────────────────────────────────────
-// Static guard: atomic acquisition primitives are present in the source; the
-// enqueue function does not contain a draft post_status (single-phase design).
-$src           = (string) file_get_contents( $queue_path );
+// ── Invariant 8: INTERLEAVED_OWNER_SAFE (Devin Comment 1) ────────────────────
+// An active publisher that pauses before insertion cannot have its claim stolen or deleted by a contender.
+$body8       = '{"submission_id":"inv8-interleaved"}';
+$dedupe_key8 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body8, '' );
+$claim_key8  = nvx_supabase_relay_queue_claim_key( $dedupe_key8 );
+
+// Owner 1 claims the identity with an active lease.
+$owner1_token   = 'owner_one_active_token';
+$owner1_expiry  = $GLOBALS['nvx_mock_time'] + 60;
+$owner1_inflight = $owner1_expiry . '|' . $owner1_token;
+$GLOBALS['nvx_mock_options'][ $claim_key8 ] = $owner1_inflight;
+
+// Owner 2 contends while Owner 1 is still in flight.
+$contender_res = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body8, array(), 1 );
+
+// Contender must NOT have stolen, overwritten, or deleted Owner 1's claim.
+$require( ( $GLOBALS['nvx_mock_options'][ $claim_key8 ] ?? '' ) === $owner1_inflight, 'CONTENDER_PRESERVED_OWNER1_CLAIM' );
+$require( ! in_array( $claim_key8, $GLOBALS['nvx_mock_deleted_options'], true ), 'CONTENDER_DID_NOT_DELETE_ACTIVE_CLAIM' );
+
+// Owner 1 completes publication and binds the claim.
+$owner1_post_id = wp_insert_post( array( 'post_status' => 'pending', 'post_content' => $body8 ) );
+add_post_meta( $owner1_post_id, '_nvx_relay_dedupe_key', $dedupe_key8, true );
+add_post_meta( $owner1_post_id, '_nvx_relay_attempts', '1', true );
+update_option( $claim_key8, (string) $owner1_post_id );
+
+// Now a new enqueue routes cleanly to Owner 1's post.
+$subsequent_res = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body8, array(), 1 );
+$require( $subsequent_res === $owner1_post_id, 'SUBSEQUENT_ROUTES_TO_OWNER1' );
+
+// ── Invariant 9: LIFECYCLE_RELEASE (Devin Comment 2) ─────────────────────────
+// Completed relays and dead relays release their claims so future retries succeed.
+// Subcase 9a: Retrying after successful drain
+$body9a   = '{"submission_id":"inv9a-drained"}';
+$post_9a  = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body9a, array(), 1 );
+$dedupe9a = nvx_supabase_relay_dedupe_key( 'lead_captured', $body9a, '' );
+$claim9a  = nvx_supabase_relay_queue_claim_key( $dedupe9a );
+
+// Simulate successful drain: post deleted, claim released.
+wp_delete_post( $post_9a, true );
+nvx_supabase_relay_queue_release_claim( $dedupe9a, (string) $post_9a );
+
+// New enqueue for the same body creates a new deliverable post.
+$post_9a_retry = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body9a, array(), 1 );
+$require( $post_9a_retry > 0 && $post_9a_retry !== $post_9a, 'RETRY_AFTER_DRAIN_CREATES_NEW_POST' );
+$require( get_post( $post_9a_retry ) instanceof WP_Post, 'RETRY_POST_EXISTS' );
+
+// Subcase 9b: Retrying after terminal death (mark_dead)
+$body9b   = '{"submission_id":"inv9b-dead"}';
+$post_9b  = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body9b, array(), 1 );
+$dedupe9b = nvx_supabase_relay_dedupe_key( 'lead_captured', $body9b, '' );
+
+nvx_supabase_relay_queue_mark_dead( $post_9b, 'lead_captured', 500, 'fatal_error' );
+$require( 'draft' === get_post( $post_9b )->post_status, 'DEAD_ITEM_IS_DRAFT' );
+
+// New enqueue for the same body creates a fresh deliverable pending post.
+$post_9b_retry = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body9b, array(), 1 );
+$require( $post_9b_retry > 0 && $post_9b_retry !== $post_9b, 'RETRY_AFTER_DEAD_CREATES_NEW_POST' );
+$require( 'pending' === get_post( $post_9b_retry )->post_status, 'NEW_RETRY_POST_IS_PENDING' );
+
+// Subcase 9c: Stale claim option pointing to deleted post is atomically taken over.
+$body9c   = '{"submission_id":"inv9c-stale-opt"}';
+$dedupe9c = nvx_supabase_relay_dedupe_key( 'lead_captured', $body9c, '' );
+$claim9c  = nvx_supabase_relay_queue_claim_key( $dedupe9c );
+$GLOBALS['nvx_mock_options'][ $claim9c ] = '99999'; // Non-existent post ID
+
+$post_9c = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body9c, array(), 1 );
+$require( $post_9c > 0 && 99999 !== $post_9c, 'STALE_OPTION_OVERTAKEN_BY_NEW_POST' );
+$require( (string) $post_9c === (string) get_option( $claim9c, '' ), 'STALE_CLAIM_BOUND_TO_NEW_POST' );
+
+// ── Invariant 10: ROLLOUT_ADOPTION (Devin Comment 3) ─────────────────────────
+// Legacy pending post without claim option is safely adopted; no duplicate created.
+$body10       = '{"submission_id":"inv10-legacy"}';
+$dedupe_key10 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body10, '' );
+$claim_key10  = nvx_supabase_relay_queue_claim_key( $dedupe_key10 );
+
+// Seed legacy pending post with no option.
+$legacy_post_id = ++$GLOBALS['nvx_mock_next_post_id'];
+$legacy_post    = new WP_Post();
+$legacy_post->ID          = $legacy_post_id;
+$legacy_post->post_status = 'pending';
+$GLOBALS['nvx_mock_posts'][ $legacy_post_id ] = $legacy_post;
+$GLOBALS['nvx_mock_post_meta'][ $legacy_post_id ]['_nvx_relay_dedupe_key'] = $dedupe_key10;
+$GLOBALS['nvx_mock_post_meta'][ $legacy_post_id ]['_nvx_relay_attempts']   = '1';
+unset( $GLOBALS['nvx_mock_options'][ $claim_key10 ] );
+
+$total_posts_before = count( $GLOBALS['nvx_mock_posts'] );
+$adopted_id         = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body10, array(), 1 );
+
+$require( $adopted_id === $legacy_post_id, 'LEGACY_POST_ADOPTED' );
+$require( count( $GLOBALS['nvx_mock_posts'] ) === $total_posts_before, 'NO_DUPLICATE_POST_ON_ADOPTION' );
+$require( (string) get_option( $claim_key10, '' ) === (string) $legacy_post_id, 'CLAIM_BOUND_TO_ADOPTED_POST' );
+
+// ── Invariant 11: SOURCE_INTEGRITY ───────────────────────────────────────────
+$src = (string) file_get_contents( $queue_path );
 $require( false !== strpos( $src, 'nvx_relay_claim_' ), 'CLAIM_KEY_PREFIX_IN_SOURCE' );
 $require( false !== strpos( $src, 'add_option( $claim_key' ), 'ATOMIC_ACQUISITION_IN_SOURCE' );
+$require( false !== strpos( $src, 'nvx_supabase_relay_queue_release_claim' ), 'RELEASE_CLAIM_HELPER_IN_SOURCE' );
+$require( false !== strpos( $src, 'nvx_supabase_relay_queue_is_valid_pending_item' ), 'VALID_PENDING_HELPER_IN_SOURCE' );
 
-// Locate enqueue body to verify no draft insertion remains.
 $enqueue_fn_pos = strpos( $src, 'function nvx_supabase_relay_queue_enqueue' );
 $post_id_return = strrpos( $src, 'return $post_id;' );
 $enqueue_body   = ( false !== $enqueue_fn_pos && false !== $post_id_return )
@@ -267,4 +352,4 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 single_phase=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 source_integrity=1\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 single_phase=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 source_integrity=1\n";
