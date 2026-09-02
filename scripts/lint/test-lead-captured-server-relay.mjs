@@ -5,6 +5,7 @@ const gtmPath = 'wp-content/themes/nuvanx-medical/inc/nvx-gtm-integration.php';
 const relayPath = 'wp-content/themes/nuvanx-medical/inc/nvx-lead-captured-relay.php';
 const bridgePath = 'wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-attribution.php';
 const consentPath = 'wp-content/themes/nuvanx-medical/inc/nvx-marketing-consent.php';
+const bootstrapPath = 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php';
 
 assert.equal(fs.existsSync(relayPath), true, 'Canonical lead-captured relay must exist');
 assert.equal(fs.existsSync(consentPath), true, 'Shared server-side consent owner must exist');
@@ -12,11 +13,18 @@ const gtm = fs.readFileSync(gtmPath, 'utf8');
 const relay = fs.readFileSync(relayPath, 'utf8');
 const bridge = fs.readFileSync(bridgePath, 'utf8');
 const consent = fs.readFileSync(consentPath, 'utf8');
+const bootstrap = fs.readFileSync(bootstrapPath, 'utf8');
 
-const secureRequire = gtm.indexOf("require_once __DIR__ . '/nvx-hubspot-secure-attribution.php';");
-const relayRequire = gtm.indexOf("require_once __DIR__ . '/nvx-lead-captured-relay.php';");
-assert.ok(secureRequire >= 0, 'Secure HubSpot bridge must remain loaded');
-assert.ok(relayRequire > secureRequire, 'Lead-captured relay must load after the secure HubSpot bridge');
+// With centralized bootstrap, verify both modules are in manifest in correct order
+const hubspotIndex = bootstrap.indexOf("'inc/nvx-hubspot-secure-attribution.php'");
+const relayIndex = bootstrap.indexOf("'inc/nvx-lead-captured-relay.php'");
+assert.ok(hubspotIndex >= 0, 'Secure HubSpot bridge must be in bootstrap manifest');
+assert.ok(relayIndex >= 0, 'Lead-captured relay must be in bootstrap manifest');
+assert.ok(relayIndex > hubspotIndex, 'Lead-captured relay must load after the secure HubSpot bridge in manifest');
+assert.doesNotMatch(gtm, /require_once.*nvx-hubspot-secure-attribution/,
+  'GTM integration must not laterally load HubSpot (bootstrap manifest owns this)');
+assert.doesNotMatch(gtm, /require_once.*nvx-lead-captured-relay/,
+  'GTM integration must not laterally load relay (bootstrap manifest owns this)');
 assert.match(bridge, /require_once (?:\$dependency|__DIR__ \. '\/nvx-marketing-consent\.php');/,
   'Secure bridge must load the shared consent owner before any attribution filtering');
 

@@ -9,6 +9,7 @@ const directPath = 'wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-f
 const gtmPath = 'wp-content/themes/nuvanx-medical/inc/nvx-gtm-integration.php';
 const bridgePath = 'wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-attribution.php';
 const provisionerPath = 'scripts/ci/provision-hubspot-attribution-contract.sh';
+const bootstrapPath = 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php';
 
 const managedV2 = [
   'nvx_lead_id',
@@ -174,6 +175,7 @@ if (!fs.existsSync(runtimePath)) {
   const direct = fs.readFileSync(directPath, 'utf8');
   const gtm = fs.readFileSync(gtmPath, 'utf8');
   const bridge = fs.readFileSync(bridgePath, 'utf8');
+  const bootstrap = fs.readFileSync(bootstrapPath, 'utf8');
 
   assert.match(runtime, /var UTM_KEYS = \['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'\]/,
     'Runtime must own the complete five-field UTM contract');
@@ -214,8 +216,10 @@ if (!fs.existsSync(runtimePath)) {
     'Staging2 must be the only automatic test-lead environment');
   assert.match(gtm, /window\.nvxConversionEvents\.qa=Object\.assign/,
     'Server QA context must be exposed to the browser runtime');
-  assert.match(gtm, /require_once __DIR__ \. '\/nvx-hubspot-secure-attribution\.php'/,
-    'Authenticated HubSpot bridge must be loaded from the analytics integration owner');
+  assert.doesNotMatch(gtm, /require_once.*nvx-hubspot-secure-attribution/,
+    'GTM integration must not laterally load HubSpot (bootstrap manifest owns this)');
+  assert.match(bootstrap, /'inc\/nvx-hubspot-secure-attribution\.php'/,
+    'HubSpot secure attribution must be loaded from bootstrap manifest');
 
   assert.match(direct, /name=\\?"nvx_lead_id\\?"/,
     'Direct form must carry the browser lineage UUID');

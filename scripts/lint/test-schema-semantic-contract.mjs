@@ -282,10 +282,12 @@ for (const file of jsonFiles) {
 }
 
 const bootstrapPath = path.join(themePath, 'functions.php');
+const bootstrapManifestPath = path.join(themePath, 'inc/nvx-theme-bootstrap.php');
 const hubPath = path.join(themePath, 'inc/nvx-treatment-hub-schema.php');
 const semanticGovernancePath = path.join(themePath, 'inc/nvx-schema-semantic-governance.php');
-const [bootstrap, hubSource, semanticGovernance] = await Promise.all([
+const [bootstrap, bootstrapManifest, hubSource, semanticGovernance] = await Promise.all([
   fs.readFile(bootstrapPath, 'utf8'),
+  fs.readFile(bootstrapManifestPath, 'utf8'),
   fs.readFile(hubPath, 'utf8'),
   fs.readFile(semanticGovernancePath, 'utf8'),
 ]);
@@ -300,8 +302,13 @@ for (const [file, content] of [
   }
 }
 
-if (!bootstrap.includes("require_once get_template_directory() . '/inc/nvx-schema-semantic-governance.php';")) {
-  addViolation('functions.php', 'semanticGovernance', 'Final semantic governance module is not loaded');
+// With centralized bootstrap, verify semantic governance is in bootstrap manifest
+if (!bootstrapManifest.includes("'inc/nvx-schema-semantic-governance.php'")) {
+  addViolation('inc/nvx-theme-bootstrap.php', 'semanticGovernance', 'Final semantic governance module is not in bootstrap manifest');
+}
+// Verify it's not laterally loaded from functions.php
+if (bootstrap.includes("require_once get_template_directory() . '/inc/nvx-schema-semantic-governance.php';")) {
+  addViolation('functions.php', 'semanticGovernance', 'Semantic governance must be loaded from bootstrap manifest, not laterally');
 }
 if (!/add_filter\(\s*['"]wpseo_schema_graph['"]\s*,\s*['"]nvx_schema_semantic_normalize_graph['"]\s*,\s*PHP_INT_MAX\s*-\s*2\s*,\s*1\s*\)/.test(semanticGovernance)) {
   addViolation('inc/nvx-schema-semantic-governance.php', 'semanticGovernance', 'Final graph normalizer must run at PHP_INT_MAX - 2');

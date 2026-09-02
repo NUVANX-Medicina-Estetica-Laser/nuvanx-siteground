@@ -7,6 +7,7 @@ const gtmPath = 'wp-content/themes/nuvanx-medical/inc/nvx-gtm-integration.php';
 const integrationPath = 'wp-content/themes/nuvanx-medical/inc/nvx-attribution-integration.php';
 const relayPath = 'wp-content/themes/nuvanx-medical/inc/nvx-lead-captured-relay.php';
 const stagingPath = '.github/workflows/staging.yml';
+const bootstrapPath = 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php';
 
 for (const path of [queuePath, gtmPath, integrationPath, relayPath, stagingPath]) {
   assert.equal(fs.existsSync(path), true, `Missing relay-queue contract file: ${path}`);
@@ -17,11 +18,18 @@ const gtm = fs.readFileSync(gtmPath, 'utf8');
 const integration = fs.readFileSync(integrationPath, 'utf8');
 const relay = fs.readFileSync(relayPath, 'utf8');
 const staging = fs.readFileSync(stagingPath, 'utf8');
+const bootstrap = fs.readFileSync(bootstrapPath, 'utf8');
 
-assert.match(gtm, /require_once __DIR__ \. '\/nvx-supabase-relay-queue\.php';/);
-const queueRequire = gtm.indexOf("require_once __DIR__ . '/nvx-supabase-relay-queue.php';");
-const leadRequire = gtm.indexOf("require_once __DIR__ . '/nvx-lead-captured-relay.php';");
-assert.ok(queueRequire >= 0 && leadRequire > queueRequire, 'Outbox must load before the lead-captured relay');
+// With centralized bootstrap, verify both modules are in manifest in correct order
+const queueIndex = bootstrap.indexOf("'inc/nvx-supabase-relay-queue.php'");
+const leadIndex = bootstrap.indexOf("'inc/nvx-lead-captured-relay.php'");
+assert.ok(queueIndex >= 0, 'Supabase relay queue must be in bootstrap manifest');
+assert.ok(leadIndex >= 0, 'Lead-captured relay must be in bootstrap manifest');
+assert.ok(leadIndex > queueIndex, 'Lead-captured relay must load after the queue in manifest');
+assert.doesNotMatch(gtm, /require_once.*nvx-supabase-relay-queue/,
+  'GTM integration must not laterally load queue (bootstrap manifest owns this)');
+assert.doesNotMatch(gtm, /require_once.*nvx-lead-captured-relay/,
+  'GTM integration must not laterally load relay (bootstrap manifest owns this)');
 
 assert.match(queue, /register_post_type\(\s*NVX_SUPABASE_RELAY_QUEUE_CPT/);
 assert.match(queue, /'public'\s*=>\s*false/);
