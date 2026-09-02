@@ -29,7 +29,11 @@ function nvx_content_is_dr_rivera_page( string $content ): bool {
 		? nvx_schema_current_path( (int) get_queried_object_id() )
 		: '';
 
-	if ( false !== strpos( $path, '/dr-javier-rivera-tejeda/' ) ) {
+	if (
+		is_string( $path )
+		&& function_exists( 'nvx_schema_path_matches' )
+		&& nvx_schema_path_matches( $path, '/dr-javier-rivera-tejeda/' )
+	) {
 		return true;
 	}
 
