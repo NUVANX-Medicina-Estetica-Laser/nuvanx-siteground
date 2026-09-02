@@ -10,8 +10,6 @@ parameters:
             - vendor
             - node_modules (?)
             - tests (?)
-    parallel:
-        maximumNumberOfProcesses: 1
     ignoreErrors:
         # Ignore filter callback return issues (common in WordPress when modifying objects by reference)
         - '#Filter callback return statement is missing#'
