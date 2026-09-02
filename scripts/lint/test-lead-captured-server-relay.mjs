@@ -40,6 +40,9 @@ if (hmacAware) {
   assert.match(relay, /'x-nvx-timestamp'\s*=>\s*\$timestamp/);
   assert.match(relay, /'x-nvx-signature'\s*=>\s*\$signature/);
   assert.match(relay, /nvx_supabase_relay_dispatch\(\s*'lead_captured'/);
+  assert.match(relay, /nvx_rt_boot_/, 'Runtime bootstrap cache transient must use token-specific prefix');
+  assert.match(relay, /hash\(\s*'sha256',\s*'nvx_runtime_bootstrap\|'\s*\.\s*\$token\s*\)/, 'Bootstrap transient key must derive from token hash');
+  assert.doesNotMatch(relay, /nvx_runtime_bootstrap_ok_v1/, 'Global static bootstrap transient key is forbidden');
 }
 
 assert.match(relay, /\$email_hash\s*=\s*hash\(\s*'sha256',\s*strtolower\(\s*trim\(\s*\$email\s*\)\s*\)\s*\);/);

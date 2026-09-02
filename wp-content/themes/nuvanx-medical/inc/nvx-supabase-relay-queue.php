@@ -777,7 +777,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 		string $endpoint,
 		string $body,
 		string $origin = '',
-		bool $force_bootstrap = false
+		bool $allow_recovery = true
 	): array|WP_Error {
 		$endpoint = sanitize_key( $endpoint );
 
@@ -803,8 +803,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 		$token = nvx_supabase_relay_google_click_token();
 
 		$bootstrap = nvx_supabase_relay_ensure_runtime_bootstrap(
-			$token,
-			$force_bootstrap
+			$token
 		);
 
 		if ( is_wp_error( $bootstrap ) ) {
@@ -858,7 +857,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 		 * and retry signed delivery once before declaring the record dead.
 		 */
 		if (
-			! $force_bootstrap
+			$allow_recovery
 			&& ! is_wp_error( $response )
 			&& 401 === absint( wp_remote_retrieve_response_code( $response ) )
 		) {
@@ -875,7 +874,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) ) {
 				$endpoint,
 				$body,
 				$origin,
-				true
+				false
 			);
 		}
 

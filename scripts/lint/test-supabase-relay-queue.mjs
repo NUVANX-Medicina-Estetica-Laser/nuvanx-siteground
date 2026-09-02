@@ -63,6 +63,8 @@ assert.match(queue, /return new WP_Error\(\s*'nvx_relay_endpoint_unsupported'/, 
 assert.match(queue, /nvx_supabase_relay_google_click_post_signed\(/, 'NO_UNSIGNED_GENERIC_POST');
 assert.match(queue, /update_post_meta\(\s*\$post_id,\s*'_nvx_relay_attempts'/, 'META_WRITE_FAILURE_ROLLS_BACK_ITEM');
 assert.match(queue, /add_action\(\s*'switch_theme',\s*'nvx_supabase_relay_queue_unschedule_cron'\s*\)/, 'SWITCH_THEME_CLEARS_ALL_CRON');
+assert.match(queue, /401 === absint\(\s*wp_remote_retrieve_response_code\(\s*\$response\s*\)\s*\)/, 'AUTH_REJECTION_RECOVERY_DETECTED');
+assert.match(queue, /nvx_supabase_relay_ensure_runtime_bootstrap\(\s*\$token,\s*true\s*\)/, 'FORCED_BOOTSTRAP_ON_401');
 
 assert.doesNotMatch(queue, /email|phone|firstname|authorization/i);
 
@@ -81,4 +83,12 @@ assert.equal(
 );
 assert.match(idHarness.stdout, /ATTRIBUTION_SUBMISSION_ID=PASS/);
 
-console.log('SUPABASE_RELAY_QUEUE=PASS blocking=1 outbox=1 telemetry=1 google_click_hmac=1 submission_id=deterministic');
+const recoveryHarness = spawnSync('php', ['scripts/lint/test-relay-token-rotation-recovery.php'], { encoding: 'utf8' });
+assert.equal(
+  recoveryHarness.status,
+  0,
+  `Relay token rotation and 401 recovery harness failed:\n${recoveryHarness.stdout}\n${recoveryHarness.stderr}`,
+);
+assert.match(recoveryHarness.stdout, /RELAY_TOKEN_ROTATION_RECOVERY=PASS/);
+
+console.log('SUPABASE_RELAY_QUEUE=PASS blocking=1 outbox=1 telemetry=1 google_click_hmac=1 submission_id=deterministic 401_recovery=1');
