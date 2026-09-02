@@ -18,7 +18,7 @@
     "lint:complianz": "node scripts/lint/test-complianz-a11y-sanitizer.mjs && node scripts/lint/test-complianz-policy-routing.mjs && php scripts/lint/test-complianz-policy-routing.php",
     "lint:schema": "node scripts/lint/test-schema-semantic-contract.mjs && php scripts/lint/test-robots-txt-governance.php && php scripts/lint/test-treatment-faqpage-contract.php",
     "lint:endolaser-approval": "node scripts/lint/test-endolaser-claim-approval.mjs",
-    "lint:clinical-evidence": "node scripts/lint/test-clinical-evidence-contract.mjs && php scripts/lint/test-php-blog-authority-governance.php",
+    "lint:clinical-evidence": "node scripts/lint/test-clinical-evidence-contract.mjs && php scripts/lint/test-php-blog-authority-governance.php && php scripts/lint/test-php-medical-provenance-owner.php",
     "lint:clinics-hub-equipment": "node scripts/lint/test-clinics-hub-equipment-contract.mjs",
     "lint:css-ownership": "node scripts/lint/test-css-ownership-contract.mjs",
     "lint:integrations": "node scripts/lint/test-conversion-ownership-contract.mjs && node scripts/lint/test-integration-config-fail-closed.mjs",
