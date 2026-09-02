@@ -34,25 +34,51 @@ assert.match(syncSource, /hs-form-event:on-ready/);
 assert.match(syncSource, /wp_listen_for_consent_change/);
 assert.doesNotMatch(syncSource, new RegExp(FORM_ID));
 
-assert.match(integration, /array\( 'nvx-attribution-contract' \)/);
-assert.match(integration, /pre_http_request', 'nvx_attribution_relay_direct_form_after_hubspot', 20, 3/);
-assert.match(integration, /nvx_hubspot_secure_original_url\(\) !== \$url/);
-assert.match(integration, /\$hubspot_status < 200 \|\| \$hubspot_status >= 300/);
-assert.match(integration, /\$_POST\['nvx_marketing_consent'\]/);
+assert.match(integration, /array\(\s*'nvx-attribution-contract'\s*\)/);
+assert.match(integration, /add_filter\(\s*'pre_http_request',\s*'nvx_attribution_relay_direct_form_after_hubspot',\s*20,\s*3\s*\)/);
+assert.match(integration, /hash_equals\(\s*\(string\)\s*nvx_hubspot_secure_original_url\(\),\s*\$url\s*\)/);
+assert.match(integration, /\$hubspot_status < 200[\s\S]*?\|\|[\s\S]*?\$hubspot_status >= 300/);
 assert.match(integration, /\$args\['body'\]/);
 assert.match(integration, /\$fields\['nvx_lead_id'\]/);
 assert.match(integration, /'submission_id'\s*=>\s*\$submission_id/);
 assert.match(integration, /'nvx_lead_id'\s*=>\s*\$lead_id/);
-assert.match(integration, /\$form_id = nvx_hubspot_secure_form_id\(\)/);
+assert.match(integration, /\$form_id = strtolower\(\s*trim\(\s*\(string\)\s*nvx_hubspot_secure_form_id\(\)\s*\)\s*\);/);
 assert.doesNotMatch(integration, new RegExp(FORM_ID));
 assert.match(integration, /return 'https:\/\/ssvvuuysgxyqvmovrlvk\.supabase\.co\/functions\/v1\/google-click-attribution';/);
 assert.match(integration, /NVX_ATTRIBUTION_COLLECTOR_ENDPOINT/);
-assert.match(integration, /NVX_ATTRIBUTION_COLLECTOR_ALLOWED_HOSTS/);
+assert.match(integration, /function nvx_attribution_collector_allowed_hosts/);
 assert.match(integration, /nvxAttributionMarketingFields/);
-assert.match(integration, /'timeout'\s*=>\s*3/);
-assert.match(integration, /'blocking'\s*=>\s*true/);
 assert.match(integration, /nvx_attribution_submission_id_from_lead/);
-assert.match(integration, /nvx_supabase_relay_dispatch/);
+assert.match(integration, /nvx_supabase_relay_dispatch\(\s*'google_click'/);
+
+// 1C-3 Contractual Tests
+assert.match(integration, /nvx_marketing_consent_granted/, 'GOOGLE_CLICK_SERVER_CONSENT_ONLY');
+assert.doesNotMatch(integration, /\$_POST\['nvx_marketing_consent'\]/, 'CLIENT_MARKETING_HIDDEN_FIELD_IGNORED');
+assert.match(integration, /nvx_attribution_is_direct_form_request/, 'GOOGLE_CLICK_DIRECT_FORM_NONCE_REQUIRED');
+
+assert.match(integration, /nvx_attribution_submission_id_from_lead/, 'GOOGLE_CLICK_DETERMINISTIC_SUBMISSION_ID');
+assert.doesNotMatch(integration, /wp_generate_uuid4/, 'GOOGLE_CLICK_NO_RANDOM_SUBMISSION_ID_FALLBACK');
+
+assert.match(integration, /int \$max_length = 512/, 'GOOGLE_CLICK_GCLID_MAX_512');
+assert.match(integration, /nvx_attribution_clean_click_id\([\s\S]*?128\s*\)/, 'GOOGLE_CLICK_GCLSRC_MAX_128');
+
+assert.match(integration, /define\(\s*'NVX_ATTRIBUTION_COLLECTOR_MAX_BODY_BYTES',\s*8192\s*\)/, 'GOOGLE_CLICK_MAX_BODY_8192');
+
+assert.match(integration, /'https' !== \$scheme/, 'GOOGLE_CLICK_HTTPS_FIRST_PARTY_LANDING');
+assert.match(integration, /'https:\/\/'\s*\.\s*\$host\s*\.\s*\$path/, 'GOOGLE_CLICK_QUERY_FRAGMENT_STRIPPED');
+
+assert.match(integration, /function nvx_attribution_collector_allowed_hosts/, 'GOOGLE_CLICK_CANONICAL_ORIGIN_ONLY');
+assert.doesNotMatch(integration, /NVX_ATTRIBUTION_COLLECTOR_ALLOWED_HOSTS/, 'GOOGLE_CLICK_NO_CONFIGURABLE_UNSUPPORTED_ORIGIN');
+
+assert.match(integration, /nvx_supabase_relay_dispatch\(\s*'google_click'/, 'GOOGLE_CLICK_OUTBOX_REQUIRED');
+assert.doesNotMatch(integration, /wp_remote_post\(\s*nvx_attribution_collector_endpoint\(\)/, 'GOOGLE_CLICK_NO_UNSIGNED_HTTP_FALLBACK');
+
+assert.match(integration, /\$hubspot_status < 200[\s\S]*?\|\|[\s\S]*?\$hubspot_status >= 300[\s\S]*?return \$preempt;/, 'GOOGLE_CLICK_HUBSPOT_FAILURE_NOOP');
+assert.match(integration, /! \$marketing_consent[\s\S]*?return \$preempt;/, 'GOOGLE_CLICK_NO_CONSENT_NOOP');
+assert.match(integration, /''\s*===\s*\$gclid\s*&&\s*''\s*===\s*\$gbraid\s*&&\s*''\s*===\s*\$wbraid[\s\S]*?return \$preempt;/, 'GOOGLE_CLICK_NO_CLICK_ID_NOOP');
+
+assert.match(integration, /\^staging2-sha-\[A-Za-z0-9._:-\]\{4,80\}\$\/D/, 'GOOGLE_CLICK_QA_SERVER_OWNED');
+assert.match(integration, /\$test_run_id = '';/, 'GOOGLE_CLICK_PRODUCTION_NO_FAKE_QA');
 assert.match(syncSource, /typeof value === 'boolean'\) return value;/,
   'Visible Single checkbox fields must retain HubSpot native boolean support');
 assert.doesNotMatch(integration, /NVX_GOOGLE_CLICK_ATTRIBUTION_ENDPOINT/);
