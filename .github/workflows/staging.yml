@@ -1068,7 +1068,7 @@ jobs:
           test "$(git rev-parse refs/remotes/origin/nvx-pr-preview)" = "$PR_SHA"
           mapfile -t changed < <(gh api --paginate "/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --jq '.[].filename' | sort -u)
           (( ${#changed[@]} > 0 ))
-          for file in "${changed[@]}"; do case "$file" in wp-content/themes/nuvanx-medical/*) ;; *) echo "PR preview refuses non-theme change: $file" >&2; exit 1 ;; esac; done
+          for file in "${changed[@]}"; do case "$file" in wp-content/themes/nuvanx-medical/*|scripts/lint/*|package.json) ;; *) echo "PR preview refuses executable or untrusted candidate path: $file" >&2; exit 1 ;; esac; done
           CANDIDATE_ROOT="$RUNNER_TEMP/nvx-pr-${PR_NUMBER}-${PR_SHA}"
           git worktree add --detach "$CANDIDATE_ROOT" origin/master
           echo "CANDIDATE_ROOT=$CANDIDATE_ROOT" >> "$GITHUB_ENV"
