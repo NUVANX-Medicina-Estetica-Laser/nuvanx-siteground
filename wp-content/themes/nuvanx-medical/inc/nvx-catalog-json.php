@@ -209,7 +209,6 @@ function nvx_catalog_apply_tariff_truth( array $catalog, string $safe_name, ?arr
 			);
 		}
 
-		// The Endolift® catalog schema reserves FAQ item 0 for the pricing question.
 		$faq_idx = $config['endolift']['price_faq_index'] ?? 0;
 		if ( isset( $catalog['faq']['items'][ $faq_idx ] ) && is_array( $catalog['faq']['items'][ $faq_idx ] ) && '' !== $ojeras && '' !== $papada ) {
 			$catalog['faq']['items'][ $faq_idx ]['a'] = sprintf(
@@ -248,7 +247,6 @@ function nvx_catalog_apply_tariff_truth( array $catalog, string $safe_name, ?arr
 			);
 		}
 
-		// The EXION® catalog schema reserves FAQ item 0 for the pricing question.
 		$faq_idx = $config['exion']['price_faq_index'] ?? 0;
 		if ( isset( $catalog['faq']['items'][ $faq_idx ] ) && is_array( $catalog['faq']['items'][ $faq_idx ] ) ) {
 			$catalog['faq']['items'][ $faq_idx ]['a'] = sprintf(
@@ -285,7 +283,6 @@ function nvx_catalog_apply_tariff_truth( array $catalog, string $safe_name, ?arr
 			);
 		}
 
-		// The Endoláser catalog schema reserves FAQ item 7 for the pricing question.
 		$faq_idx = $config['endolaser']['price_faq_index'] ?? 7;
 		if ( isset( $catalog['faq']['items'][ $faq_idx ] ) && is_array( $catalog['faq']['items'][ $faq_idx ] ) && '' !== $rodillas && '' !== $abdomen ) {
 			$catalog['faq']['items'][ $faq_idx ]['a'] = sprintf(
@@ -414,10 +411,15 @@ function nvx_catalog_disable_legacy_exion_investment_override(): void {
 add_action( 'wp', 'nvx_catalog_disable_legacy_exion_investment_override', 1 );
 
 /**
- * Retire the temporary Bridal seed on staging when it was created by the
- * aesthetic-page seeder. Editorial pages with stale historical seed metadata
- * but without the seed marker are never modified.
+ * Determine whether both independent signals prove legacy Bridal seed provenance.
+ *
+ * This predicate is pure: it never mutates WordPress state. Persistent retirement
+ * is owned exclusively by the explicit Staging2 migration in tools/migrations.
  */
+function nvx_catalog_is_legacy_bridal_seed( bool $has_meta_key, bool $has_seed_marker ): bool {
+	$is_seed = $has_meta_key && $has_seed_marker;
+	return $is_seed;
+}
 
 /**
  * Resolve a single catalog string token via prefix resolvers and claim tokens.
