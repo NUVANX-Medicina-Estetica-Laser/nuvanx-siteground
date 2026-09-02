@@ -221,7 +221,7 @@ function nvx_medical_review_approval( int $post_id = 0 ): ?array {
 /** Whether a registered reviewer has every public provenance field required. */
 function nvx_medical_review_reviewer_complete( array $reviewer ): bool {
 	foreach ( array( 'name', 'license', 'url', 'id', 'title' ) as $field ) {
-		if ( '' === trim( (string) ( $reviewer[ $field ] ?? '' ) ) {
+		if ( '' === trim( (string) ( $reviewer[ $field ] ?? '' ) ) ) {
 			return false;
 		}
 	}
