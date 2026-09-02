@@ -289,16 +289,16 @@ if ( ! function_exists( 'nvx_theme_request_context' ) ) {
 		$environment = nvx_theme_request_environment( $host );
 
 		$context = array(
-			'has_request_uri' => $has_request_uri,
-			'uri'             => $uri,
-			'path'            => $path,
-			'query_args'      => $query_args,
-			'client_host'     => $client_host,
-			'host'            => $host,
-			'environment'     => $environment,
-			'is_production'   => 'production' === $environment,
-			'is_staging2'     => 'staging2' === $environment,
-			'is_nonproduction'=> 'production' !== $environment,
+			'has_request_uri'  => $has_request_uri,
+			'uri'              => $uri,
+			'path'             => $path,
+			'query_args'       => $query_args,
+			'client_host'      => $client_host,
+			'host'             => $host,
+			'environment'      => $environment,
+			'is_production'    => 'production' === $environment,
+			'is_staging2'      => 'staging2' === $environment,
+			'is_nonproduction' => 'production' !== $environment,
 		);
 
 		return $context;
