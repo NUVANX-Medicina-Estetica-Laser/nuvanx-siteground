@@ -1,6 +1,10 @@
 <?php
 /**
- * Server-side authentication for the Google click attribution relay.
+ * Server-side authentication guard for the Google click attribution relay.
+ *
+ * This module enforces a fail-closed boundary during transport. It does not
+ * attach the signature itself; it only verifies that the relay queue has
+ * provided a valid cryptographic signature before allowing the network request.
  *
  * @package nuvanx-medical
  */
@@ -90,44 +94,3 @@ function nvx_google_attribution_block_unsigned_request( $preempt, array $parsed_
 	return $preempt;
 }
 add_filter( 'pre_http_request', 'nvx_google_attribution_block_unsigned_request', 5, 3 );
-
-/**
- * Attach the server-generated timestamp and HMAC signature to collector POSTs.
- *
- * Any normalization failure is deliberately left unsigned; the subsequent
- * pre_http_request gate above will block transport rather than fail open.
- *
- * @param array<string,mixed> $parsed_args Parsed request arguments.
- * @param string              $url         Request URL.
- * @return array<string,mixed>
- */
-function nvx_google_attribution_sign_request_args( array $parsed_args, string $url ): array {
-	if ( ! nvx_google_attribution_is_collector_request( $url ) || 'POST' !== strtoupper( (string) ( $parsed_args['method'] ?? 'GET' ) ) ) {
-		return $parsed_args;
-	}
-
-	$credential = nvx_google_attribution_signing_credential();
-	if ( '' === $credential ) {
-		return $parsed_args;
-	}
-
-	$body = nvx_google_attribution_normalize_body( $parsed_args['body'] ?? '' );
-	if ( false === $body ) {
-		return $parsed_args;
-	}
-	$parsed_args['body'] = $body;
-
-	$timestamp = (string) time();
-	$signature = hash_hmac(
-		'sha256',
-		$timestamp . '.' . $body,
-		nvx_google_attribution_derive_hmac_key( $credential )
-	);
-	$headers = isset( $parsed_args['headers'] ) && is_array( $parsed_args['headers'] ) ? $parsed_args['headers'] : array();
-	$headers['x-nvx-timestamp'] = $timestamp;
-	$headers['x-nvx-signature'] = $signature;
-	$parsed_args['headers']     = $headers;
-
-	return $parsed_args;
-}
-add_filter( 'http_request_args', 'nvx_google_attribution_sign_request_args', 10, 2 );
