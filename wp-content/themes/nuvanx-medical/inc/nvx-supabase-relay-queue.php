@@ -896,7 +896,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock_owned' ) ) {
 		string $token
 	): bool {
 		$key     = 'nvx_supabase_relay_drain_lock_v1';
-		$current = (string) get_option( $key, '' );
+		$current = nvx_supabase_relay_queue_fresh_option( $key );
 		$parts   = explode( '|', $current, 2 );
 
 		$current_expiry = isset( $parts[0] ) ? absint( $parts[0] ) : 0;
@@ -911,6 +911,59 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock_owned' ) ) {
 		}
 
 		return true;
+	}
+}
+
+/**
+ * Record additional attempts and schedule retry for an existing pending queue item.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_record_existing_attempt' ) ) {
+	function nvx_supabase_relay_queue_record_existing_attempt(
+		int $existing,
+		string $endpoint,
+		int $attempts
+	): int {
+		$new_attempts = nvx_supabase_relay_queue_atomic_add_attempts(
+			$existing,
+			$attempts
+		);
+
+		if ( null === $new_attempts ) {
+			nvx_supabase_relay_log(
+				$endpoint,
+				'QUEUED',
+				0,
+				'attempt_state_write_failed'
+			);
+
+			return $existing;
+		}
+
+		if ( $new_attempts >= (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES ) {
+			nvx_supabase_relay_queue_mark_dead(
+				$existing,
+				$endpoint,
+				0,
+				'max_retries_exceeded'
+			);
+		} else {
+			$next_attempt = time()
+				+ nvx_supabase_relay_queue_backoff_seconds(
+					$new_attempts
+				);
+			if ( ! nvx_supabase_relay_queue_set_next_attempt_monotonic( $existing, $next_attempt ) ) {
+				nvx_supabase_relay_log(
+					$endpoint,
+					'QUEUED',
+					0,
+					'next_attempt_write_failed'
+				);
+
+				return $existing;
+			}
+		}
+
+		return $existing;
 	}
 }
 
@@ -973,7 +1026,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			// Contention: determine whether the active holder published the identical pending item.
 			$existing = nvx_supabase_relay_existing_item( $dedupe_key );
 			if ( $existing > 0 ) {
-				return $existing;
+				return nvx_supabase_relay_queue_record_existing_attempt(
+					$existing,
+					$endpoint,
+					$attempts
+				);
 			}
 
 			// If the holder did not publish, provide a safe retry path so delivery is not lost.
@@ -983,7 +1040,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			} else {
 				$existing = nvx_supabase_relay_existing_item( $dedupe_key );
 				if ( $existing > 0 ) {
-					return $existing;
+					return nvx_supabase_relay_queue_record_existing_attempt(
+						$existing,
+						$endpoint,
+						$attempts
+					);
 				}
 
 				nvx_supabase_relay_log(
@@ -1003,47 +1064,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			);
 
 			if ( $existing > 0 ) {
-				$new_attempts = nvx_supabase_relay_queue_atomic_add_attempts(
+				return nvx_supabase_relay_queue_record_existing_attempt(
 					$existing,
+					$endpoint,
 					$attempts
 				);
-
-				if ( null === $new_attempts ) {
-					nvx_supabase_relay_log(
-						$endpoint,
-						'QUEUED',
-						0,
-						'attempt_state_write_failed'
-					);
-
-					return $existing;
-				}
-
-				if ( $new_attempts >= (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES ) {
-					nvx_supabase_relay_queue_mark_dead(
-						$existing,
-						$endpoint,
-						0,
-						'max_retries_exceeded'
-					);
-				} else {
-					$next_attempt = time()
-						+ nvx_supabase_relay_queue_backoff_seconds(
-							$new_attempts
-						);
-					if ( ! nvx_supabase_relay_queue_set_next_attempt_monotonic( $existing, $next_attempt ) ) {
-						nvx_supabase_relay_log(
-							$endpoint,
-							'QUEUED',
-							0,
-							'next_attempt_write_failed'
-						);
-
-						return $existing;
-					}
-				}
-
-				return $existing;
 			}
 
 			$attempts = max(
@@ -1158,7 +1183,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 
 				$existing = nvx_supabase_relay_existing_item( $dedupe_key );
 				if ( $existing > 0 ) {
-					return $existing;
+					return nvx_supabase_relay_queue_record_existing_attempt(
+						$existing,
+						$endpoint,
+						$attempts
+					);
 				}
 
 				return 0;

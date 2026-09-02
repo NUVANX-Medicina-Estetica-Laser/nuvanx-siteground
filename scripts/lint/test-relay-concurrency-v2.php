@@ -405,9 +405,14 @@ $require(
 	'DUE_STATE_RENEWS_OWNER_LEASE'
 );
 
-// Invariant 7: post-I/O fence rejects wrong or expired owners.
+// Invariant 7: post-I/O fence rejects wrong or expired owners and reads fresh option bypassing stale cache.
 $GLOBALS['nvx_mock_options'][ $lock_key ] = ( $now + 30 ) . '|fence-owner';
+$initial_cache_deletes = $GLOBALS['nvx_mock_cache_delete_calls'][ 'options:' . $lock_key ] ?? 0;
 $require( true === nvx_supabase_relay_queue_lock_owned( 'fence-owner' ), 'POST_IO_FENCE_VALID_OWNER' );
+$require(
+	( $GLOBALS['nvx_mock_cache_delete_calls'][ 'options:' . $lock_key ] ?? 0 ) > $initial_cache_deletes,
+	'POST_IO_FENCE_FRESH_OPTION_READ'
+);
 $require( false === nvx_supabase_relay_queue_lock_owned( 'wrong-owner' ), 'POST_IO_FENCE_WRONG_OWNER' );
 $GLOBALS['nvx_mock_options'][ $lock_key ] = $now . '|fence-owner';
 $require( false === nvx_supabase_relay_queue_lock_owned( 'fence-owner' ), 'POST_IO_FENCE_EXPIRED_OWNER' );
@@ -544,6 +549,24 @@ $require(
 );
 unset( $GLOBALS['nvx_mock_expire_reservation_before_publish'] );
 
+// Invariant 12: contention on an existing published item accumulates contender attempts through the shared accounting path.
+$overlap_body = '{"submission_id":"takeover-winner"}';
+$GLOBALS['nvx_mock_options'][ $takeover_res_key ] = ( $now + 60 ) . '|active-holder';
+$prior_attempts = absint( $GLOBALS['nvx_mock_post_meta'][ $takeover_post_id ]['_nvx_relay_attempts'] ?? '1' );
+$overlap_id = nvx_supabase_relay_queue_enqueue(
+	'lead_captured',
+	$overlap_body,
+	array(),
+	2
+);
+$require( $takeover_post_id === $overlap_id, 'CONTENTION_MATCHES_EXISTING_ITEM' );
+$updated_attempts = absint( $GLOBALS['nvx_mock_post_meta'][ $takeover_post_id ]['_nvx_relay_attempts'] ?? '0' );
+$require(
+	$updated_attempts === ( $prior_attempts + 2 ),
+	'CONTENTION_ACCUMULATES_CONTENDER_ATTEMPTS'
+);
+unset( $GLOBALS['nvx_mock_options'][ $takeover_res_key ] );
+
 unset( $GLOBALS['nvx_mock_time'] );
 
 if ( ! empty( $failures ) ) {
@@ -554,4 +577,4 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery cache_refresh=1 acquisition=bounded attempts=cas_conflict_safe meta_failure=bounded next_attempt=monotonic due=revalidated publish=two_phase publication_failure=fail_closed fencing=ordered contender_recovery=1 takeover_fenced=1\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery cache_refresh=1 acquisition=bounded attempts=cas_conflict_safe meta_failure=bounded next_attempt=monotonic due=revalidated publish=two_phase publication_failure=fail_closed fencing=ordered contender_recovery=1 takeover_fenced=1 contention_attempts=1\n";
