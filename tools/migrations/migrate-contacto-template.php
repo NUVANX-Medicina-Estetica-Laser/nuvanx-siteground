@@ -8,12 +8,10 @@
  * @package nuvanx-medical
  */
 
-if ( 'cli' !== php_sapi_name() ) {
-	echo "FAIL: Must run from CLI\n";
+if ( 'cli' !== php_sapi_name() || ! defined( 'ABSPATH' ) ) {
+	echo "FAIL: Run through WP-CLI eval-file with WordPress loaded.\n";
 	exit( 1 );
 }
-
-require_once dirname( __DIR__, 2 ) . '/wp-load.php';
 
 $query = new WP_Query(
 	array(
@@ -35,6 +33,7 @@ if ( empty( $query->posts ) ) {
 }
 
 $migrated = 0;
+$failures = 0;
 foreach ( $query->posts as $page ) {
 	$page_id = (int) $page->ID;
 	
@@ -48,12 +47,24 @@ foreach ( $query->posts as $page ) {
 	$updated = update_post_meta( $page_id, '_wp_page_template', 'templates/page-contacto.php' );
 	
 	if ( $updated ) {
-		echo "PASS\n";
-		$migrated++;
+		$verified = get_post_meta( $page_id, '_wp_page_template', true );
+		if ( 'templates/page-contacto.php' === $verified ) {
+			echo "PASS\n";
+			$migrated++;
+		} else {
+			echo "FAIL verification\n";
+			$failures++;
+		}
 	} else {
 		echo "FAIL\n";
+		$failures++;
 	}
 }
 
-echo sprintf( "Migration complete. %d pages migrated.\n", $migrated );
+if ( 0 < $failures ) {
+	echo sprintf( "CONTACTO_TEMPLATE_MIGRATION=FAIL migrated=%d failures=%d\n", $migrated, $failures );
+	exit( 1 );
+}
+
+echo sprintf( "CONTACTO_TEMPLATE_MIGRATION=PASS migrated=%d failures=0\n", $migrated );
 exit( 0 );
