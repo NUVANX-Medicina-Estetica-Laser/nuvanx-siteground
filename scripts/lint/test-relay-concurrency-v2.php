@@ -76,8 +76,39 @@ function get_post( $post_id ) {
 }
 
 function get_posts( $args = array() ): array {
-	unset( $args );
-	return array();
+	$status     = $args['post_status'] ?? 'pending';
+	$meta_query = $args['meta_query'] ?? array();
+	$results    = array();
+
+	// Hook for test: release reservation on existing check (simulating holder failure)
+	foreach ( $meta_query as $clause ) {
+		$v = $clause['value'] ?? '';
+		if ( ! empty( $GLOBALS['nvx_mock_release_on_existing_check'][ $v ] ) ) {
+			$res_key = $GLOBALS['nvx_mock_release_on_existing_check'][ $v ];
+			unset( $GLOBALS['nvx_mock_release_on_existing_check'][ $v ] );
+			unset( $GLOBALS['nvx_mock_options'][ $res_key ] );
+		}
+	}
+
+	foreach ( $GLOBALS['nvx_mock_posts'] as $id => $post ) {
+		if ( (string) $post->post_status !== (string) $status ) {
+			continue;
+		}
+		$match = true;
+		foreach ( $meta_query as $clause ) {
+			$k = $clause['key'] ?? '';
+			$v = $clause['value'] ?? '';
+			if ( (string) ( $GLOBALS['nvx_mock_post_meta'][ $id ][ $k ] ?? '' ) !== (string) $v ) {
+				$match = false;
+				break;
+			}
+		}
+		if ( $match ) {
+			$results[] = $id;
+		}
+	}
+
+	return $results;
 }
 
 function get_post_meta( $post_id, $key = '', $single = false ) {
@@ -116,6 +147,15 @@ function add_post_meta( $post_id, $key, $value, $unique = false ): bool {
 		return false;
 	}
 	$GLOBALS['nvx_mock_post_meta'][ $post_id ][ $key ] = (string) $value;
+
+	if (
+		'_nvx_relay_dedupe_key' === $key
+		&& ! empty( $GLOBALS['nvx_mock_expire_reservation_before_publish'] )
+	) {
+		$res_key = 'nvx_relay_dedupe_res_' . (string) $value;
+		$GLOBALS['nvx_mock_options'][ $res_key ] = ( time() - 100 ) . '|delayed-expired';
+	}
+
 	return true;
 }
 
@@ -428,6 +468,82 @@ $require(
 	'POST_IO_FENCE_BEFORE_MUTATION'
 );
 
+// Invariant 9b: enqueue ownership fence occurs after metadata and before publication.
+$fence_enqueue_pos = strpos( $enqueue, 'nvx_supabase_relay_queue_renew_dedupe_reservation(' );
+$require( false !== $fence_enqueue_pos, 'ENQUEUE_OWNERSHIP_FENCE_PRESENT' );
+$require(
+	false !== $dedupe_pos && false !== $fence_enqueue_pos && false !== $publish_pos
+	&& $dedupe_pos < $fence_enqueue_pos && $fence_enqueue_pos < $publish_pos,
+	'ENQUEUE_OWNERSHIP_FENCE_BEFORE_PUBLICATION'
+);
+
+// Invariant 10: holder failure after contender timeout preserves retryable delivery without dropping the event.
+$contender_body     = '{"submission_id":"holder-fails-after-contender-timeout"}';
+$contender_fail_key = nvx_supabase_relay_dedupe_key( 'lead_captured', $contender_body, '' );
+$contender_res_key  = 'nvx_relay_dedupe_res_' . $contender_fail_key;
+$GLOBALS['nvx_mock_options'][ $contender_res_key ] = ( $now + 60 ) . '|failing-holder';
+$GLOBALS['nvx_mock_release_on_existing_check'][ $contender_fail_key ] = $contender_res_key;
+
+$saved_post_id = nvx_supabase_relay_queue_enqueue(
+	'lead_captured',
+	$contender_body,
+	array(),
+	1
+);
+$require( $saved_post_id > 0, 'CONTENDER_RECOVERS_AND_PERSISTS_AFTER_HOLDER_FAILURE' );
+$require(
+	isset( $GLOBALS['nvx_mock_posts'][ $saved_post_id ] ) && 'pending' === $GLOBALS['nvx_mock_posts'][ $saved_post_id ]->post_status,
+	'CONTENDER_RECOVERED_ITEM_PENDING'
+);
+$require(
+	$contender_fail_key === ( $GLOBALS['nvx_mock_post_meta'][ $saved_post_id ]['_nvx_relay_dedupe_key'] ?? '' ),
+	'CONTENDER_RECOVERED_ITEM_DEDUPE_KEY_MATCH'
+);
+
+// Invariant 11: delayed owner whose lease expired is fenced from publishing duplicate after takeover.
+$takeover_key     = str_repeat( 'e', 64 );
+$takeover_res_key = 'nvx_relay_dedupe_res_' . $takeover_key;
+
+// 1. Takeover owner enqueues and publishes legitimate pending item.
+$takeover_post_id = nvx_supabase_relay_queue_enqueue(
+	'lead_captured',
+	'{"submission_id":"takeover-winner"}',
+	array(),
+	1
+);
+$require( $takeover_post_id > 0, 'TAKEOVER_OWNER_ENQUEUE_SUCCESS' );
+
+// 2. Ownership renewal rejects an expired owner token.
+$delayed_token = 'delayed-expired-token';
+$GLOBALS['nvx_mock_options'][ $takeover_res_key ] = ( $now - 10 ) . '|' . $delayed_token;
+$fence_result = nvx_supabase_relay_queue_renew_dedupe_reservation( $takeover_res_key, $delayed_token );
+$require( false === $fence_result, 'EXPIRED_OWNER_RENEWAL_FENCED' );
+
+// 3. Ownership renewal rejects a token that was overtaken by a new winner.
+$GLOBALS['nvx_mock_options'][ $takeover_res_key ] = ( $now + 60 ) . '|new-takeover-owner';
+$fence_taken_over = nvx_supabase_relay_queue_renew_dedupe_reservation( $takeover_res_key, $delayed_token );
+$require( false === $fence_taken_over, 'TAKEOVER_OWNER_RENEWAL_FENCED' );
+
+// 4. An enqueueing owner whose lease expires before publish deletes its draft post and does not publish.
+$GLOBALS['nvx_mock_expire_reservation_before_publish'] = true;
+$resumed_result = nvx_supabase_relay_queue_enqueue(
+	'lead_captured',
+	'{"submission_id":"resume-after-expired-lease"}',
+	array(),
+	1
+);
+$require( 0 === $resumed_result, 'EXPIRED_OWNER_ENQUEUE_RETURNS_ZERO' );
+$expired_post_id = $GLOBALS['nvx_mock_next_post_id'];
+$require(
+	in_array( $expired_post_id, $GLOBALS['nvx_mock_deleted_posts'], true ),
+	'EXPIRED_OWNER_DRAFT_DELETED_ON_FENCE'
+);
+$require(
+	! isset( $GLOBALS['nvx_mock_posts'][ $expired_post_id ] ),
+	'EXPIRED_OWNER_LEAVES_NO_ORPHAN_POST'
+);
+unset( $GLOBALS['nvx_mock_expire_reservation_before_publish'] );
+
 unset( $GLOBALS['nvx_mock_time'] );
 
 if ( ! empty( $failures ) ) {
@@ -438,4 +554,4 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery cache_refresh=1 acquisition=bounded attempts=cas_conflict_safe meta_failure=bounded next_attempt=monotonic due=revalidated publish=two_phase publication_failure=fail_closed fencing=ordered\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery cache_refresh=1 acquisition=bounded attempts=cas_conflict_safe meta_failure=bounded next_attempt=monotonic due=revalidated publish=two_phase publication_failure=fail_closed fencing=ordered contender_recovery=1 takeover_fenced=1\n";

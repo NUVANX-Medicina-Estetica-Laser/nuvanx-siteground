@@ -664,6 +664,64 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_unlock_dedupe' ) ) {
 }
 
 /**
+ * Validate that a dedupe reservation is currently held by the specified token and unexpired.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_dedupe_reservation_valid' ) ) {
+	function nvx_supabase_relay_queue_dedupe_reservation_valid(
+		string $key,
+		string $token
+	): bool {
+		if ( '' === $key || '' === $token ) {
+			return false;
+		}
+
+		$current = nvx_supabase_relay_queue_fresh_option( $key );
+		if ( '' === $current ) {
+			return false;
+		}
+
+		$parts  = explode( '|', $current, 2 );
+		$expiry = isset( $parts[0] ) ? absint( $parts[0] ) : 0;
+		$holder = isset( $parts[1] ) ? (string) $parts[1] : '';
+
+		return $holder === $token && $expiry > nvx_supabase_relay_time();
+	}
+}
+
+/**
+ * Renew an existing dedupe reservation lease for the active owner.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_renew_dedupe_reservation' ) ) {
+	function nvx_supabase_relay_queue_renew_dedupe_reservation(
+		string $key,
+		string $token,
+		int $lease = 60
+	): bool {
+		if ( '' === $key || '' === $token ) {
+			return false;
+		}
+
+		$current = nvx_supabase_relay_queue_fresh_option( $key );
+		if ( '' === $current ) {
+			return false;
+		}
+
+		$parts  = explode( '|', $current, 2 );
+		$expiry = isset( $parts[0] ) ? absint( $parts[0] ) : 0;
+		$holder = isset( $parts[1] ) ? (string) $parts[1] : '';
+
+		if ( $holder !== $token || $expiry <= nvx_supabase_relay_time() ) {
+			return false;
+		}
+
+		$new_expiry = nvx_supabase_relay_time() + $lease;
+		$new_val    = $new_expiry . '|' . $token;
+
+		return nvx_supabase_relay_compare_and_swap_option( $key, $current, $new_val );
+	}
+}
+
+/**
  * Force a fresh non-autoloaded option read after a lost cross-request CAS.
  */
 if ( ! function_exists( 'nvx_supabase_relay_queue_fresh_option' ) ) {
@@ -703,7 +761,17 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_dedupe_reservation' ) ) {
 				);
 			}
 
-			$current        = nvx_supabase_relay_queue_fresh_option( $key );
+			$current = nvx_supabase_relay_queue_fresh_option( $key );
+			if ( '' === $current ) {
+				if ( add_option( $key, $value, '', false ) ) {
+					return array(
+						'key'   => $key,
+						'token' => $token,
+					);
+				}
+				$current = nvx_supabase_relay_queue_fresh_option( $key );
+			}
+
 			$parts          = explode( '|', $current, 2 );
 			$current_expiry = isset( $parts[0] ) ? absint( $parts[0] ) : 0;
 
@@ -902,14 +970,31 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 
 		$reservation = nvx_supabase_relay_queue_dedupe_reservation( $dedupe_key );
 		if ( '' === $reservation['key'] || '' === $reservation['token'] ) {
-			nvx_supabase_relay_log(
-				$endpoint,
-				'TRANSPORT',
-				0,
-				'dedupe_reservation_failed'
-			);
+			// Contention: determine whether the active holder published the identical pending item.
+			$existing = nvx_supabase_relay_existing_item( $dedupe_key );
+			if ( $existing > 0 ) {
+				return $existing;
+			}
 
-			return 0;
+			// If the holder did not publish, provide a safe retry path so delivery is not lost.
+			$retry_reservation = nvx_supabase_relay_queue_dedupe_reservation( $dedupe_key );
+			if ( '' !== $retry_reservation['key'] && '' !== $retry_reservation['token'] ) {
+				$reservation = $retry_reservation;
+			} else {
+				$existing = nvx_supabase_relay_existing_item( $dedupe_key );
+				if ( $existing > 0 ) {
+					return $existing;
+				}
+
+				nvx_supabase_relay_log(
+					$endpoint,
+					'TRANSPORT',
+					0,
+					'dedupe_reservation_failed'
+				);
+
+				return 0;
+			}
 		}
 
 		try {
@@ -1056,6 +1141,25 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 					0,
 					'enqueue_metadata_failed'
 				);
+
+				return 0;
+			}
+
+			// Ownership fence: ensure the dedupe reservation has not expired and was not taken over before publishing.
+			if ( ! nvx_supabase_relay_queue_renew_dedupe_reservation( $reservation['key'], $reservation['token'] ) ) {
+				wp_delete_post( $post_id, true );
+
+				nvx_supabase_relay_log(
+					$endpoint,
+					'DEAD',
+					0,
+					'dedupe_reservation_expired'
+				);
+
+				$existing = nvx_supabase_relay_existing_item( $dedupe_key );
+				if ( $existing > 0 ) {
+					return $existing;
+				}
 
 				return 0;
 			}
