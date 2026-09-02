@@ -99,10 +99,8 @@ function nvx_aesthetic_schema_procedure_node(
 				$prices[] = (float) $normalized;
 			}
 
-			if ( ! empty( $prices ) ) {
-				$numeric_price = min( $prices );
-				$high_price = max( $prices );
-			}
+			$numeric_price = min( $prices );
+			$high_price = max( $prices );
 		}
 
 		if ( null !== $numeric_price && $numeric_price > 0 ) {
