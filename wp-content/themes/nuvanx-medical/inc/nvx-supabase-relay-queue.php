@@ -38,7 +38,30 @@ if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_MAX_BODY_BYTES' ) ) {
 }
 
 if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL' ) ) {
-	define( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL', 120 );
+	define( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL', 180 );
+}
+
+/**
+ * Safely derive lock lease duration based on batch size and worst-case transport timeouts.
+ *
+ * Each item in the batch can consume up to 5s delivery, 5s forced bootstrap, and 5s retry delivery (15s).
+ * A safe safety buffer is added to ensure the lease outlives worst-case execution.
+ *
+ * @param int $batch_size Maximum items in batch.
+ * @return int TTL in seconds.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_lock_ttl' ) ) {
+	function nvx_supabase_relay_queue_lock_ttl(
+		int $batch_size = NVX_SUPABASE_RELAY_QUEUE_BATCH
+	): int {
+		$worst_case_per_item = 15;
+		$derived             = ( max( 1, $batch_size ) * $worst_case_per_item ) + 30;
+
+		return max(
+			(int) NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL,
+			$derived
+		);
+	}
 }
 
 if ( ! defined( 'NVX_GOOGLE_CLICK_HMAC_CONTEXT' ) ) {
@@ -891,9 +914,10 @@ if ( ! function_exists( 'nvx_supabase_relay_dispatch' ) ) {
 			);
 		}
 
-		$class = nvx_supabase_relay_classify(
+		$class             = nvx_supabase_relay_classify(
 			$response
 		);
+		$delivery_attempts = 1;
 
 		if ( 401 === $class['status'] ) {
 			try {
@@ -912,9 +936,12 @@ if ( ! function_exists( 'nvx_supabase_relay_dispatch' ) ) {
 				);
 			}
 
-			$class = nvx_supabase_relay_classify(
+			$class             = nvx_supabase_relay_classify(
 				$retry_response
 			);
+			$delivery_attempts = ( is_wp_error( $retry_response ) && 'nvx_runtime_bootstrap_unavailable' === $retry_response->get_error_code() )
+				? 1
+				: 2;
 		}
 
 		nvx_supabase_relay_log(
@@ -933,7 +960,7 @@ if ( ! function_exists( 'nvx_supabase_relay_dispatch' ) ) {
 				array(
 					'Origin' => $origin,
 				),
-				1
+				$delivery_attempts
 			);
 		}
 
@@ -1012,14 +1039,21 @@ if ( ! function_exists( 'nvx_supabase_relay_compare_and_swap_option' ) ) {
  * @return string Lock token or empty string.
  */
 if ( ! function_exists( 'nvx_supabase_relay_queue_lock' ) ) {
-	function nvx_supabase_relay_queue_lock(): string {
+	function nvx_supabase_relay_queue_lock(
+		int $ttl = 0
+	): string {
 		$key   = 'nvx_supabase_relay_drain_lock_v1';
 		$token = function_exists( 'wp_generate_uuid4' )
 			? wp_generate_uuid4()
 			: bin2hex( random_bytes( 16 ) );
 
-		$expires = time()
-			+ (int) NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL;
+		$lease = $ttl > 0
+			? $ttl
+			: ( function_exists( 'nvx_supabase_relay_queue_lock_ttl' )
+				? nvx_supabase_relay_queue_lock_ttl()
+				: (int) NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL );
+
+		$expires = time() + $lease;
 
 		$value = $expires . '|' . $token;
 
@@ -1065,6 +1099,54 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock' ) ) {
 		}
 
 		return '';
+	}
+}
+
+/**
+ * Atomically renew the drain lock for the active owner.
+ *
+ * @param string $token Lock ownership token.
+ * @param int    $ttl   Renewal lease duration in seconds.
+ * @return bool True if lock was renewed, false if lost or not owned.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_renew_lock' ) ) {
+	function nvx_supabase_relay_queue_renew_lock(
+		string $token,
+		int $ttl = 0
+	): bool {
+		if ( '' === $token ) {
+			return false;
+		}
+
+		$key = 'nvx_supabase_relay_drain_lock_v1';
+
+		$current = (string) get_option(
+			$key,
+			''
+		);
+
+		if (
+			! str_ends_with(
+				$current,
+				'|' . $token
+			)
+		) {
+			return false;
+		}
+
+		$lease = $ttl > 0
+			? $ttl
+			: ( function_exists( 'nvx_supabase_relay_queue_lock_ttl' )
+				? nvx_supabase_relay_queue_lock_ttl()
+				: (int) NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL );
+
+		$new_value = ( time() + $lease ) . '|' . $token;
+
+		return nvx_supabase_relay_compare_and_swap_option(
+			$key,
+			$current,
+			$new_value
+		);
 	}
 }
 
@@ -1154,7 +1236,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 			)
 		);
 
-		$lock = nvx_supabase_relay_queue_lock();
+		$lease_ttl = function_exists( 'nvx_supabase_relay_queue_lock_ttl' )
+			? nvx_supabase_relay_queue_lock_ttl( $limit )
+			: (int) NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL;
+
+		$lock = nvx_supabase_relay_queue_lock( $lease_ttl );
 
 		if ( '' === $lock ) {
 			return;
@@ -1185,6 +1271,10 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 			);
 
 			foreach ( $query->posts as $post ) {
+				if ( ! nvx_supabase_relay_queue_renew_lock( $lock, $lease_ttl ) ) {
+					break;
+				}
+
 				if ( ! $post instanceof WP_Post ) {
 					continue;
 				}

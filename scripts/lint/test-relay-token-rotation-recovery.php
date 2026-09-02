@@ -95,12 +95,30 @@ function update_post_meta( int $post_id, string $key, $value ): bool {
 	$GLOBALS['post_meta'][ $post_id ][ $key ] = (string) $value;
 	return true;
 }
+function add_post_meta( int $post_id, string $key, $value, bool $unique = false ): bool {
+	unset( $unique );
+	return update_post_meta( $post_id, $key, $value );
+}
 function wp_delete_post( int $post_id, bool $force = false ): bool {
 	unset( $post_id, $force );
 	return true;
 }
 function wp_update_post( array $args = array() ): int {
 	return (int) ( $args['ID'] ?? 0 );
+}
+function wp_slash( $val ) { return $val; }
+function wp_unslash( $val ) { return $val; }
+
+$GLOBALS['nvx_next_post_id'] = 2000;
+function wp_insert_post( array $args, bool $wp_error = false ) {
+	unset( $wp_error );
+	$id = ++$GLOBALS['nvx_next_post_id'];
+	if ( isset( $args['meta_input'] ) && is_array( $args['meta_input'] ) ) {
+		foreach ( $args['meta_input'] as $k => $v ) {
+			update_post_meta( $id, $k, (string) $v );
+		}
+	}
+	return $id;
 }
 
 if ( ! class_exists( 'WP_Post' ) ) {
@@ -118,6 +136,10 @@ if ( ! class_exists( 'WP_Query' ) ) {
 			$this->posts = $GLOBALS['mock_query_posts'] ?? array();
 		}
 	}
+}
+
+function get_posts( array $args = array() ): array {
+	return $GLOBALS['mock_get_posts'] ?? array();
 }
 
 function sanitize_key( $key ): string {
@@ -416,4 +438,68 @@ nvx_supabase_relay_queue_drain( 1 );
 assert( '2' === (string) get_post_meta( 1000, '_nvx_relay_attempts', true ), 'Completed second delivery retry must increment attempts by 2' );
 assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected 3 HTTP calls: 1 failed delivery + 1 successful bootstrap + 1 retry delivery' );
 
-echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned expired_lock_cas=atomic drain_bootstrap_fail_accounting=1\n";
+// Assert Test 9: Dispatch 401 -> successful bootstrap -> retryable delivery failure enqueues with 2 attempts
+$GLOBALS['remote_post_log'] = array();
+$GLOBALS['mock_responses']  = array(
+	array( 'response' => array( 'code' => 401 ), 'body' => '{"error":"unauthorized"}' ),
+	array( 'response' => array( 'code' => 200 ), 'body' => '{"ok":true}' ),
+	array( 'response' => array( 'code' => 500 ), 'body' => '{"error":"internal error"}' ),
+);
+
+set_transient( 'nvx_rt_boot_' . $active_hash, '1' );
+
+$dispatch_result = nvx_supabase_relay_dispatch( 'lead_captured', $valid_body );
+assert( 500 === $dispatch_result['status'], 'Expected retry delivery 500 status in dispatch' );
+assert( $dispatch_result['queued'] > 0, 'Retryable failure must enqueue item from dispatch' );
+$enqueued_id = $dispatch_result['queued'];
+assert( '2' === (string) get_post_meta( $enqueued_id, '_nvx_relay_attempts', true ), 'Enqueued item must record 2 delivery attempts when retry was completed' );
+assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected 3 HTTP calls: 1 initial send + 1 bootstrap + 1 retry send' );
+
+// Assert Test 10: Dispatch 401 -> bootstrap failure enqueues with 1 attempt
+$GLOBALS['remote_post_log'] = array();
+$GLOBALS['mock_responses']  = array(
+	array( 'response' => array( 'code' => 401 ), 'body' => '{"error":"unauthorized"}' ),
+	array( 'response' => array( 'code' => 500 ), 'body' => '{"error":"bootstrap fail"}' ),
+);
+
+set_transient( 'nvx_rt_boot_' . $active_hash, '1' );
+
+$dispatch_fail_boot = nvx_supabase_relay_dispatch( 'lead_captured', $valid_body );
+assert( 0 === $dispatch_fail_boot['status'], 'Bootstrap failure produces status 0' );
+assert( $dispatch_fail_boot['queued'] > 0, 'Bootstrap failure is retryable so item must be enqueued' );
+$enqueued_fail_id = $dispatch_fail_boot['queued'];
+assert( '1' === (string) get_post_meta( $enqueued_fail_id, '_nvx_relay_attempts', true ), 'Failed bootstrap before retry must retain 1 attempt' );
+assert( 2 === count( $GLOBALS['remote_post_log'] ), 'Expected 2 HTTP calls: 1 initial send + 1 failed bootstrap' );
+
+// Assert Test 11: Drain lock renewal across worst-case batch (150s) prevents second worker from acquiring lock
+unset( $GLOBALS['nvx_mock_options']['nvx_supabase_relay_drain_lock_v1'] );
+
+$batch_limit = 10;
+$derived_ttl = nvx_supabase_relay_queue_lock_ttl( $batch_limit );
+assert( $derived_ttl >= 180, 'Derived lease for 10 items must be >= 180s' );
+
+// Worker 1 acquires lock
+$worker1_lock = nvx_supabase_relay_queue_lock( $derived_ttl );
+assert( '' !== $worker1_lock, 'Worker 1 must acquire initial drain lock' );
+
+// Simulate 10 items in a worst-case batch where each item takes 15s (total 150s)
+// During the batch, lock is renewed at each step.
+// Even after 135s (which exceeds the old 120s static TTL), Worker 2 CANNOT acquire the lock.
+for ( $i = 1; $i <= 10; $i++ ) {
+	$renewed = nvx_supabase_relay_queue_renew_lock( $worker1_lock, $derived_ttl );
+	assert( $renewed, "Lock renewal must succeed at batch step {$i}" );
+
+	$worker2_attempt = nvx_supabase_relay_queue_lock( $derived_ttl );
+	assert( '' === $worker2_attempt, "Worker 2 must NOT acquire lock while Worker 1 is draining at step {$i}" );
+}
+
+// After batch completes, Worker 1 releases lock cleanly:
+nvx_supabase_relay_queue_unlock( $worker1_lock );
+assert( ! isset( $GLOBALS['nvx_mock_options']['nvx_supabase_relay_drain_lock_v1'] ), 'Worker 1 unlock must cleanly release lock' );
+
+// Now Worker 2 can acquire lock:
+$worker2_lock = nvx_supabase_relay_queue_lock( $derived_ttl );
+assert( '' !== $worker2_lock, 'Worker 2 can acquire lock once Worker 1 unlocks' );
+nvx_supabase_relay_queue_unlock( $worker2_lock );
+
+echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned expired_lock_cas=atomic drain_bootstrap_fail_accounting=1 dispatch_retry_accounting=aligned drain_lock_renewal=verified\n";

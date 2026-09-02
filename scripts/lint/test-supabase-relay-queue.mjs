@@ -67,6 +67,9 @@ assert.match(queue, /add_action\(\s*'switch_theme',\s*'nvx_supabase_relay_queue_
 assert.match(queue, /401 === \$class\['status'\]/, 'AUTH_REJECTION_RECOVERY_DETECTED');
 assert.match(queue, /nvx_supabase_relay_queue_send\([\s\S]*?true\s*\)/, 'FORCED_BOOTSTRAP_ON_401');
 assert.match(queue, /\$attempts \+= \$delivery_attempts/, 'ATTEMPT_ACCOUNTING_ALIGNED');
+assert.match(queue, /nvx_supabase_relay_queue_renew_lock\(/, 'DRAIN_LOCK_RENEWAL_DURING_BATCH');
+assert.match(queue, /nvx_supabase_relay_queue_lock_ttl\(/, 'DERIVED_LOCK_LEASE_TTL');
+assert.match(queue, /nvx_supabase_relay_queue_enqueue\([\s\S]*?\$delivery_attempts\s*\)/, 'DISPATCH_RETRY_ATTEMPT_ACCOUNTING');
 
 assert.doesNotMatch(queue, /email|phone|firstname|authorization/i);
 
