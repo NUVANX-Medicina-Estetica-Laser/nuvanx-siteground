@@ -38,7 +38,7 @@ if ( ! function_exists( 'nvx_hubspot_secure_load_dependencies' ) ) {
 			return;
 		}
 
-		require_once __DIR__ . '/nvx-marketing-consent.php';
+		require_once $dependency;
 	}
 }
 

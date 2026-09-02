@@ -17,7 +17,7 @@ const secureRequire = gtm.indexOf("require_once __DIR__ . '/nvx-hubspot-secure-a
 const relayRequire = gtm.indexOf("require_once __DIR__ . '/nvx-lead-captured-relay.php';");
 assert.ok(secureRequire >= 0, 'Secure HubSpot bridge must remain loaded');
 assert.ok(relayRequire > secureRequire, 'Lead-captured relay must load after the secure HubSpot bridge');
-assert.match(bridge, /require_once __DIR__ \. '\/nvx-marketing-consent\.php';/,
+assert.match(bridge, /require_once (?:\$dependency|__DIR__ \. '\/nvx-marketing-consent\.php');/,
   'Secure bridge must load the shared consent owner before any attribution filtering');
 
 assert.match(relay, /add_filter\( 'http_response', 'nvx_lead_captured_on_http_response', 10, 3 \)/,

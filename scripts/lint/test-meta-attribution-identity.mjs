@@ -37,7 +37,7 @@ assert.doesNotMatch(consent, /\$_POST/,
 assert.doesNotMatch(consent, /nvx_hubspot_secure_post_value|'\s*nvx_marketing_consent\s*'/,
   'Canonical consent authority must not read the hidden POST consent field');
 
-assert.match(bridge, /require_once __DIR__ \. '\/nvx-marketing-consent\.php';/);
+assert.match(bridge, /require_once (?:\$dependency|__DIR__ \. '\/nvx-marketing-consent\.php');/);
 assert.match(bridge, /\$marketing_consent = nvx_marketing_consent_granted\(\);/,
   'Secure HubSpot bridge must use the shared server authority');
 assert.doesNotMatch(bridge, /\$marketing_consent\s*=\s*'1' === nvx_hubspot_secure_post_value\( 'nvx_marketing_consent'/,
