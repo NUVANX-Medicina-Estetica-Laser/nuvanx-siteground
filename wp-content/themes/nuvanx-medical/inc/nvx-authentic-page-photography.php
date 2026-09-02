@@ -286,7 +286,7 @@ function nvx_append_authentic_page_photography( string $content ): string {
 
 	return $content . nvx_authentic_page_photo_markup( $data );
 }
-add_filter( 'the_content', 'nvx_append_authentic_page_photography', 175 );
+add_filter( 'the_content', 'nvx_append_authentic_page_photography', NVX_HOOK_PRIO_AUTHENTIC_PHOTOGRAPHY );
 
 /**
  * Attachment IDs used by NUVANX public editorial photography.
