@@ -58,4 +58,4 @@ function nvx_remove_redundant_inner_brand_page_class( string $content ): string 
 
 	return is_string( $normalized ) ? $normalized : $content;
 }
-add_filter( 'the_content', 'nvx_remove_redundant_inner_brand_page_class', PHP_INT_MAX );
+add_filter( 'the_content', 'nvx_remove_redundant_inner_brand_page_class', NVX_HOOK_PRIO_BRAND_WRAPPER_NORMALIZE );
