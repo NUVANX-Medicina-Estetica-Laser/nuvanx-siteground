@@ -2,12 +2,16 @@
 /**
  * Approval-gated medical review provenance for clinical pages.
  *
- * Visible review attribution and reviewedBy schema are emitted only when the
- * current page has a complete approval record in post meta:
+ * Visible review attribution and Schema provenance are emitted only when the
+ * current public page has a complete approval record in post meta:
  *
  * - `_nvx_medical_review_status` = `approved`
  * - `_nvx_medical_reviewer`      = registered reviewer key
  * - `_nvx_medical_review_date`   = YYYY-MM-DD
+ *
+ * This module is the final owner of `reviewedBy` and `lastReviewed` on WebPage
+ * nodes. Earlier page-specific emitters are treated as untrusted inputs and are
+ * stripped before the approved record is applied.
  *
  * @package nuvanx-medical
  */
@@ -42,13 +46,39 @@ function nvx_medical_review_valid_date( string $date ): bool {
 	return checkdate( (int) $match[2], (int) $match[3], (int) $match[1] );
 }
 
-/** Restrict review provenance to registered treatment pages. */
+/**
+ * Restrict review provenance to published WordPress pages.
+ *
+ * Approval itself remains explicit and fail-closed through the three post-meta
+ * fields consumed by nvx_medical_review_record(). This allows governed medical
+ * hubs and valuation pages to use the same owner without inventing parallel
+ * hardcoded provenance.
+ */
 function nvx_medical_review_supported_page( int $post_id ): bool {
-	if ( $post_id <= 0 || ! function_exists( 'nvx_schema_resolve_treatment_key' ) ) {
+	if ( $post_id <= 0 ) {
 		return false;
 	}
 
-	return null !== nvx_schema_resolve_treatment_key( $post_id );
+	if ( function_exists( 'get_post_type' ) && 'page' !== (string) get_post_type( $post_id ) ) {
+		return false;
+	}
+
+	if ( function_exists( 'get_post_status' ) && 'publish' !== (string) get_post_status( $post_id ) ) {
+		return false;
+	}
+
+	return true;
+}
+
+/** Whether a registered reviewer has every public provenance field required. */
+function nvx_medical_review_reviewer_complete( array $reviewer ): bool {
+	foreach ( array( 'name', 'license', 'url', 'id', 'title' ) as $field ) {
+		if ( '' === trim( (string) ( $reviewer[ $field ] ?? '' ) ) ) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 /**
@@ -72,7 +102,11 @@ function nvx_medical_review_record( int $post_id = 0 ): ?array {
 	}
 
 	$reviewer = $reviewers[ $reviewer_key ];
-	$time     = strtotime( $date . ' 12:00:00' );
+	if ( ! nvx_medical_review_reviewer_complete( $reviewer ) ) {
+		return null;
+	}
+
+	$time = strtotime( $date . ' 12:00:00' );
 	if ( false === $time ) {
 		return null;
 	}
@@ -104,9 +138,15 @@ function nvx_medical_review_byline_markup( array $record ): string {
 	return $html;
 }
 
-/** Remove unconditional bylines so a single provenance block can be re-injected. */
+/**
+ * Remove unconditional bylines so a single provenance block can be re-injected.
+ *
+ * Covers both the `<div>`-wrapped bylines emitted by page modules and the
+ * `<address>`-wrapped hero byline emitted by BTL detail pages; the closing tag
+ * is matched by backreference so the alternation never over-captures.
+ */
 function nvx_medical_review_strip_unconditional_bylines( string $content ): string {
-	$pattern = '#<div\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>\s*</div>#iu';
+	$pattern = '#<(div|address)\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>\s*</\1>#iu';
 	$clean   = preg_replace( $pattern, '', $content );
 
 	return is_string( $clean ) ? $clean : $content;
@@ -139,28 +179,46 @@ function nvx_medical_review_enforce_visible_provenance( string $content ): strin
 }
 add_filter( 'the_content', 'nvx_medical_review_enforce_visible_provenance', NVX_HOOK_PRIO_MEDICAL_REVIEW );
 
-/** Test whether a schema type contains WebPage. */
-function nvx_medical_review_schema_has_type( $types, string $type ): bool {
-	return in_array( $type, is_array( $types ) ? $types : array( $types ), true );
+/** Test whether a schema type contains WebPage or one of its page subtypes. */
+function nvx_medical_review_schema_has_webpage_type( $types ): bool {
+	foreach ( is_array( $types ) ? $types : array( $types ) as $type ) {
+		$type = (string) $type;
+		if ( 'WebPage' === $type || str_ends_with( $type, 'Page' ) ) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
-/** Add reviewedBy only when the same approved reviewer disclosure is visible. */
+/**
+ * Final owner of reviewedBy + lastReviewed on page nodes.
+ *
+ * Any page-specific hardcoded provenance emitted earlier is removed. Approved
+ * values are then written from the same post-meta record used for the visible
+ * byline, guaranteeing visible/Schema parity and fail-closed behavior.
+ *
+ * @param mixed $graph Yoast Schema graph.
+ * @return mixed
+ */
 function nvx_medical_review_schema_graph( $graph ) {
-	$record = nvx_medical_review_record();
-	if ( null === $record || ! is_array( $graph ) ) {
+	if ( ! is_array( $graph ) ) {
 		return $graph;
 	}
 
+	$record = nvx_medical_review_record();
 	foreach ( $graph as $index => $piece ) {
-		if (
-			is_array( $piece )
-			&& isset( $piece['@type'] )
-			&& nvx_medical_review_schema_has_type( $piece['@type'], 'WebPage' )
-		) {
-			$graph[ $index ]['reviewedBy'] = array( '@id' => $record['id'] );
+		if ( ! is_array( $piece ) || ! isset( $piece['@type'] ) || ! nvx_medical_review_schema_has_webpage_type( $piece['@type'] ) ) {
+			continue;
+		}
+
+		unset( $graph[ $index ]['reviewedBy'], $graph[ $index ]['lastReviewed'] );
+		if ( null !== $record ) {
+			$graph[ $index ]['reviewedBy']   = array( '@id' => $record['id'] );
+			$graph[ $index ]['lastReviewed'] = $record['date'];
 		}
 	}
 
 	return $graph;
 }
-add_filter( 'wpseo_schema_graph', 'nvx_medical_review_schema_graph', 57 );
+add_filter( 'wpseo_schema_graph', 'nvx_medical_review_schema_graph', PHP_INT_MAX - 1 );
