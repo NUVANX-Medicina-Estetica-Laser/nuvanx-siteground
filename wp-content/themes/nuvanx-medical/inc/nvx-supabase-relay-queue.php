@@ -666,24 +666,24 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_dedupe_reservation' ) ) {
 	function nvx_supabase_relay_queue_dedupe_reservation(
 		string $dedupe_key
 	): array {
-		$key = 'nvx_relay_dedupe_res_' . $dedupe_key;
+		$key   = 'nvx_relay_dedupe_res_' . $dedupe_key;
 		$token = function_exists( 'wp_generate_uuid4' )
 			? wp_generate_uuid4()
 			: bin2hex( random_bytes( 16 ) );
 		$lease = 60; // 60 seconds
-		
+
 		$has_reservation = false;
 		while ( ! $has_reservation ) {
 			$expires = nvx_supabase_relay_time() + $lease;
-			$value = $expires . '|' . $token;
-			
+			$value   = $expires . '|' . $token;
+
 			if ( add_option( $key, $value, '', false ) ) {
 				$has_reservation = true;
 			} else {
-				$current = (string) get_option( $key, '' );
-				$parts = explode( '|', $current, 2 );
+				$current        = (string) get_option( $key, '' );
+				$parts          = explode( '|', $current, 2 );
 				$current_expiry = isset( $parts[0] ) ? absint( $parts[0] ) : 0;
-				
+
 				if ( $current_expiry > 0 && $current_expiry <= nvx_supabase_relay_time() ) {
 					if ( nvx_supabase_relay_compare_and_swap_option( $key, $current, $value ) ) {
 						$has_reservation = true;
@@ -694,10 +694,10 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_dedupe_reservation' ) ) {
 				usleep( 50000 );
 			}
 		}
-		
+
 		return array(
-			'key' => $key,
-			'token' => $token
+			'key'   => $key,
+			'token' => $token,
 		);
 	}
 }
@@ -710,13 +710,13 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_atomic_add_attempts' ) ) {
 		int $post_id,
 		int $add_attempts
 	): int {
-		$post_id = absint( $post_id );
+		$post_id   = absint( $post_id );
 		$max_tries = (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES;
-		
+
 		while ( true ) {
 			$current = absint( get_post_meta( $post_id, '_nvx_relay_attempts', true ) );
 			$new_val = min( $max_tries, $current + $add_attempts );
-			
+
 			if ( $current === $new_val ) {
 				return $new_val;
 			}
@@ -762,16 +762,16 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
 		if ( ! $post instanceof WP_Post || 'pending' !== $post->post_status ) {
 			return false;
 		}
-		
+
 		$next_attempt = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
 		if ( $next_attempt > nvx_supabase_relay_time() ) {
 			return false;
 		}
-		
+
 		if ( ! nvx_supabase_relay_queue_renew_lock( $lock, $lease_ttl ) ) {
 			return false;
 		}
-		
+
 		return true;
 	}
 }
@@ -783,21 +783,21 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock_owned' ) ) {
 	function nvx_supabase_relay_queue_lock_owned(
 		string $token
 	): bool {
-		$key = 'nvx_supabase_relay_drain_lock_v1';
+		$key     = 'nvx_supabase_relay_drain_lock_v1';
 		$current = (string) get_option( $key, '' );
-		$parts = explode( '|', $current, 2 );
-		
+		$parts   = explode( '|', $current, 2 );
+
 		$current_expiry = isset( $parts[0] ) ? absint( $parts[0] ) : 0;
-		$current_token = isset( $parts[1] ) ? $parts[1] : '';
+		$current_token  = isset( $parts[1] ) ? $parts[1] : '';
 
 		if ( $current_token !== $token ) {
 			return false;
 		}
-		
+
 		if ( $current_expiry <= nvx_supabase_relay_time() ) {
 			return false;
 		}
-		
+
 		return true;
 	}
 }
@@ -988,7 +988,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 
 				return 0;
 			}
-			
+
 			wp_update_post(
 				array(
 					'ID'          => $post_id,
