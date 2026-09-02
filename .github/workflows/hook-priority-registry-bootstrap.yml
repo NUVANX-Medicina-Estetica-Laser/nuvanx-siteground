@@ -1,0 +1,57 @@
+name: Hook priority registry bootstrap
+
+on:
+  push:
+    branches:
+      - fix/php-audit-b1-hook-graph-20260902
+
+permissions:
+  contents: write
+
+jobs:
+  wire-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Wire contract into blocking static gate
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('.github/workflows/staging.yml')
+          text = path.read_text(encoding='utf-8')
+          anchor = '          php scripts/lint/test-priority-landing-contract.php\n'
+          insertion = anchor + '          php scripts/lint/test-the-content-hook-priority-registry.php\n'
+          count = text.count(anchor)
+          if count != 1:
+              raise SystemExit(f'Expected one staging anchor, found {count}')
+          if 'php scripts/lint/test-the-content-hook-priority-registry.php' in text:
+              raise SystemExit('Hook-priority registry contract already wired unexpectedly')
+          path.write_text(text.replace(anchor, insertion, 1), encoding='utf-8')
+
+      - name: Execute new root-cause contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l scripts/lint/test-the-content-hook-priority-registry.php
+          php scripts/lint/test-the-content-hook-priority-registry.php
+          npm run lint:hook-priorities
+          git diff --check
+          grep -Fq 'php scripts/lint/test-the-content-hook-priority-registry.php' .github/workflows/staging.yml
+
+      - name: Commit CI wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'NUVANX Audit Bot'
+          git config user.email 'bot@nuvanx.com'
+          git add .github/workflows/staging.yml
+          git diff --cached --quiet && { echo 'No staged changes'; exit 1; }
+          git commit -m 'ci(hooks): block unregistered the_content priorities (#1005)'
+          git push origin "HEAD:${{ github.ref_name }}"
