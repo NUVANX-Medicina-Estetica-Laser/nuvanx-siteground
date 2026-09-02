@@ -204,13 +204,23 @@ $nvx_col_two  = array_slice( $nvx_footer_treatments, $nvx_split_at );
 	</div>
 </footer>
 
-<?php if ( function_exists( 'nvx_valoracion_modal_enabled' ) && nvx_valoracion_modal_enabled() ) : ?>
+<?php
+$nvx_footer_modal_contract = function_exists( 'nvx_cta_valoracion_modal_contract' )
+	? nvx_cta_valoracion_modal_contract()
+	: array(
+		'class' => ( function_exists( 'nvx_valoracion_modal_enabled' ) && nvx_valoracion_modal_enabled() ) ? ' nvx-open-valoracion-modal' : '',
+		'attrs' => ( function_exists( 'nvx_valoracion_modal_enabled' ) && nvx_valoracion_modal_enabled() ) ? ' data-nvx-valoracion-modal="1" aria-haspopup="dialog"' : '',
+	);
+$nvx_footer_modal_enabled = function_exists( 'nvx_cta_valoracion_modal_enabled' )
+	? nvx_cta_valoracion_modal_enabled()
+	: ( function_exists( 'nvx_valoracion_modal_enabled' ) && nvx_valoracion_modal_enabled() );
+if ( $nvx_footer_modal_enabled ) :
+?>
 <div class="nvx-sticky-mobile-cta" aria-label="<?php esc_attr_e( 'Acción rápida de reserva', 'nuvanx-medical' ); ?>">
 	<a
-		href="<?php echo esc_url( home_url( '/madrid/valoracion/' ) ); ?>"
-		class="nvx-sticky-mobile-cta__btn nvx-open-valoracion-modal"
-		data-nvx-valoracion-modal="1"
-		aria-haspopup="dialog"
+		href="<?php echo esc_url( function_exists( 'nvx_cta_valoracion_url' ) ? nvx_cta_valoracion_url() : home_url( '/madrid/valoracion/' ) ); ?>"
+		class="nvx-sticky-mobile-cta__btn<?php echo esc_attr( $nvx_footer_modal_contract['class'] ); ?>"
+		<?php echo $nvx_footer_modal_contract['attrs']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 		data-gtag="click-reserve"
 	>
 		<?php esc_html_e( 'Solicitar Valoración Médica', 'nuvanx-medical' ); ?>
