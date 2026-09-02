@@ -13,7 +13,7 @@
     "lint:contrast": "node scripts/lint/test-hero-wcag-contrast.mjs",
     "lint:hook-priorities": "php scripts/lint/test-the-content-hook-priority-registry.php",
     "lint:function-collisions": "php scripts/lint/test-theme-function-collisions.php",
-    "lint:integrations-runtime": "php scripts/lint/test-integrations-runtime-contract.php",
+    "lint:integrations-runtime": "php scripts/lint/test-integrations-runtime-contract.php && php scripts/lint/test-php-presentation-forms-navigation.php",
     "lint:runtime-seeds": "node scripts/lint/test-runtime-seed-boundary.mjs && php scripts/lint/test-h1-review-preservation.php",
     "lint:bootstrap": "node scripts/lint/test-theme-bootstrap-single-owner.mjs && php scripts/lint/test-theme-request-boundary.php",
     "lint:outbox-concurrency": "php -d display_errors=1 scripts/lint/test-relay-concurrency-v2.php",
