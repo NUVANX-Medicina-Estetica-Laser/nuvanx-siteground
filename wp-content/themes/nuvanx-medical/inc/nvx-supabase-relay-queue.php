@@ -1214,7 +1214,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 				return 0;
 			}
 
-			// Post-publish ownership fence: confirm the reservation is still held by this token
+		// Post-publish ownership fence: confirm the reservation is still held by this token
 			// after the publish. If another process acquired the lease and also published between
 			// our renew() and wp_update_post(), both posts become pending. We detect and remove
 			// our now-redundant pending post and return the surviving item instead.
@@ -1223,9 +1223,13 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			// simply expired, or a successor may have reserved without publishing yet. In those
 			// cases our published item is the only drainable copy and must be kept, otherwise the
 			// accepted event is lost.
+			// Distinguish the cases by checking whether a DISTINCT pending item exists before
+			// deleting, so we never erase the only copy of the event.
 			if ( ! nvx_supabase_relay_queue_dedupe_reservation_valid( $reservation['key'], $reservation['token'] ) ) {
 				$surviving = nvx_supabase_relay_existing_item( $dedupe_key );
+
 				if ( $surviving > 0 && $surviving !== $post_id ) {
+					// Case (a): a different pending item exists — ours is the redundant duplicate.
 					wp_delete_post( $post_id, true );
 
 					nvx_supabase_relay_log(
@@ -1241,6 +1245,10 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 						$attempts
 					);
 				}
+
+				// Case (b): our post IS the surviving item (or nothing found yet).
+				// The reservation was released by a successor that already claimed our item;
+				// fall through to the normal success path below.
 			}
 		} finally {
 			nvx_supabase_relay_queue_unlock_dedupe(

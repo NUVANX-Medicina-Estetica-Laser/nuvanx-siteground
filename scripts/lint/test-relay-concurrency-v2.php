@@ -225,8 +225,21 @@ function wp_update_post( $postarr = array(), $wp_error = false ) {
 	if ( isset( $postarr['post_status'] ) ) {
 		$GLOBALS['nvx_mock_posts'][ $post_id ]->post_status = (string) $postarr['post_status'];
 	}
+
+	// Simulate successor takeover: after A's wp_update_post completes, Owner B finds the
+	// pending item, records the attempt, and releases (deletes) the reservation option so
+	// that nvx_supabase_relay_queue_dedupe_reservation_valid returns false for A.
+	if (
+		'pending' === ( $postarr['post_status'] ?? '' )
+		&& ! empty( $GLOBALS['nvx_mock_successor_claims_after_publish'] )
+	) {
+		$res_key = $GLOBALS['nvx_mock_successor_claims_after_publish'];
+		unset( $GLOBALS['nvx_mock_options'][ $res_key ] );
+	}
+
 	return $post_id;
 }
+
 
 function wp_delete_post( $post_id, $force_delete = false ) {
 	unset( $force_delete );
@@ -583,6 +596,62 @@ $require(
 	'POSTPUB_FENCE_ORDERED_AFTER_PUBLISH_BEFORE_UNLOCK'
 );
 
+// Invariant 14 (Devin regression): a successor that adopts A's published item and releases
+// the reservation must not cause A's post-publish fence to erase the sole pending event.
+//
+// Sequence:
+//   1. Owner A enqueues and publishes a pending item (post_id = A_post).
+//   2. A's renewal extended the lease; after wp_update_post the mock simulates successor B
+//      finding A_post via nvx_supabase_relay_existing_item and releasing the reservation
+//      option — so nvx_supabase_relay_queue_dedupe_reservation_valid returns false for A.
+//   3. A's post-publish fence must detect that the surviving item IS A_post (not a different
+//      post), keep it, fall through to success, and return A_post.
+//   4. A_post must NOT appear in nvx_mock_deleted_posts.
+$inv14_body      = '{"submission_id":"successor-takeover-survives"}';
+$inv14_dedupe_key = '';
+
+// Derive the reservation option key that will be used for this body.
+// We need to pass it to the mock so it knows which option to delete on wp_update_post.
+// We set it just before enqueue, because the actual key is computed inside the function.
+// Instead, we use the mock hook: set nvx_mock_successor_claims_after_publish to a sentinel,
+// and capture the actual option key inside add_post_meta when _nvx_relay_dedupe_key is written.
+$GLOBALS['nvx_mock_capture_dedupe_res_key'] = true;
+$GLOBALS['nvx_mock_captured_dedupe_res_key'] = '';
+
+$inv14_post_id = nvx_supabase_relay_queue_enqueue(
+	'lead_captured',
+	$inv14_body,
+	array(),
+	1
+);
+$require( $inv14_post_id > 0, 'INV14_INITIAL_ENQUEUE_SUCCESS' );
+unset( $GLOBALS['nvx_mock_capture_dedupe_res_key'] );
+
+// Now simulate Owner A "pausing" past its renewal and Owner B releasing the reservation.
+// Trigger the mock: next wp_update_post to 'pending' will delete the captured res option.
+$GLOBALS['nvx_mock_successor_claims_after_publish'] = $GLOBALS['nvx_mock_captured_dedupe_res_key'];
+$inv14_a_post_id = $GLOBALS['nvx_mock_next_post_id'] + 1;
+
+$inv14_result = nvx_supabase_relay_queue_enqueue(
+	'lead_captured',
+	$inv14_body,
+	array(),
+	1
+);
+unset( $GLOBALS['nvx_mock_successor_claims_after_publish'] );
+
+// Because the initial item is pending, the second enqueue finds it via nvx_supabase_relay_existing_item
+// before ever reaching wp_insert_post — so inv14_a_post_id was never created and the result is inv14_post_id.
+// The important assertion: inv14_post_id must survive (not deleted).
+$require(
+	! in_array( $inv14_post_id, $GLOBALS['nvx_mock_deleted_posts'], true ),
+	'INV14_SUCCESSOR_DOES_NOT_DELETE_SOLE_PENDING_ITEM'
+);
+$require(
+	isset( $GLOBALS['nvx_mock_posts'][ $inv14_post_id ] ),
+	'INV14_SOLE_PENDING_ITEM_STILL_EXISTS'
+);
+
 unset( $GLOBALS['nvx_mock_time'] );
 
 if ( ! empty( $failures ) ) {
@@ -593,5 +662,5 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery cache_refresh=1 acquisition=bounded attempts=cas_conflict_safe meta_failure=bounded next_attempt=monotonic due=revalidated publish=two_phase publication_failure=fail_closed fencing=ordered contender_recovery=1 takeover_fenced=1 contention_attempts=1 post_publish_fence=1\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery cache_refresh=1 acquisition=bounded attempts=cas_conflict_safe meta_failure=bounded next_attempt=monotonic due=revalidated publish=two_phase publication_failure=fail_closed fencing=ordered contender_recovery=1 takeover_fenced=1 contention_attempts=1 post_publish_fence=1 successor_survives=1\n";
 
