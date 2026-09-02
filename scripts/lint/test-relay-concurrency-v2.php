@@ -14,11 +14,13 @@ declare(strict_types=1);
 define( 'ABSPATH', __DIR__ );
 define( 'MINUTE_IN_SECONDS', 60 );
 define( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL', 60 );
+define( 'NVX_SUPABASE_RELAY_QUEUE_CAS_MAX_ATTEMPTS', 4 );
 
 if ( ! class_exists( 'WP_Post' ) ) {
 	class WP_Post {
 		public $ID = 0;
 		public $post_status = 'pending';
+		public $post_content = '';
 	}
 }
 
@@ -42,18 +44,40 @@ function wp_next_scheduled( ...$args ) { unset( $args ); return false; }
 function wp_schedule_event( ...$args ): bool { unset( $args ); return true; }
 function wp_clear_scheduled_hook( ...$args ): int { unset( $args ); return 1; }
 function sanitize_key( $value ): string { return preg_replace( '/[^a-z0-9_-]/i', '', (string) $value ) ?? ''; }
+function sanitize_text_field( $value ): string { return trim( (string) $value ); }
+function wp_slash( $value ): string { return addslashes( (string) $value ); }
 function absint( $value ): int { return abs( (int) $value ); }
+function is_wp_error( $value ): bool { return $value instanceof WP_Error; }
+function nvx_lead_captured_endpoint(): string { return 'https://collector.example.test/functions/v1/web-lead-captured'; }
 
-$GLOBALS['nvx_mock_options']              = array();
-$GLOBALS['nvx_uuid_counter']              = 0;
-$GLOBALS['nvx_mock_post_meta']            = array();
-$GLOBALS['nvx_mock_meta_conflict_values'] = array();
+$GLOBALS['nvx_mock_options']                        = array();
+$GLOBALS['nvx_uuid_counter']                        = 0;
+$GLOBALS['nvx_mock_post_meta']                      = array();
+$GLOBALS['nvx_mock_meta_conflict_values']           = array();
+$GLOBALS['nvx_mock_meta_permanent_fail_keys']       = array();
+$GLOBALS['nvx_mock_meta_update_calls']               = array();
+$GLOBALS['nvx_mock_option_cas_conflict_values']     = array();
+$GLOBALS['nvx_mock_release_after_cache_delete']     = array();
+$GLOBALS['nvx_mock_cache_delete_calls']              = array();
+$GLOBALS['nvx_mock_posts']                           = array();
+$GLOBALS['nvx_mock_next_post_id']                    = 100;
+$GLOBALS['nvx_mock_deleted_posts']                   = array();
+$GLOBALS['nvx_mock_publish_failure']                 = false;
 
 function get_post( $post_id ) {
+	$post_id = (int) $post_id;
+	if ( isset( $GLOBALS['nvx_mock_posts'][ $post_id ] ) ) {
+		return $GLOBALS['nvx_mock_posts'][ $post_id ];
+	}
 	$post              = new WP_Post();
-	$post->ID          = (int) $post_id;
+	$post->ID          = $post_id;
 	$post->post_status = 'pending';
 	return $post;
+}
+
+function get_posts( $args = array() ): array {
+	unset( $args );
+	return array();
 }
 
 function get_post_meta( $post_id, $key = '', $single = false ) {
@@ -65,6 +89,11 @@ function update_post_meta( $post_id, $key, $value, $prev_value = '' ) {
 	$post_id = (int) $post_id;
 	$key     = (string) $key;
 	$current = (string) ( $GLOBALS['nvx_mock_post_meta'][ $post_id ][ $key ] ?? '' );
+	$GLOBALS['nvx_mock_meta_update_calls'][ $key ] = ( $GLOBALS['nvx_mock_meta_update_calls'][ $key ] ?? 0 ) + 1;
+
+	if ( ! empty( $GLOBALS['nvx_mock_meta_permanent_fail_keys'][ $key ] ) ) {
+		return false;
+	}
 
 	if ( isset( $GLOBALS['nvx_mock_meta_conflict_values'][ $key ] ) ) {
 		$GLOBALS['nvx_mock_post_meta'][ $post_id ][ $key ] = (string) $GLOBALS['nvx_mock_meta_conflict_values'][ $key ];
@@ -76,6 +105,16 @@ function update_post_meta( $post_id, $key, $value, $prev_value = '' ) {
 		return false;
 	}
 
+	$GLOBALS['nvx_mock_post_meta'][ $post_id ][ $key ] = (string) $value;
+	return true;
+}
+
+function add_post_meta( $post_id, $key, $value, $unique = false ): bool {
+	$post_id = (int) $post_id;
+	$key     = (string) $key;
+	if ( $unique && array_key_exists( $key, $GLOBALS['nvx_mock_post_meta'][ $post_id ] ?? array() ) ) {
+		return false;
+	}
 	$GLOBALS['nvx_mock_post_meta'][ $post_id ][ $key ] = (string) $value;
 	return true;
 }
@@ -104,9 +143,53 @@ function delete_option( string $key ): bool {
 	return true;
 }
 
+function wp_cache_delete( $key, string $group = '' ): bool {
+	$cache_key = $group . ':' . (string) $key;
+	$GLOBALS['nvx_mock_cache_delete_calls'][ $cache_key ] = ( $GLOBALS['nvx_mock_cache_delete_calls'][ $cache_key ] ?? 0 ) + 1;
+	if ( 'options' === $group && ! empty( $GLOBALS['nvx_mock_release_after_cache_delete'][ (string) $key ] ) ) {
+		unset( $GLOBALS['nvx_mock_release_after_cache_delete'][ (string) $key ] );
+		unset( $GLOBALS['nvx_mock_options'][ (string) $key ] );
+	}
+	return true;
+}
+
 function wp_generate_uuid4(): string {
 	$GLOBALS['nvx_uuid_counter']++;
 	return sprintf( '00000000-0000-4000-8000-%012d', $GLOBALS['nvx_uuid_counter'] );
+}
+
+function wp_insert_post( $postarr = array(), $wp_error = false ) {
+	unset( $wp_error );
+	$post_id              = ++$GLOBALS['nvx_mock_next_post_id'];
+	$post                  = new WP_Post();
+	$post->ID              = $post_id;
+	$post->post_status     = (string) ( $postarr['post_status'] ?? 'draft' );
+	$post->post_content    = stripslashes( (string) ( $postarr['post_content'] ?? '' ) );
+	$GLOBALS['nvx_mock_posts'][ $post_id ] = $post;
+	return $post_id;
+}
+
+function wp_update_post( $postarr = array(), $wp_error = false ) {
+	$post_id = (int) ( $postarr['ID'] ?? 0 );
+	if ( 'pending' === ( $postarr['post_status'] ?? '' ) && ! empty( $GLOBALS['nvx_mock_publish_failure'] ) ) {
+		return $wp_error ? new WP_Error( 'mock_publish_failed', 'Mock publication failure.' ) : 0;
+	}
+	if ( $post_id < 1 || ! isset( $GLOBALS['nvx_mock_posts'][ $post_id ] ) ) {
+		return $wp_error ? new WP_Error( 'mock_post_missing', 'Mock post missing.' ) : 0;
+	}
+	if ( isset( $postarr['post_status'] ) ) {
+		$GLOBALS['nvx_mock_posts'][ $post_id ]->post_status = (string) $postarr['post_status'];
+	}
+	return $post_id;
+}
+
+function wp_delete_post( $post_id, $force_delete = false ) {
+	unset( $force_delete );
+	$post_id = (int) $post_id;
+	$GLOBALS['nvx_mock_deleted_posts'][] = $post_id;
+	$post = $GLOBALS['nvx_mock_posts'][ $post_id ] ?? null;
+	unset( $GLOBALS['nvx_mock_posts'][ $post_id ], $GLOBALS['nvx_mock_post_meta'][ $post_id ] );
+	return $post;
 }
 
 $queue_path = dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-supabase-relay-queue.php';
@@ -166,6 +249,31 @@ nvx_supabase_relay_queue_unlock_dedupe(
 );
 $require( ! isset( $GLOBALS['nvx_mock_options'][ $dedupe_res_key ] ), 'DEDUPE_RESERVATION_RELEASED' );
 
+// Invariant 3b: a contender that loses stale-reservation CAS refreshes cache and can acquire after winner release.
+$race_key     = str_repeat( 'b', 64 );
+$race_res_key = 'nvx_relay_dedupe_res_' . $race_key;
+$GLOBALS['nvx_mock_options'][ $race_res_key ]                    = ( $now - 1 ) . '|expired-shared-read';
+$GLOBALS['nvx_mock_option_cas_conflict_values'][ $race_res_key ] = ( $now + 60 ) . '|winner-owner';
+$GLOBALS['nvx_mock_release_after_cache_delete'][ $race_res_key ] = true;
+$race_reservation = nvx_supabase_relay_queue_dedupe_reservation( $race_key );
+$require( '' !== ( $race_reservation['token'] ?? '' ), 'DEDUPE_LOSER_REACQUIRES_AFTER_RELEASE' );
+$require(
+	( $GLOBALS['nvx_mock_cache_delete_calls'][ 'options:' . $race_res_key ] ?? 0 ) >= 1,
+	'DEDUPE_LOST_CAS_INVALIDATES_OPTION_CACHE'
+);
+nvx_supabase_relay_queue_unlock_dedupe(
+	(string) ( $race_reservation['key'] ?? '' ),
+	(string) ( $race_reservation['token'] ?? '' )
+);
+
+// Invariant 3c: an active reservation cannot hold a request indefinitely.
+$bounded_key     = str_repeat( 'c', 64 );
+$bounded_res_key = 'nvx_relay_dedupe_res_' . $bounded_key;
+$GLOBALS['nvx_mock_options'][ $bounded_res_key ] = ( $now + 60 ) . '|active-owner';
+$bounded_reservation = nvx_supabase_relay_queue_dedupe_reservation( $bounded_key );
+$require( '' === ( $bounded_reservation['token'] ?? '' ), 'DEDUPE_ACQUISITION_BOUNDED' );
+unset( $GLOBALS['nvx_mock_options'][ $bounded_res_key ] );
+
 // Invariant 4: CAS retry preserves a concurrent attempt increment.
 $post_id = 77;
 $GLOBALS['nvx_mock_post_meta'][ $post_id ]['_nvx_relay_attempts'] = '2';
@@ -181,16 +289,30 @@ $GLOBALS['nvx_mock_post_meta'][ $post_id ]['_nvx_relay_attempts'] = '7';
 $attempts = nvx_supabase_relay_queue_atomic_add_attempts( $post_id, 2 );
 $require( 8 === $attempts, 'ATOMIC_ATTEMPTS_CAPPED' );
 
+// Invariant 4b: permanent metadata failure terminates with an explicit failure result.
+$GLOBALS['nvx_mock_post_meta'][ $post_id ]['_nvx_relay_attempts'] = '2';
+$GLOBALS['nvx_mock_meta_permanent_fail_keys']['_nvx_relay_attempts'] = true;
+$GLOBALS['nvx_mock_meta_update_calls']['_nvx_relay_attempts'] = 0;
+$attempts_failed = nvx_supabase_relay_queue_atomic_add_attempts( $post_id, 1 );
+$require( null === $attempts_failed, 'ATOMIC_ATTEMPTS_PERMANENT_FAILURE_EXPLICIT' );
+$require(
+	NVX_SUPABASE_RELAY_QUEUE_CAS_MAX_ATTEMPTS === ( $GLOBALS['nvx_mock_meta_update_calls']['_nvx_relay_attempts'] ?? 0 ),
+	'ATOMIC_ATTEMPTS_RETRIES_BOUNDED'
+);
+unset( $GLOBALS['nvx_mock_meta_permanent_fail_keys']['_nvx_relay_attempts'] );
+
 // Invariant 5: retry scheduling is monotonic even after a CAS conflict.
 $GLOBALS['nvx_mock_post_meta'][ $post_id ]['_nvx_relay_next_attempt'] = '500';
-nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, 400 );
+$next_ok = nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, 400 );
+$require( true === $next_ok, 'NEXT_ATTEMPT_NOOP_SUCCESS' );
 $require(
 	'500' === ( $GLOBALS['nvx_mock_post_meta'][ $post_id ]['_nvx_relay_next_attempt'] ?? '' ),
 	'NEXT_ATTEMPT_NO_REGRESSION'
 );
 
 $GLOBALS['nvx_mock_meta_conflict_values']['_nvx_relay_next_attempt'] = '650';
-nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, 600 );
+$next_ok = nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, 600 );
+$require( true === $next_ok, 'NEXT_ATTEMPT_CONCURRENT_FORWARD_RESULT' );
 $require(
 	'650' === ( $GLOBALS['nvx_mock_post_meta'][ $post_id ]['_nvx_relay_next_attempt'] ?? '' ),
 	'NEXT_ATTEMPT_CONCURRENT_FORWARD_WINS'
@@ -198,11 +320,23 @@ $require(
 
 $GLOBALS['nvx_mock_meta_conflict_values']['_nvx_relay_next_attempt'] = '650';
 $GLOBALS['nvx_mock_post_meta'][ $post_id ]['_nvx_relay_next_attempt'] = '500';
-nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, 700 );
+$next_ok = nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, 700 );
+$require( true === $next_ok, 'NEXT_ATTEMPT_RETRY_RESULT' );
 $require(
 	'700' === ( $GLOBALS['nvx_mock_post_meta'][ $post_id ]['_nvx_relay_next_attempt'] ?? '' ),
 	'NEXT_ATTEMPT_RETRY_COMMITS_MAX'
 );
+
+$GLOBALS['nvx_mock_post_meta'][ $post_id ]['_nvx_relay_next_attempt'] = '500';
+$GLOBALS['nvx_mock_meta_permanent_fail_keys']['_nvx_relay_next_attempt'] = true;
+$GLOBALS['nvx_mock_meta_update_calls']['_nvx_relay_next_attempt'] = 0;
+$next_failed = nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, 700 );
+$require( false === $next_failed, 'NEXT_ATTEMPT_PERMANENT_FAILURE_EXPLICIT' );
+$require(
+	NVX_SUPABASE_RELAY_QUEUE_CAS_MAX_ATTEMPTS === ( $GLOBALS['nvx_mock_meta_update_calls']['_nvx_relay_next_attempt'] ?? 0 ),
+	'NEXT_ATTEMPT_RETRIES_BOUNDED'
+);
+unset( $GLOBALS['nvx_mock_meta_permanent_fail_keys']['_nvx_relay_next_attempt'] );
 
 // Invariant 6: due-state is re-read immediately before I/O and renewal.
 $GLOBALS['nvx_mock_time']                 = $now;
@@ -248,6 +382,22 @@ $require(
 	'NEW_ITEM_TWO_PHASE_ORDER'
 );
 
+// Invariant 8b: draft-to-pending publication failure is not reported as queued success.
+$GLOBALS['nvx_mock_publish_failure'] = true;
+unset( $GLOBALS['nvx_supabase_relay_queue_dirty'] );
+$publish_failure_id = nvx_supabase_relay_queue_enqueue(
+	'lead_captured',
+	'{"submission_id":"publication-failure"}',
+	array(),
+	1
+);
+$failed_post_id = $GLOBALS['nvx_mock_next_post_id'];
+$require( 0 === $publish_failure_id, 'PUBLICATION_FAILURE_RETURNS_ENQUEUE_FAILURE' );
+$require( in_array( $failed_post_id, $GLOBALS['nvx_mock_deleted_posts'], true ), 'PUBLICATION_FAILURE_DELETES_INCOMPLETE_DRAFT' );
+$require( ! isset( $GLOBALS['nvx_mock_posts'][ $failed_post_id ] ), 'PUBLICATION_FAILURE_LEAVES_NO_STRANDED_DRAFT' );
+$require( empty( $GLOBALS['nvx_supabase_relay_queue_dirty'] ), 'PUBLICATION_FAILURE_NOT_MARKED_DIRTY' );
+$GLOBALS['nvx_mock_publish_failure'] = false;
+
 // Invariant 9: the post-I/O fence occurs after transport and before queue mutation.
 $drain_start = strpos( $queue, 'function nvx_supabase_relay_queue_drain(' );
 $shutdown_start = strpos( $queue, "add_action(\n\tNVX_SUPABASE_RELAY_QUEUE_CRON" );
@@ -279,4 +429,4 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery attempts=cas_conflict_safe next_attempt=monotonic due=revalidated publish=two_phase fencing=ordered\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS exact_expiry=1 stale_renewal=blocked dedupe=cas_recovery cache_refresh=1 acquisition=bounded attempts=cas_conflict_safe meta_failure=bounded next_attempt=monotonic due=revalidated publish=two_phase publication_failure=fail_closed fencing=ordered\n";
