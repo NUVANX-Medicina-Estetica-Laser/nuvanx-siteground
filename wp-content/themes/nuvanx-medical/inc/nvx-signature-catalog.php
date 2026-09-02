@@ -59,6 +59,7 @@ function nvx_signature_phase_catalog_specs(): array {
 	return nvx_catalog_filter_records(
 		$catalog,
 		array(
+			'phase',
 			'slug',
 			'title',
 			'kicker',

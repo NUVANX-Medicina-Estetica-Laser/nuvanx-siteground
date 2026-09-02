@@ -10,6 +10,7 @@ declare(strict_types=1);
 define( 'ABSPATH', __DIR__ . '/' );
 
 function add_filter( ...$args ): bool { unset( $args ); return true; }
+function add_action( ...$args ): bool { unset( $args ); return true; }
 function home_url( string $path = '' ): string { return 'https://nuvanx.test' . $path; }
 function trailingslashit( string $value ): string { return rtrim( $value, '/' ) . '/'; }
 function nvx_schema_price_string( float $value ): string { return number_format( $value, 2, '.', '' ); }
@@ -62,19 +63,47 @@ nvx_block5_assert( '330.00' === ( $node['offers']['price'] ?? '' ), 'OFFER_PRICE
 nvx_block5_assert( '330.00' === ( $node['offers']['priceSpecification']['minPrice'] ?? '' ), 'FROM_PRICE_MINIMUM' );
 
 // Validate the real Signature source records contain the fields the renderer indexes.
+// 'phase' is required so that hub routers nvx_signature_hub_phase1_cards() and
+// nvx_signature_hub_contour_cards() cannot classify records that are missing the
+// field they dispatch on (lines ~375 and ~405 of nvx-signature-phase-pages.php).
 $signature_path = $root . '/wp-content/themes/nuvanx-medical/inc/data/nvx-signature-phase-catalog.json';
 $signature_json = json_decode( (string) file_get_contents( $signature_path ), true );
 nvx_block5_assert( is_array( $signature_json ) && array() !== $signature_json, 'SIGNATURE_JSON_AVAILABLE' );
-$required = array( 'slug', 'title', 'kicker', 'lead', 'intro', 'assessment', 'technology', 'limits', 'seo_title', 'seo_desc', 'protocol' );
+$required = array( 'phase', 'slug', 'title', 'kicker', 'lead', 'intro', 'assessment', 'technology', 'limits', 'seo_title', 'seo_desc', 'protocol' );
 foreach ( $signature_json as $key => $record ) {
 	nvx_block5_assert( is_array( $record ), 'SIGNATURE_RECORD_ARRAY_' . (string) $key );
 	nvx_block5_assert( array() === array_diff( $required, array_keys( $record ) ), 'SIGNATURE_REQUIRED_FIELDS_' . (string) $key );
 }
 
+// Regression fixture: a phase-missing record must be silently dropped by the runtime
+// validator before renderers can reach it.  nvx_catalog_filter_records() is the gate.
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php';
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php';
+$fixture_catalog = array(
+	'good-record' => array(
+		'phase' => 1, 'slug' => 'test', 'title' => 'T', 'kicker' => 'K', 'lead' => 'L',
+		'intro' => 'I', 'assessment' => array(), 'technology' => array(), 'limits' => array(),
+		'seo_title' => 'S', 'seo_desc' => 'D', 'protocol' => 'P',
+	),
+	'phase-missing' => array(
+		'slug' => 'no-phase', 'title' => 'T', 'kicker' => 'K', 'lead' => 'L',
+		'intro' => 'I', 'assessment' => array(), 'technology' => array(), 'limits' => array(),
+		'seo_title' => 'S', 'seo_desc' => 'D', 'protocol' => 'P',
+	),
+);
+$valid = nvx_catalog_filter_records( $fixture_catalog, $required, 'nvx-signature-phase-catalog.json' );
+nvx_block5_assert( array_key_exists( 'good-record', $valid ), 'PHASE_PRESENT_RECORD_PASSES' );
+nvx_block5_assert( ! array_key_exists( 'phase-missing', $valid ), 'PHASE_MISSING_RECORD_DROPPED' );
+
 $signature_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-signature-catalog.php' );
 nvx_block5_assert(
 	false !== strpos( $signature_source, 'nvx_catalog_filter_records(' ),
 	'SIGNATURE_RUNTIME_FILTERS_INCOMPLETE_RECORDS'
+);
+// phase must be in the required-key list passed to the runtime validator.
+nvx_block5_assert(
+	false !== strpos( $signature_source, "'phase'" ),
+	'SIGNATURE_PHASE_IN_REQUIRED_KEYS'
 );
 
 // Inventory guards for final ownership consolidation: canonical root bootstrap
