@@ -34,7 +34,7 @@ const diagnostic = fs.readFileSync(new URL('scripts/ci/validate-hubspot-form.sh'
 const stagingDeploy = fs.readFileSync(new URL('tools/deploy/deploy-to-staging2.sh', repoRoot), 'utf8');
 const stagingIdentity = JSON.parse(fs.readFileSync(new URL('lib/staging-public-integration-identities.json', repoRoot), 'utf8'));
 
-assert.match(secure, /return '';\s*\n}/, 'HubSpot identity resolver must be able to return empty');
+assert.match(secure, /return '';\s*}/, 'HubSpot identity resolver must be able to return empty');
 assert.match(secure, /nvx_missing_hubspot_identity/, 'Missing HubSpot identity must fail explicitly');
 assert.match(secure, /nvx_hubspot_secure_identity_configured/, 'Secure bridge must expose an identity-configured contract');
 assert.match(managed, /NVX_VALORACION_FORM_UNAVAILABLE secure_identity_not_configured/, 'Managed landing must fail closed when identity is absent');
@@ -86,7 +86,7 @@ const TEST_PORTAL = '88888888';
 const TEST_FORM = '11111111-2222-4333-8444-555555555555';
 const phpRunner = `<?php
 function run_case($setup, $expected_portal, $expected_form) {
-  $code = "define('ABSPATH', __DIR__ . '/'); function add_filter(\\$t, \\$c, \\$p=10, \\$a=1){} " . $setup . " require_once 'wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-attribution.php'; \\$res = nvx_hubspot_secure_identity(); if (\\$res['portal_id'] !== '$expected_portal' || \\$res['form_id'] !== '$expected_form') { exit(1); }";
+  $code = "define('ABSPATH', __DIR__ . '/'); function add_filter(\\$t, \\$c, \\$p=10, \\$a=1){} function sanitize_text_field(\\$x){return \\$x;} function sanitize_key(\\$x){return \\$x;} " . $setup . " require_once 'wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-attribution.php'; \\$res = nvx_hubspot_secure_identity(); if (\\$res['portal_id'] !== '$expected_portal' || \\$res['form_id'] !== '$expected_form') { exit(1); }";
   $cmd = 'php -r ' . escapeshellarg($code);
   exec($cmd, $out, $ret);
   if ($ret !== 0) exit(1);
