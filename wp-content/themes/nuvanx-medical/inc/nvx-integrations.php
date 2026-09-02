@@ -10,8 +10,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/nvx-environment-flags.php';
 
-/**
- * Returns the normalized request path from REQUEST_URI.
+/** Goya sede: evita bucle redirect_canonical. */
+function nvx_theme_is_goya_page(): bool {
 	if ( is_admin() ) {
 		return false;
 	}
@@ -234,7 +234,6 @@ function nvx_theme_disable_public_facebook_pixel( $plugins ) {
 }
 add_filter( 'option_active_plugins', 'nvx_theme_disable_public_facebook_pixel', 1 );
 add_filter( 'site_option_active_sitewide_plugins', 'nvx_theme_disable_public_facebook_pixel', 1 );
-
 
 /**
  * Campaign attribution marker for Google Ads QA (absorbed from retired MU).
