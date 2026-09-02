@@ -97,7 +97,7 @@ function nvx_btl_claim_governed( string $id ): string {
  * @return string The wrapped HTML.
  */
 function nvx_btl_build_clinical_note_shell( string $notice ): string {
-	return '<div class="nvx-shell nvx-clinical-evidence-note" role="note" aria-label="Nota clínica">'
+	return '<div class="nvx-shell nvx-clinical-evidence-note" data-nvx-btl-clinical-note="1" role="note" aria-label="Nota clínica">'
 		 . '<div class="nvx-clinical-evidence-note__inner">' . $notice . '</div>'
 		 . '</div>';
 }
@@ -130,10 +130,9 @@ function nvx_btl_govern_rendered_content( string $content ): string {
 
 	$notice_content = '<h2 class="nvx-clinical-note__title">Datos técnicos y variabilidad clínica</h2><p class="nvx-clinical-note__text">Los datos técnicos requieren contexto clínico y no equivalen a un resultado individual. La indicación, los parámetros y la respuesta dependen del equipo, el aplicador, la zona y el paciente.</p>';
 
-	if ( false === strpos( $governed, 'nvx-btl-evidence-note' ) ) {
+	if ( false === strpos( $governed, 'data-nvx-btl-clinical-note="1"' ) ) {
 		$notice_shell = nvx_btl_build_clinical_note_shell( $notice_content );
 
-		// Option 1: replace anchor if present
 		if ( false !== strpos( $governed, '<!-- nvx:clinical-note-anchor -->' ) ) {
 			$governed = str_replace(
 				'<!-- nvx:clinical-note-anchor -->',
@@ -141,13 +140,18 @@ function nvx_btl_govern_rendered_content( string $content ): string {
 				$governed
 			);
 		} else {
-			// Option 2 (fallback): insert before closing CTA section
+			$count    = 0;
 			$governed = preg_replace(
 				'/(<section[^>]+nvx-closing-cta[^>]*>)/i',
 				$notice_shell . '$1',
 				$governed,
-				1
+				1,
+				$count
 			) ?? $governed;
+
+			if ( 0 === $count ) {
+				$governed .= $notice_shell;
+			}
 		}
 	}
 
