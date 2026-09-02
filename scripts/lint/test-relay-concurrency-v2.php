@@ -55,14 +55,14 @@ $GLOBALS['nvx_uuid_counter']                        = 0;
 $GLOBALS['nvx_mock_post_meta']                      = array();
 $GLOBALS['nvx_mock_meta_conflict_values']           = array();
 $GLOBALS['nvx_mock_meta_permanent_fail_keys']       = array();
-$GLOBALS['nvx_mock_meta_update_calls']               = array();
+$GLOBALS['nvx_mock_meta_update_calls']              = array();
 $GLOBALS['nvx_mock_option_cas_conflict_values']     = array();
 $GLOBALS['nvx_mock_release_after_cache_delete']     = array();
-$GLOBALS['nvx_mock_cache_delete_calls']              = array();
-$GLOBALS['nvx_mock_posts']                           = array();
-$GLOBALS['nvx_mock_next_post_id']                    = 100;
-$GLOBALS['nvx_mock_deleted_posts']                   = array();
-$GLOBALS['nvx_mock_publish_failure']                 = false;
+$GLOBALS['nvx_mock_cache_delete_calls']             = array();
+$GLOBALS['nvx_mock_posts']                          = array();
+$GLOBALS['nvx_mock_next_post_id']                   = 100;
+$GLOBALS['nvx_mock_deleted_posts']                  = array();
+$GLOBALS['nvx_mock_publish_failure']                = false;
 
 function get_post( $post_id ) {
 	$post_id = (int) $post_id;
@@ -146,7 +146,12 @@ function delete_option( string $key ): bool {
 function wp_cache_delete( $key, string $group = '' ): bool {
 	$cache_key = $group . ':' . (string) $key;
 	$GLOBALS['nvx_mock_cache_delete_calls'][ $cache_key ] = ( $GLOBALS['nvx_mock_cache_delete_calls'][ $cache_key ] ?? 0 ) + 1;
-	if ( 'options' === $group && ! empty( $GLOBALS['nvx_mock_release_after_cache_delete'][ (string) $key ] ) ) {
+	$current = (string) ( $GLOBALS['nvx_mock_options'][ (string) $key ] ?? '' );
+	if (
+		'options' === $group
+		&& ! empty( $GLOBALS['nvx_mock_release_after_cache_delete'][ (string) $key ] )
+		&& str_ends_with( $current, '|winner-owner' )
+	) {
 		unset( $GLOBALS['nvx_mock_release_after_cache_delete'][ (string) $key ] );
 		unset( $GLOBALS['nvx_mock_options'][ (string) $key ] );
 	}
@@ -258,8 +263,12 @@ $GLOBALS['nvx_mock_release_after_cache_delete'][ $race_res_key ] = true;
 $race_reservation = nvx_supabase_relay_queue_dedupe_reservation( $race_key );
 $require( '' !== ( $race_reservation['token'] ?? '' ), 'DEDUPE_LOSER_REACQUIRES_AFTER_RELEASE' );
 $require(
-	( $GLOBALS['nvx_mock_cache_delete_calls'][ 'options:' . $race_res_key ] ?? 0 ) >= 1,
-	'DEDUPE_LOST_CAS_INVALIDATES_OPTION_CACHE'
+	( $GLOBALS['nvx_mock_cache_delete_calls'][ 'options:' . $race_res_key ] ?? 0 ) >= 2,
+	'DEDUPE_LOST_CAS_INVALIDATES_AND_REREADS_OPTION_CACHE'
+);
+$require(
+	! isset( $GLOBALS['nvx_mock_option_cas_conflict_values'][ $race_res_key ] ),
+	'DEDUPE_LOST_CAS_WAS_EXERCISED'
 );
 nvx_supabase_relay_queue_unlock_dedupe(
 	(string) ( $race_reservation['key'] ?? '' ),
