@@ -173,6 +173,10 @@ switch ( $scenario ) {
 }
 
 $module = dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-theme-request.php';
+function get_option( string $option ): string {
+	return 'home' === $option ? (string) $GLOBALS['nvx_test_home_url'] : '';
+}
+
 require $module;
 
 if ( 'immutable_uri' === $scenario ) {
