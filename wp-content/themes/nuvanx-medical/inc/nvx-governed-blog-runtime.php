@@ -17,22 +17,9 @@ if ( ! defined( 'NVX_GOVERNED_BLOG_RUNTIME_CONTRACT' ) ) {
 	define( 'NVX_GOVERNED_BLOG_RUNTIME_CONTRACT', '20260815-immutable-request-final-query-lock-v3' );
 }
 
-// Capture the public request URI once during theme bootstrap. Later query/SEO
-// callbacks must never trust a mutable $_SERVER['REQUEST_URI']: production-only
-// integrations can otherwise make every PHP_INT_MAX guard follow a neighbouring
-// singular after the original route has already been parsed.
-if ( ! defined( 'NVX_GOVERNED_BLOG_BOOT_REQUEST_URI' ) ) {
-	define(
-		'NVX_GOVERNED_BLOG_BOOT_REQUEST_URI',
-		isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : ''
-	);
-}
-
 /** Immutable public request URI captured before the main query lifecycle. */
 function nvx_governed_blog_runtime_original_request_uri(): string {
-	return defined( 'NVX_GOVERNED_BLOG_BOOT_REQUEST_URI' )
-		? (string) NVX_GOVERNED_BLOG_BOOT_REQUEST_URI
-		: '';
+	return function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '';
 }
 
 /** Actual one-segment public slug, independent of WP_Query/global post state. */

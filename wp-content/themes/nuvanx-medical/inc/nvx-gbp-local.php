@@ -684,11 +684,8 @@ function nvx_gbp_send_due_review_requests(): void {
 add_action( NVX_GBP_CRON_HOOK, 'nvx_gbp_send_due_review_requests' );
 
 function nvx_gbp_handle_admin_register(): void {
-	if ( ! is_admin() || ! current_user_can( 'edit_posts' ) ) {
-		return;
-	}
-	if ( empty( $_POST['nvx_gbp_register_visit'] ) ) {
-		return;
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( esc_html__( 'No tienes permisos suficientes.', 'nuvanx-medical' ), 403 );
 	}
 	check_admin_referer( 'nvx_gbp_register_visit' );
 
@@ -704,7 +701,7 @@ function nvx_gbp_handle_admin_register(): void {
 	wp_safe_redirect( $redirect );
 	exit;
 }
-add_action( 'admin_init', 'nvx_gbp_handle_admin_register' );
+add_action( 'admin_post_nvx_gbp_register_visit', 'nvx_gbp_handle_admin_register' );
 
 function nvx_gbp_admin_register_notice(): void {
 	if ( empty( $_GET['nvx_gbp'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -729,9 +726,9 @@ function nvx_gbp_admin_register_form(): void {
 	<div class="notice notice-info">
 		<p><strong><?php esc_html_e( 'Solicitud de reseña GBP a T+7', 'nuvanx-medical' ); ?></strong></p>
 		<p><?php esc_html_e( 'Sin incentivos ni petición de estrellas. Solo el enlace directo al perfil de la sede.', 'nuvanx-medical' ); ?></p>
-		<form method="post">
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 			<?php wp_nonce_field( 'nvx_gbp_register_visit' ); ?>
-			<input type="hidden" name="nvx_gbp_register_visit" value="1" />
+			<input type="hidden" name="action" value="nvx_gbp_register_visit" />
 			<p>
 				<label><?php esc_html_e( 'Nombre', 'nuvanx-medical' ); ?> <input type="text" name="nvx_gbp_name" required /></label>
 				<label><?php esc_html_e( 'Email', 'nuvanx-medical' ); ?> <input type="email" name="nvx_gbp_email" required /></label>

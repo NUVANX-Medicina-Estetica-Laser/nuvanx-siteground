@@ -30,7 +30,7 @@ if ( function_exists( 'nvx_seo_blog_post_metadata_catalog' ) ) {
 		? nvx_governed_blog_runtime_request_slug()
 		: '';
 	if ( '' === $nvx_request_slug ) {
-		$nvx_uri          = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '';
+		$nvx_uri          = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '';
 		$nvx_path         = wp_parse_url( $nvx_uri, PHP_URL_PATH );
 		$nvx_path         = is_string( $nvx_path ) ? '/' . trim( $nvx_path, '/' ) . '/' : '';
 		$nvx_request_slug = trim( $nvx_path, '/' );

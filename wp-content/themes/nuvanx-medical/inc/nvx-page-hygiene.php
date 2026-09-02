@@ -75,12 +75,14 @@ function nvx_redirect_valoracion_aliases(): void {
 		return;
 	}
 
-	// Preserve query strings (gclid, UTM, etc.).
-	$query = isset( $_SERVER['QUERY_STRING'] ) && '' !== $_SERVER['QUERY_STRING']
-		? '?' . $_SERVER['QUERY_STRING']
-		: '';
+	// Preserve query strings (gclid, UTM, etc.) securely using the request context.
+	$context    = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : null;
+	$query_args = is_array( $context ) ? $context['query_args'] : array();
+	$target     = home_url( '/madrid/valoracion/' );
+	if ( ! empty( $query_args ) ) {
+		$target = add_query_arg( $query_args, $target );
+	}
 
-	$target = home_url( '/madrid/valoracion/' ) . $query;
 	wp_safe_redirect( $target, 301, 'NUVANX' );
 	exit;
 }
@@ -189,11 +191,14 @@ function nvx_redirect_unpublished_public_routes(): void {
 		return;
 	}
 
-	$query = isset( $_SERVER['QUERY_STRING'] ) && '' !== $_SERVER['QUERY_STRING']
-		? '?' . $_SERVER['QUERY_STRING']
-		: '';
+	$context    = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : null;
+	$query_args = is_array( $context ) ? $context['query_args'] : array();
+	$target     = home_url( $map[ $slug ] );
+	if ( ! empty( $query_args ) ) {
+		$target = add_query_arg( $query_args, $target );
+	}
 
-	wp_safe_redirect( home_url( $map[ $slug ] ) . $query, 301, 'NUVANX' );
+	wp_safe_redirect( $target, 301, 'NUVANX' );
 	exit;
 }
 add_action( 'template_redirect', 'nvx_redirect_unpublished_public_routes', 0 );

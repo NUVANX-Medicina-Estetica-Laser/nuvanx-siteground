@@ -290,7 +290,7 @@ function nvx_seo_current_path(): string {
 		return (string) nvx_schema_current_path( (int) get_queried_object_id() );
 	}
 
-	$uri     = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/';
+	$uri     = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '/';
 	$uri     = (string) strtok( $uri, '?' );
 	$trimmed = trim( $uri, '/' );
 	return '' !== $trimmed ? '/' . $trimmed . '/' : '/';
@@ -586,7 +586,7 @@ function nvx_seo_route_alias_destination( string $path ): ?string {
 	// its own; wp_parse_str + add_query_arg re-encode it so raw request input
 	// never reaches the Location header verbatim.
 	if ( false === strpos( $target, '?' ) ) {
-		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+		$request_uri = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '';
 		$query       = wp_parse_url( $request_uri, PHP_URL_QUERY );
 		$query       = is_string( $query ) ? $query : '';
 		if ( '' === $query && isset( $_SERVER['QUERY_STRING'] ) ) {
@@ -610,7 +610,7 @@ function nvx_seo_handle_route_alias_redirect(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '/';
+	$uri  = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '/';
 	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
 	$path = '' !== trim( $path, '/' ) ? '/' . trim( $path, '/' ) . '/' : '/';
 

@@ -495,32 +495,3 @@ function nvx_contacto_resolve_legacy_template( string $template ): string {
 	return is_readable( $canonical ) ? $canonical : $template;
 }
 add_filter( 'page_template', 'nvx_contacto_resolve_legacy_template', 5 );
-
-/**
- * Set custom SEO title for contacto page.
-
-
-/**
- * Rewrite legacy _wp_page_template meta to the canonical contact template slug.
- */
-function nvx_contacto_migrate_legacy_template_meta(): void {
-	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
-		return;
-	}
-	if ( ! is_singular( 'page' ) ) {
-		return;
-	}
-
-	$page_id = (int) get_queried_object_id();
-	if ( $page_id <= 0 ) {
-		return;
-	}
-
-	$slug = (string) get_page_template_slug( $page_id );
-	if ( 'templates/template-contact.php' !== $slug ) {
-		return;
-	}
-
-	update_post_meta( $page_id, '_wp_page_template', 'templates/page-contacto.php' );
-}
-add_action( 'template_redirect', 'nvx_contacto_migrate_legacy_template_meta', 0 );

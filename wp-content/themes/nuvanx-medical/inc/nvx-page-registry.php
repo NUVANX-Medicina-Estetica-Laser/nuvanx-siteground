@@ -321,9 +321,9 @@ function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
 		}
 	}
 
-	// Normalize $_SERVER['REQUEST_URI'] as fallback
-	if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
-		$raw_path = (string) wp_parse_url( (string) $_SERVER['REQUEST_URI'], PHP_URL_PATH );
+	// Normalize request context path as fallback
+	if ( function_exists( 'nvx_theme_request_context' ) ) {
+		$raw_path = nvx_theme_request_context()['path'];
 		$norm_path = '/' . trim( $raw_path, '/' ) . '/';
 		if ( '/' === $norm_path || '//' === $norm_path ) {
 			$norm_path = '/';
