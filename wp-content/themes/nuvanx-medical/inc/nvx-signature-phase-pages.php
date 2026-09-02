@@ -686,7 +686,7 @@ add_filter(
 		return $owner;
 	}
 );
-add_filter( 'the_content', 'nvx_signature_phase_inject_markup', 20 );
+add_filter( 'the_content', 'nvx_signature_phase_inject_markup', NVX_HOOK_PRIO_SIGNATURE_PHASE_MARKUP );
 
 /**
  * Contour Architecture™ child routes for the primary navigation mega-menu.
