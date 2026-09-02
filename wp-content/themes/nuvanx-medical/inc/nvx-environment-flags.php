@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 function nvx_environment_is_staging2(): bool {
 	if ( function_exists( 'nvx_theme_request_context' ) ) {
 		$context = nvx_theme_request_context();
-		return ! empty( $context['is_staging'] );
+		return ! empty( $context['is_staging2'] );
 	}
 	return false;
 }
