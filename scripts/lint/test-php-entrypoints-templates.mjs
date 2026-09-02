@@ -44,7 +44,7 @@ for (const relative of nonInc) {
     `${relative} must not create a browser-request authority outside canonical runtime modules`);
 
   if (relative === 'functions.php') continue;
-  assert.doesNotMatch(source, /require_once\s+[^;]*\/inc\/nvx-/,
+  assert.doesNotMatch(source, /(?:require|include)(?:_once)?\s*\(?\s*[^;]*\/inc\/nvx-/,
     `${relative} must render/delegate only, not load nvx runtime modules laterally`);
 }
 
