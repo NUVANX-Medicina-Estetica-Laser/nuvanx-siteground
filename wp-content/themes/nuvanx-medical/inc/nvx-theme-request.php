@@ -232,6 +232,9 @@ if ( ! function_exists( 'nvx_theme_request_environment' ) ) {
 		}
 
 		if ( in_array( $configured_env, array( 'staging', 'development', 'local', 'test' ), true ) ) {
+			if ( 'staging2' === $host_environment ) {
+				return 'staging2';
+			}
 			return 'production' === $host_environment ? 'unknown' : 'nonproduction';
 		}
 
