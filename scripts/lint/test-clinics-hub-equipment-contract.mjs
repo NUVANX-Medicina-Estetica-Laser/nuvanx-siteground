@@ -104,7 +104,7 @@ for (const token of [
   'data-nvx-approved-equipment-section="clinic-hub-v1"',
   'NVX_APPROVED_EQUIPMENT_SECTION:clinic-hub-v1',
   'function nvx_clinics_hub_append_approved_equipment',
-  "add_filter( 'the_content', 'nvx_clinics_hub_append_approved_equipment', 220 );",
+  "add_filter( 'the_content', 'nvx_clinics_hub_append_approved_equipment', NVX_HOOK_PRIO_CLINICS_APPROVED_EQUIPMENT );",
   'return nvx_clinics_hub_equipment_unavailable_markup();',
   'function nvx_clinics_hub_equipment_unavailable_markup',
   'data-nvx-approved-equipment-section="incomplete"',

@@ -1034,7 +1034,7 @@ function nvx_content_presentation_enhance( string $content ): string {
 
 	return $content;
 }
-add_filter( 'the_content', 'nvx_content_presentation_enhance', 20 );
+add_filter( 'the_content', 'nvx_content_presentation_enhance', NVX_HOOK_PRIO_PRESENTATION_ENHANCE );
 
 /**
  * Single late strip of page-local closing CTAs after modules rebuild the_content.
@@ -1046,7 +1046,7 @@ function nvx_content_strip_page_closing_ctas_late( string $content ): string {
 	}
 	return nvx_content_strip_page_closing_ctas( $content );
 }
-add_filter( 'the_content', 'nvx_content_strip_page_closing_ctas_late', 99 );
+add_filter( 'the_content', 'nvx_content_strip_page_closing_ctas_late', NVX_HOOK_PRIO_STRIP_PAGE_CTAS );
 
 
 /**
@@ -1297,4 +1297,4 @@ function nvx_content_inject_global_treatment_sections( string $content ): string
 		nvx_content_build_treatment_section_injections( $content )
 	);
 }
-add_filter( 'the_content', 'nvx_content_inject_global_treatment_sections', 21 );
+add_filter( 'the_content', 'nvx_content_inject_global_treatment_sections', NVX_HOOK_PRIO_GLOBAL_TREATMENT );

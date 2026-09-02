@@ -84,7 +84,7 @@ function nvx_theme_normalize_managed_component_prose_wrapper( string $content ):
 
 	return is_string( $normalized ) ? $normalized : $content;
 }
-add_filter( 'the_content', 'nvx_theme_normalize_managed_component_prose_wrapper', PHP_INT_MAX );
+add_filter( 'the_content', 'nvx_theme_normalize_managed_component_prose_wrapper', NVX_HOOK_PRIO_MANAGED_COMPONENT_PROSE_WRAPPER );
 
 /**
  * Return the ordered local stylesheets required by the current public route.

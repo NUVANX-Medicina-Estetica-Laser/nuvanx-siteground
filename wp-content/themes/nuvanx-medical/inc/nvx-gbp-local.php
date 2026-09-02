@@ -349,7 +349,7 @@ function nvx_public_strip_vendor_images( string $content ): string {
 
 	return is_string( $updated ) ? $updated : $content;
 }
-add_filter( 'the_content', 'nvx_public_strip_vendor_images', 198 );
+add_filter( 'the_content', 'nvx_public_strip_vendor_images', NVX_HOOK_PRIO_PUBLIC_VENDOR_IMAGES );
 
 /**
  * Featured images inherit the post title as alt in several templates.
@@ -417,7 +417,7 @@ function nvx_clinic_strip_vendor_packshots( string $content ): string {
 
 	return is_string( $updated ) ? $updated : $content;
 }
-add_filter( 'the_content', 'nvx_clinic_strip_vendor_packshots', 199 );
+add_filter( 'the_content', 'nvx_clinic_strip_vendor_packshots', NVX_HOOK_PRIO_CLINIC_VENDOR_PACKSHOTS );
 
 /**
  * Goya-only clinical portraits. Never used on Equipo Médico or Chamberí.

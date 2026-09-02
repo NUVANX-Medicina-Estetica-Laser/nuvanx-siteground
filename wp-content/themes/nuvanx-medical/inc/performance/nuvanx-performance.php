@@ -357,4 +357,4 @@ function nuvanx_external_links_rel( string $content ): string {
 		$content
 	);
 }
-add_filter( 'the_content', 'nuvanx_external_links_rel', 15 );
+add_filter( 'the_content', 'nuvanx_external_links_rel', NVX_HOOK_PRIO_EXTERNAL_LINKS_REL );

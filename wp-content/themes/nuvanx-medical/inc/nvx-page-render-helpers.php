@@ -316,7 +316,7 @@ function nvx_remove_missing_local_content_images( $content ) {
 
 	return $filtered;
 }
-add_filter( 'the_content', 'nvx_remove_missing_local_content_images', 20 );
+add_filter( 'the_content', 'nvx_remove_missing_local_content_images', NVX_HOOK_PRIO_REMOVE_MISSING_LOCAL_IMAGES );
 
 /** Read an HTML attribute value from an attribute string. */
 function nvx_html_attrs_get( string $attrs, string $name ): string {
@@ -610,7 +610,7 @@ function nvx_content_apply_responsive_images( string $content ): string {
 
 	return is_string( $updated ) ? $updated : $content;
 }
-add_filter( 'the_content', 'nvx_content_apply_responsive_images', 200 );
+add_filter( 'the_content', 'nvx_content_apply_responsive_images', NVX_HOOK_PRIO_RESPONSIVE_IMAGES );
 
 /** Build an img tag with srcset/sizes when theme or upload derivatives exist. */
 function nvx_responsive_img_markup( string $src, string $alt, string $extra_attrs = '' ): string {
@@ -696,7 +696,7 @@ function nvx_rewrite_eager_maps_iframes( string $html ): string {
 
 	return is_string( $rewritten ) ? $rewritten : $html;
 }
-add_filter( 'the_content', 'nvx_rewrite_eager_maps_iframes', 201 );
+add_filter( 'the_content', 'nvx_rewrite_eager_maps_iframes', NVX_HOOK_PRIO_MAPS_IFRAMES );
 add_filter( 'widget_text', 'nvx_rewrite_eager_maps_iframes', 20 );
 add_filter( 'widget_block_content', 'nvx_rewrite_eager_maps_iframes', 20 );
 add_filter( 'embed_oembed_html', 'nvx_rewrite_eager_maps_iframes', 20 );
@@ -734,7 +734,7 @@ function nvx_sanitize_invalid_list_roles( string $html ): string {
 
 	return is_string( $updated ) ? $updated : $html;
 }
-add_filter( 'the_content', 'nvx_sanitize_invalid_list_roles', 202 );
+add_filter( 'the_content', 'nvx_sanitize_invalid_list_roles', NVX_HOOK_PRIO_INVALID_LIST_ROLES );
 add_filter( 'render_block', 'nvx_sanitize_invalid_list_roles', 202 );
 
 /**
@@ -1033,7 +1033,7 @@ function nvx_inject_clinical_authority_byline( string $content ): string {
 
 	return is_string( $updated ) ? $updated : $content;
 }
-add_filter( 'the_content', 'nvx_inject_clinical_authority_byline', NVX_HOOK_PRIO_MEDICAL_REVIEW + 1 );
+add_filter( 'the_content', 'nvx_inject_clinical_authority_byline', NVX_HOOK_PRIO_CLINICAL_AUTHORITY_BYLINE );
 
 /**
  * Injects physician portrait authority card and clinical cases preview onto core treatment landing pages.
@@ -1086,7 +1086,7 @@ function nvx_inject_treatment_authority_and_cases( string $content ): string {
 
 	return $content;
 }
-add_filter( 'the_content', 'nvx_inject_treatment_authority_and_cases', NVX_HOOK_PRIO_MEDICAL_REVIEW + 2 );
+add_filter( 'the_content', 'nvx_inject_treatment_authority_and_cases', NVX_HOOK_PRIO_TREATMENT_AUTHORITY_CASES );
 
 
 /**
