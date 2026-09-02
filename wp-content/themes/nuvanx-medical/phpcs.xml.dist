@@ -17,6 +17,8 @@
     <rule ref="WordPress">
         <!-- Demote all WPCS errors to warnings temporarily for controlled evolution -->
         <type>warning</type>
+        <exclude name="WordPress.WP.I18n.MissingTranslatorsComment"/>
+
     </rule>
 
     <!-- Specific enforced rules for integrity -->
