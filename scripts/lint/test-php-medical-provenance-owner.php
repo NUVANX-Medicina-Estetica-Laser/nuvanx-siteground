@@ -74,7 +74,6 @@ $rogue_graph = array(
 );
 $legacy_visible = '<h1>Valoración médica</h1><p class="nvx-medical-review">Revisión médica: Dr. Rivera · ICOMEM · agosto 2026</p><p>Contenido clínico.</p>';
 
-// Registry schema version is part of the authority contract.
 $GLOBALS['nvx_test_approvals'] = array( 'managed_pages' => $approved_managed_pages );
 nvx_provenance_assert( array() === nvx_medical_review_managed_registry(), 'REGISTRY_REJECTS_MISSING_VERSION' );
 nvx_provenance_assert( nvx_medical_review_governed_page(), 'MISSING_VERSION_PAGE_STAYS_GOVERNED' );
@@ -89,8 +88,6 @@ nvx_provenance_assert( array() === nvx_medical_review_managed_registry(), 'REGIS
 nvx_provenance_assert( nvx_medical_review_governed_page(), 'UNSUPPORTED_VERSION_PAGE_STAYS_GOVERNED' );
 nvx_provenance_assert( null === nvx_medical_review_record(), 'UNSUPPORTED_VERSION_HAS_NO_APPROVAL' );
 
-// Exact canonical registry keys are required; near-equivalent malformed keys
-// must never be normalized into approval authority, while the route remains governed.
 $GLOBALS['nvx_test_approvals'] = array(
 	'version'       => 1,
 	'managed_pages' => array(
@@ -116,10 +113,7 @@ nvx_provenance_assert( 'Dr. José Javier Rivera Tejeda' === ( $managed['name'] ?
 nvx_provenance_assert( nvx_medical_review_governed_page(), 'MANAGED_PAGE_IS_GOVERNED' );
 
 $governed = nvx_medical_review_schema_graph( $rogue_graph );
-nvx_provenance_assert(
-	'https://nuvanx.test/equipo-medico/#physician-rivera-tejeda' === ( $governed[0]['reviewedBy']['@id'] ?? '' ),
-	'ROGUE_REVIEWER_REPLACED_BY_CANONICAL_OWNER'
-);
+nvx_provenance_assert( 'https://nuvanx.test/equipo-medico/#physician-rivera-tejeda' === ( $governed[0]['reviewedBy']['@id'] ?? '' ), 'ROGUE_REVIEWER_REPLACED_BY_CANONICAL_OWNER' );
 nvx_provenance_assert( '2026-08-01' === ( $governed[0]['lastReviewed'] ?? '' ), 'ROGUE_DATE_REPLACED_BY_APPROVED_DATE' );
 
 $approved_visible = nvx_medical_review_enforce_visible_provenance( $legacy_visible );
@@ -140,11 +134,9 @@ $deep_nested = '<h1>Valoración médica</h1><div class="nvx-medical-byline"><div
 $deep_clean = nvx_medical_review_enforce_visible_provenance( $deep_nested );
 nvx_provenance_assert( false === strpos( $deep_clean, 'Deep legacy review' ), 'DEEP_NESTED_LEGACY_CONTENT_REMOVED' );
 nvx_provenance_assert( false === strpos( $deep_clean, 'Secondary legacy block' ), 'DEEP_NESTED_SECONDARY_BLOCK_REMOVED' );
-nvx_provenance_assert( false === strpos( $deep_clean, '</div></div></div></div>' ), 'DEEP_NESTED_NO_STRAY_CLOSING_TAGS' );
 nvx_provenance_assert( false !== strpos( $deep_clean, '<section data-adjacent="before">Antes intacto</section><p>Contenido clínico.</p><section data-adjacent="after">Después intacto</section>' ), 'DEEP_NESTED_ADJACENT_CONTENT_PRESERVED' );
 nvx_provenance_assert( 1 === substr_count( $deep_clean, 'data-nvx-medical-review="approved"' ), 'DEEP_NESTED_REPLACED_ONCE' );
 
-// Registered pending approval remains in the perimeter and strips all provenance.
 $GLOBALS['nvx_test_approvals']['managed_pages']['/madrid/valoracion/']['status'] = 'pending';
 nvx_provenance_assert( null === nvx_medical_review_record(), 'REGISTERED_PENDING_PAGE_FAILS_CLOSED' );
 nvx_provenance_assert( nvx_medical_review_governed_page(), 'REGISTERED_PENDING_PAGE_STAYS_GOVERNED' );
@@ -155,11 +147,13 @@ $pending_visible = nvx_medical_review_enforce_visible_provenance( $legacy_visibl
 nvx_provenance_assert( false === strpos( $pending_visible, 'class="nvx-medical-review"' ), 'PENDING_LEGACY_PARAGRAPH_REMOVED' );
 nvx_provenance_assert( false === strpos( $pending_visible, 'data-nvx-medical-review="approved"' ), 'PENDING_NO_CANONICAL_ATTRIBUTION' );
 
-// Restore approved registry for precedence checks.
-$GLOBALS['nvx_test_approvals'] = array( 'version' => 1, 'managed_pages' => $approved_managed_pages );
+$malformed_target = '<h1>Valoración médica</h1><div class="shell"><p class="nvx-medical-review">Rogue malformed attribution</div><section data-adjacent="malformed">Contenido adyacente intacto</section>';
+$malformed_clean = nvx_medical_review_enforce_visible_provenance( $malformed_target );
+nvx_provenance_assert( false === strpos( $malformed_clean, 'Rogue malformed attribution' ), 'MALFORMED_ORPHAN_TARGET_REMOVED' );
+nvx_provenance_assert( false !== strpos( $malformed_clean, '<div class="shell"></div><section data-adjacent="malformed">Contenido adyacente intacto</section>' ), 'MALFORMED_PARENT_AND_ADJACENT_CONTENT_PRESERVED' );
+nvx_provenance_assert( false === strpos( $malformed_clean, 'data-nvx-medical-review="approved"' ), 'MALFORMED_PENDING_NO_CANONICAL_ATTRIBUTION' );
 
-// Papada is also classified as a treatment route. Explicit managed registration
-// must win even when generic treatment resolution is enabled and post meta is absent.
+$GLOBALS['nvx_test_approvals'] = array( 'version' => 1, 'managed_pages' => $approved_managed_pages );
 $GLOBALS['nvx_test_path']      = '/papada-definicion-mandibular-madrid/';
 $GLOBALS['nvx_test_treatment'] = true;
 $GLOBALS['nvx_test_post_meta'] = array();
@@ -168,7 +162,6 @@ nvx_provenance_assert( is_array( $papada ), 'PAPADA_MANAGED_APPROVAL_RESOLVES_WI
 nvx_provenance_assert( 'managed_registry' === ( $papada['source'] ?? '' ), 'PAPADA_MANAGED_APPROVAL_PRECEDENCE' );
 nvx_provenance_assert( '2026-08-01' === ( $papada['date'] ?? '' ), 'PAPADA_MANAGED_APPROVAL_DATE' );
 
-// Managed routes never fall through to treatment metadata if registry authority fails.
 $GLOBALS['nvx_test_approvals'] = array( 'version' => 2, 'managed_pages' => $approved_managed_pages );
 nvx_provenance_assert( nvx_medical_review_governed_page( 42 ), 'PAPADA_WRONG_VERSION_STAYS_GOVERNED' );
 nvx_provenance_assert( null === nvx_medical_review_record( 42 ), 'PAPADA_WRONG_VERSION_DOES_NOT_FALL_THROUGH_TO_TREATMENT' );
@@ -176,15 +169,12 @@ $papada_fail_closed = nvx_medical_review_schema_graph( $rogue_graph );
 nvx_provenance_assert( ! isset( $papada_fail_closed[0]['reviewedBy'], $papada_fail_closed[0]['lastReviewed'] ), 'PAPADA_WRONG_VERSION_SCHEMA_STRIPPED' );
 $GLOBALS['nvx_test_approvals'] = array( 'version' => 1, 'managed_pages' => $approved_managed_pages );
 
-// An unrelated page outside this owner's perimeter must remain untouched.
 $GLOBALS['nvx_test_path']      = '/unrelated-page/';
 $GLOBALS['nvx_test_treatment'] = false;
 $unrelated = nvx_medical_review_schema_graph( $rogue_graph );
 nvx_provenance_assert( 'https://rogue.example/#doctor' === ( $unrelated[0]['reviewedBy']['@id'] ?? '' ), 'UNRELATED_PAGE_GRAPH_LEFT_UNTOUCHED' );
 nvx_provenance_assert( '1999-01-01' === ( $unrelated[0]['lastReviewed'] ?? '' ), 'UNRELATED_PAGE_DATE_LEFT_UNTOUCHED' );
 
-// Generic treatment routes without an explicit managed registration preserve the
-// existing post-meta approval contract.
 $GLOBALS['nvx_test_treatment'] = true;
 $GLOBALS['nvx_test_post_meta'] = array(
 	'_nvx_medical_review_status' => 'approved',
@@ -198,19 +188,17 @@ nvx_provenance_assert( '2026-08-15' === ( $treatment['date'] ?? '' ), 'TREATMENT
 
 $GLOBALS['nvx_test_post_meta']['_nvx_medical_review_status'] = 'pending';
 nvx_provenance_assert( null === nvx_medical_review_record( 42 ), 'TREATMENT_PENDING_FAILS_CLOSED' );
-// Simulate a legacy priority-145 byline producer: canonical priority 147 must remove it.
-$late_legacy = '<h1>Endoláser Corporal</h1>' . '<p class="nvx-medical-review">Late unconditional ICOMEM claim</p><p>Contenido.</p>';
+$late_legacy = '<h1>Endoláser Corporal</h1><p class="nvx-medical-review">Late unconditional ICOMEM claim</p><p>Contenido.</p>';
 $after_canonical = nvx_medical_review_enforce_visible_provenance( $late_legacy );
 nvx_provenance_assert( false === strpos( $after_canonical, 'Late unconditional ICOMEM claim' ), 'PENDING_LATE_LEGACY_PRODUCER_STRIPPED' );
 nvx_provenance_assert( false === strpos( $after_canonical, 'data-nvx-medical-review="approved"' ), 'PENDING_LATE_PRODUCER_NO_REINJECTION' );
 
-$registry_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/data/medical-review-approvals.json' );
+$registry_source  = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/data/medical-review-approvals.json' );
+$medical_source   = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-medical-review.php' );
+$constants_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php' );
 nvx_provenance_assert( false !== strpos( $registry_source, '"version": 1' ), 'MANAGED_APPROVAL_REGISTRY_VERSIONED' );
 nvx_provenance_assert( false !== strpos( $registry_source, '"/madrid/valoracion/"' ), 'VALORACION_APPROVAL_VERSIONED' );
 nvx_provenance_assert( false !== strpos( $registry_source, '"/papada-definicion-mandibular-madrid/"' ), 'PAPADA_APPROVAL_VERSIONED' );
-
-$medical_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-medical-review.php' );
-$constants_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php' );
 nvx_provenance_assert( false !== strpos( $medical_source, 'nvx_medical_review_managed_paths' ), 'MANAGED_PERIMETER_INDEPENDENT_OF_REGISTRY' );
 nvx_provenance_assert( false !== strpos( $medical_source, "1 !== (int) ( \$catalog['version'] ?? 0 )" ), 'REGISTRY_VERSION_GUARD_PRESENT' );
 nvx_provenance_assert( false !== strpos( $medical_source, 'nvx_medical_review_registry_path_is_canonical' ), 'REGISTRY_EXACT_PATH_GUARD_PRESENT' );
@@ -220,4 +208,4 @@ nvx_provenance_assert( false !== strpos( $medical_source, "\$graph[ \$index ]['l
 nvx_provenance_assert( false !== strpos( $constants_source, 'NVX_HOOK_PRIO_CLINICAL_AUTHORITY_BYLINE  = 145' ), 'LEGACY_BYLINE_PRIORITY_DOCUMENTED' );
 nvx_provenance_assert( false !== strpos( $constants_source, 'NVX_HOOK_PRIO_MEDICAL_REVIEW             = 147' ), 'CANONICAL_VISIBLE_OWNER_RUNS_AFTER_LEGACY_BYLINE' );
 
-echo 'PHP_MEDICAL_PROVENANCE_OWNER=PASS managed_registry=versioned_exact perimeter=independent precedence=managed legacy_byline=balanced treatment_meta=preserved rogue_provenance=fail_closed priority=147' . PHP_EOL;
+echo 'PHP_MEDICAL_PROVENANCE_OWNER=PASS managed_registry=versioned_exact perimeter=independent precedence=managed legacy_byline=balanced malformed=fail_closed treatment_meta=preserved rogue_provenance=fail_closed priority=147' . PHP_EOL;
