@@ -1,40 +1,40 @@
 {
   "schema": "nuvanx-endolaser-content-approval/v2",
-  "status": "APPROVED",
+  "status": "PENDING",
   "instructions": "References only. Do not store clinical records, patient data, credentials, device serial numbers, secrets or private IFU contents in Git. For an APPROVED record, bind revision.base_sha to the PR base commit, revision.head_sha to the reviewed protected-content commit, and revision.protected_fingerprint to the gate output for that protected revision.",
   "revision": {
-    "base_sha": "c5f25a35e7ffe21e6dbb59161a2106a9ec78998b",
-    "head_sha": "02d35fb659eecf9de62d7b06d536b2df1dd49f49",
-    "protected_fingerprint": "bc687edd6197fad2c69d52cd4f578bbc9bcc2f39a8e1a3ec9c2ec791058928ea"
+    "base_sha": "",
+    "head_sha": "",
+    "protected_fingerprint": ""
   },
   "equipment": {
-    "approved_by": "maria",
-    "approved_at": "2026-09-02T12:00:00Z",
-    "evidence_references": ["ok"]
+    "approved_by": "",
+    "approved_at": "",
+    "evidence_references": []
   },
   "technique": {
-    "approved_by": "maria",
-    "approved_at": "2026-09-02T12:00:00Z",
-    "evidence_references": ["ok"]
+    "approved_by": "",
+    "approved_at": "",
+    "evidence_references": []
   },
   "claims": {
-    "approved_by": "maria",
-    "approved_at": "2026-09-02T12:00:00Z",
-    "evidence_references": ["ok"]
+    "approved_by": "",
+    "approved_at": "",
+    "evidence_references": []
   },
   "identity": {
-    "approved_by": "maria",
-    "approved_at": "2026-09-02T12:00:00Z",
-    "evidence_references": ["ok"]
+    "approved_by": "",
+    "approved_at": "",
+    "evidence_references": []
   },
   "tariff": {
-    "approved_by": "maria",
-    "approved_at": "2026-09-02T12:00:00Z",
-    "evidence_references": ["ok"]
+    "approved_by": "",
+    "approved_at": "",
+    "evidence_references": []
   },
   "taxonomy": {
-    "approved_by": "maria",
-    "approved_at": "2026-09-02T12:00:00Z",
-    "evidence_references": ["ok"]
+    "approved_by": "",
+    "approved_at": "",
+    "evidence_references": []
   }
 }
