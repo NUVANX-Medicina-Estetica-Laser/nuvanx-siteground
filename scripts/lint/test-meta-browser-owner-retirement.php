@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 $root       = dirname( __DIR__, 2 );
 $runtime    = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-meta-browser-governance.php';
-$bootstrap  = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-environment-flags.php';
+$bootstrap  = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php';
 $boundary   = $root . '/scripts/production/verify-production-boundary.mjs';
 $route_gate = __DIR__ . '/test-production-meta-local-boundary.mjs';
 
@@ -26,8 +26,16 @@ $bootstrap_source = file_get_contents( $bootstrap );
 is_string( $runtime_source ) || $fail( 'runtime_unreadable' );
 is_string( $bootstrap_source ) || $fail( 'bootstrap_unreadable' );
 
-str_contains( $bootstrap_source, "require_once __DIR__ . '/nvx-meta-browser-governance.php';" )
+str_contains( $bootstrap_source, "'inc/nvx-meta-browser-governance.php'" )
 	|| $fail( 'runtime_not_loaded_early' );
+// Verify it's NOT laterally loaded from environment-flags.php
+$env_flags = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-environment-flags.php';
+if ( is_file( $env_flags ) ) {
+	$env_flags_source = file_get_contents( $env_flags );
+	if ( str_contains( $env_flags_source, "require_once __DIR__ . '/nvx-meta-browser-governance.php';" ) ) {
+		$fail( 'runtime_loaded_laterally_from_environment_flags' );
+	}
+}
 str_contains( $runtime_source, "return 'nuvanx-meta-dedupe-event-id.php';" )
 	|| $fail( 'legacy_source_identity_missing' );
 str_contains( $runtime_source, 'ReflectionFunction' ) || $fail( 'function_source_reflection_missing' );
