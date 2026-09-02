@@ -136,6 +136,14 @@ $nested_clean = nvx_medical_review_enforce_visible_provenance( $nested_div );
 nvx_provenance_assert( false === strpos( $nested_clean, 'Nested legacy review' ), 'NESTED_LEGACY_DIV_REMOVED' );
 nvx_provenance_assert( 1 === substr_count( $nested_clean, 'data-nvx-medical-review="approved"' ), 'NESTED_DIV_REPLACED_ONCE' );
 
+$deep_nested = '<h1>Valoración médica</h1><div class="nvx-medical-byline"><div class="level-1"><div class="level-2"><div class="level-3">Deep legacy review</div><div>Secondary legacy block</div></div></div></div><section data-adjacent="before">Antes intacto</section><p>Contenido clínico.</p><section data-adjacent="after">Después intacto</section>';
+$deep_clean = nvx_medical_review_enforce_visible_provenance( $deep_nested );
+nvx_provenance_assert( false === strpos( $deep_clean, 'Deep legacy review' ), 'DEEP_NESTED_LEGACY_CONTENT_REMOVED' );
+nvx_provenance_assert( false === strpos( $deep_clean, 'Secondary legacy block' ), 'DEEP_NESTED_SECONDARY_BLOCK_REMOVED' );
+nvx_provenance_assert( false === strpos( $deep_clean, '</div></div></div></div>' ), 'DEEP_NESTED_NO_STRAY_CLOSING_TAGS' );
+nvx_provenance_assert( false !== strpos( $deep_clean, '<section data-adjacent="before">Antes intacto</section><p>Contenido clínico.</p><section data-adjacent="after">Después intacto</section>' ), 'DEEP_NESTED_ADJACENT_CONTENT_PRESERVED' );
+nvx_provenance_assert( 1 === substr_count( $deep_clean, 'data-nvx-medical-review="approved"' ), 'DEEP_NESTED_REPLACED_ONCE' );
+
 // Registered pending approval remains in the perimeter and strips all provenance.
 $GLOBALS['nvx_test_approvals']['managed_pages']['/madrid/valoracion/']['status'] = 'pending';
 nvx_provenance_assert( null === nvx_medical_review_record(), 'REGISTERED_PENDING_PAGE_FAILS_CLOSED' );
@@ -206,9 +214,10 @@ $constants_source = (string) file_get_contents( $root . '/wp-content/themes/nuva
 nvx_provenance_assert( false !== strpos( $medical_source, 'nvx_medical_review_managed_paths' ), 'MANAGED_PERIMETER_INDEPENDENT_OF_REGISTRY' );
 nvx_provenance_assert( false !== strpos( $medical_source, "1 !== (int) ( \$catalog['version'] ?? 0 )" ), 'REGISTRY_VERSION_GUARD_PRESENT' );
 nvx_provenance_assert( false !== strpos( $medical_source, 'nvx_medical_review_registry_path_is_canonical' ), 'REGISTRY_EXACT_PATH_GUARD_PRESENT' );
+nvx_provenance_assert( false !== strpos( $medical_source, 'nvx_medical_review_legacy_wrapper_ranges' ), 'BALANCED_BYLINE_PARSER_PRESENT' );
 nvx_provenance_assert( false !== strpos( $medical_source, "unset( \$graph[ \$index ]['reviewedBy'], \$graph[ \$index ]['lastReviewed'] )" ), 'CANONICAL_OWNER_SANITIZES_EARLIER_PROVENANCE' );
 nvx_provenance_assert( false !== strpos( $medical_source, "\$graph[ \$index ]['lastReviewed'] = \$record['date']" ), 'CANONICAL_OWNER_EMITS_APPROVED_DATE' );
 nvx_provenance_assert( false !== strpos( $constants_source, 'NVX_HOOK_PRIO_CLINICAL_AUTHORITY_BYLINE  = 145' ), 'LEGACY_BYLINE_PRIORITY_DOCUMENTED' );
 nvx_provenance_assert( false !== strpos( $constants_source, 'NVX_HOOK_PRIO_MEDICAL_REVIEW             = 147' ), 'CANONICAL_VISIBLE_OWNER_RUNS_AFTER_LEGACY_BYLINE' );
 
-echo 'PHP_MEDICAL_PROVENANCE_OWNER=PASS managed_registry=versioned_exact perimeter=independent precedence=managed legacy_byline=removed treatment_meta=preserved rogue_provenance=fail_closed priority=147' . PHP_EOL;
+echo 'PHP_MEDICAL_PROVENANCE_OWNER=PASS managed_registry=versioned_exact perimeter=independent precedence=managed legacy_byline=balanced treatment_meta=preserved rogue_provenance=fail_closed priority=147' . PHP_EOL;
