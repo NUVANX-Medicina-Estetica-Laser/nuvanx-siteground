@@ -62,6 +62,20 @@ function delete_transient( string $key ): bool {
 	return true;
 }
 
+$GLOBALS['post_meta'] = array();
+function get_post_meta( int $post_id, string $key = '', bool $single = false ) {
+	unset( $single );
+	return $GLOBALS['post_meta'][ $post_id ][ $key ] ?? '';
+}
+function update_post_meta( int $post_id, string $key, $value ): bool {
+	$GLOBALS['post_meta'][ $post_id ][ $key ] = (string) $value;
+	return true;
+}
+function wp_delete_post( int $post_id, bool $force = false ): bool {
+	unset( $post_id, $force );
+	return true;
+}
+
 function sanitize_key( $key ): string {
 	return preg_replace( '/[^a-z0-9_-]/i', '', (string) $key );
 }
@@ -156,7 +170,7 @@ set_transient( 'nvx_rt_boot_' . $active_hash, '1' );
 // Load relay queue functions
 require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-supabase-relay-queue.php';
 
-// Assert Test 2: Bounded 401 recovery on lead_captured
+// Assert Test 2: Bounded 401 recovery on dispatch(lead_captured)
 $valid_body = '{"lead_id":"d1234567-89ab-4cde-0123-456789abcdef","client_timestamp":"2026-09-02T10:00:00Z"}';
 
 // Reset logs and mock responses:
@@ -170,9 +184,10 @@ $GLOBALS['mock_responses']  = array(
 	array( 'response' => array( 'code' => 200 ), 'body' => '{"success":true}' ),
 );
 
-$send_result = nvx_supabase_relay_queue_send( 'lead_captured', $valid_body );
-assert( ! is_wp_error( $send_result ), 'Recovered send must not be WP_Error' );
-assert( 200 === wp_remote_retrieve_response_code( $send_result ), 'Recovered send must return 200' );
+$dispatch_result = nvx_supabase_relay_dispatch( 'lead_captured', $valid_body );
+assert( 'SUCCESS' === $dispatch_result['outcome'], 'Recovered dispatch must have SUCCESS outcome' );
+assert( 200 === $dispatch_result['status'], 'Recovered dispatch must return status 200' );
+assert( 0 === $dispatch_result['queued'], 'Recovered dispatch must not enqueue' );
 assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected 3 HTTP calls: send(401) -> bootstrap(200) -> resend(200)' );
 
 // Assert Test 3: Bounded recovery when retry still returns 401 (must not infinite loop)
@@ -184,12 +199,13 @@ $GLOBALS['mock_responses']  = array(
 	array( 'response' => array( 'code' => 401 ), 'body' => '{"error":"unauthorized_still"}' ),
 );
 
-$send_result_401 = nvx_supabase_relay_queue_send( 'lead_captured', $valid_body );
-assert( ! is_wp_error( $send_result_401 ), 'Exhausted retry returns array response' );
-assert( 401 === wp_remote_retrieve_response_code( $send_result_401 ), 'Exhausted retry returns 401' );
-assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected strictly bounded 3 HTTP calls (no infinite loop)' );
+$dispatch_result_401 = nvx_supabase_relay_dispatch( 'lead_captured', $valid_body );
+assert( 'HTTP_4XX' === $dispatch_result_401['outcome'], 'Exhausted retry yields HTTP_4XX' );
+assert( 401 === $dispatch_result_401['status'], 'Exhausted retry yields 401' );
+assert( 0 === $dispatch_result_401['queued'], 'Unrecoverable 401 must not be queued' );
+assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected strictly bounded 3 HTTP calls (1 send + 1 bootstrap + 1 retry)' );
 
-// Assert Test 4: When forced bootstrap fails, returns retryable WP_Error
+// Assert Test 4: When forced bootstrap fails during 401 recovery, dispatch marks failure as retryable
 set_transient( 'nvx_rt_boot_' . $active_hash, '1' );
 $GLOBALS['remote_post_log'] = array();
 $GLOBALS['mock_responses']  = array(
@@ -197,14 +213,14 @@ $GLOBALS['mock_responses']  = array(
 	array( 'response' => array( 'code' => 500 ), 'body' => '{"error":"server error"}' ),
 );
 
-$send_result_fail = nvx_supabase_relay_queue_send( 'lead_captured', $valid_body );
+$send_result_fail = nvx_supabase_relay_queue_send( 'lead_captured', $valid_body, '', true );
 assert( is_wp_error( $send_result_fail ), 'Failed forced bootstrap must return WP_Error' );
 assert( 'nvx_runtime_bootstrap_unavailable' === $send_result_fail->get_error_code(), 'Must return bootstrap unavailable code' );
 
 $classified = nvx_supabase_relay_classify( $send_result_fail );
 assert( true === $classified['retryable'], 'Failed bootstrap must be retryable (not dead)' );
 
-// Assert Test 5: Bounded 401 recovery on google_click
+// Assert Test 5: Bounded 401 recovery on dispatch(google_click)
 set_transient( 'nvx_rt_boot_' . $active_hash, '1' );
 $click_body = '{"gclid":"test-gclid-123","source":"adwords"}';
 $origin = 'https://nuvanx.es';
@@ -216,9 +232,9 @@ $GLOBALS['mock_responses']  = array(
 	array( 'response' => array( 'code' => 200 ), 'body' => '{"success":true}' ),
 );
 
-$click_result = nvx_supabase_relay_queue_send( 'google_click', $click_body, $origin );
-assert( ! is_wp_error( $click_result ), 'Recovered click send must not be WP_Error' );
-assert( 200 === wp_remote_retrieve_response_code( $click_result ), 'Recovered click send must return 200' );
-assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected 3 HTTP calls for google_click: send(401) -> bootstrap(200) -> resend(200)' );
+$click_dispatch = nvx_supabase_relay_dispatch( 'google_click', $click_body, array( 'Origin' => $origin ) );
+assert( 'SUCCESS' === $click_dispatch['outcome'], 'Recovered click dispatch must have SUCCESS outcome' );
+assert( 200 === $click_dispatch['status'], 'Recovered click dispatch must return 200' );
+assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected 3 HTTP calls for google_click dispatch: send(401) -> bootstrap(200) -> resend(200)' );
 
-echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified\n";
+echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned\n";
