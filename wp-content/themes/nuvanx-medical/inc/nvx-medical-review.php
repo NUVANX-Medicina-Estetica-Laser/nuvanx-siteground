@@ -51,6 +51,17 @@ function nvx_medical_review_supported_page( int $post_id ): bool {
 	return null !== nvx_schema_resolve_treatment_key( $post_id );
 }
 
+/** Whether a registered reviewer has every public provenance field required. */
+function nvx_medical_review_reviewer_complete( array $reviewer ): bool {
+	foreach ( array( 'name', 'license', 'url', 'id', 'title' ) as $field ) {
+		if ( '' === trim( (string) ( $reviewer[ $field ] ?? '' ) ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 /**
  * Return one complete approval record or null.
  *
@@ -72,7 +83,11 @@ function nvx_medical_review_record( int $post_id = 0 ): ?array {
 	}
 
 	$reviewer = $reviewers[ $reviewer_key ];
-	$time     = strtotime( $date . ' 12:00:00' );
+	if ( ! nvx_medical_review_reviewer_complete( $reviewer ) ) {
+		return null;
+	}
+
+	$time = strtotime( $date . ' 12:00:00' );
 	if ( false === $time ) {
 		return null;
 	}
