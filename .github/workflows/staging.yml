@@ -185,7 +185,7 @@ jobs:
           set -euo pipefail
           cd wp-content/themes/nuvanx-medical
           composer install --no-interaction --no-progress --prefer-dist
-          ./vendor/bin/phpstan analyse --configuration=phpstan.neon --error-format=table --no-progress --memory-limit=1G
+          ./vendor/bin/phpstan analyse --configuration=phpstan.neon --error-format=table --no-progress --memory-limit=2G
 
       - name: Scan committed history for secrets
         if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.event_name == 'schedule' }}

@@ -5,13 +5,15 @@ parameters:
     level: 1
     paths:
         - .
+    bootstrapFiles:
+        - tests/phpstan-bootstrap.php
     excludePaths:
         analyseAndScan:
             - vendor
             - node_modules (?)
             - tests (?)
+    parallel:
+        maximumNumberOfProcesses: 1
     ignoreErrors:
         # Ignore filter callback return issues (common in WordPress when modifying objects by reference)
         - '#Filter callback return statement is missing#'
-        # Ignore WordPress dynamic function calls
-        - '#Function (add_action|add_filter|do_action|apply_filters) invoked with incorrect number of parameters#'
