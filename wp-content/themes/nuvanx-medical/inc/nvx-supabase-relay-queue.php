@@ -1272,7 +1272,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 					$class             = nvx_supabase_relay_classify(
 						$retry_response
 					);
-					$delivery_attempts = 2;
+					$delivery_attempts = ( is_wp_error( $retry_response ) && 'nvx_runtime_bootstrap_unavailable' === $retry_response->get_error_code() )
+						? 1
+						: 2;
 				}
 
 				if ( 'SUCCESS' === $class['outcome'] ) {
@@ -1297,6 +1299,12 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 					|| $attempts
 					>= (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES
 				) {
+					update_post_meta(
+						$post_id,
+						'_nvx_relay_attempts',
+						(string) $attempts
+					);
+
 					nvx_supabase_relay_queue_mark_dead(
 						$post_id,
 						$endpoint,

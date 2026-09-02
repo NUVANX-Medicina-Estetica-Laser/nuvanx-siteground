@@ -99,6 +99,26 @@ function wp_delete_post( int $post_id, bool $force = false ): bool {
 	unset( $post_id, $force );
 	return true;
 }
+function wp_update_post( array $args = array() ): int {
+	return (int) ( $args['ID'] ?? 0 );
+}
+
+if ( ! class_exists( 'WP_Post' ) ) {
+	final class WP_Post {
+		public int $ID = 0;
+		public string $post_content = '';
+		public string $post_status = 'pending';
+	}
+}
+
+if ( ! class_exists( 'WP_Query' ) ) {
+	class WP_Query {
+		public array $posts = array();
+		public function __construct( array $args = array() ) {
+			$this->posts = $GLOBALS['mock_query_posts'] ?? array();
+		}
+	}
+}
 
 function sanitize_key( $key ): string {
 	return preg_replace( '/[^a-z0-9_-]/i', '', (string) $key );
@@ -335,4 +355,65 @@ assert( isset( $GLOBALS['nvx_mock_options'][ $lock_key ] ), 'Wrong token unlock 
 nvx_supabase_relay_queue_unlock( $token_a );
 assert( ! isset( $GLOBALS['nvx_mock_options'][ $lock_key ] ), 'Winner unlock must cleanly release lock' );
 
-echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned expired_lock_cas=atomic\n";
+// Assert Test 7: Queued item with 401 whose forced bootstrap fails increments attempts by exactly 1
+$post_fail = new WP_Post();
+$post_fail->ID = 999;
+$post_fail->post_content = $valid_body;
+$GLOBALS['mock_query_posts'] = array( $post_fail );
+$GLOBALS['post_meta'][999] = array(
+	'_nvx_relay_endpoint' => 'lead_captured',
+	'_nvx_relay_origin'   => '',
+	'_nvx_relay_attempts' => '0',
+);
+
+// Clear lock so drain can acquire lock:
+unset( $GLOBALS['nvx_mock_options']['nvx_supabase_relay_drain_lock_v1'] );
+set_transient( 'nvx_rt_boot_' . $active_hash, '1' );
+
+// Responses:
+// 1st call: lead_captured send returns 401
+// 2nd call: forced bootstrap returns 500 (fails before second delivery runs)
+$GLOBALS['remote_post_log'] = array();
+$GLOBALS['mock_responses']  = array(
+	array( 'response' => array( 'code' => 401 ), 'body' => '{"error":"unauthorized"}' ),
+	array( 'response' => array( 'code' => 500 ), 'body' => '{"error":"bootstrap fail"}' ),
+);
+
+nvx_supabase_relay_queue_drain( 1 );
+
+// Assert that attempts is 1 (NOT 2)
+assert( '1' === (string) get_post_meta( 999, '_nvx_relay_attempts', true ), 'Failed bootstrap must increment attempts by exactly 1' );
+assert( 2 === count( $GLOBALS['remote_post_log'] ), 'Expected 2 HTTP calls: 1 failed delivery + 1 failed bootstrap' );
+
+// Assert Test 8: Queued item with 401 whose forced bootstrap succeeds but second delivery fails increments attempts by 2
+$post_retry = new WP_Post();
+$post_retry->ID = 1000;
+$post_retry->post_content = $valid_body;
+$GLOBALS['mock_query_posts'] = array( $post_retry );
+$GLOBALS['post_meta'][1000] = array(
+	'_nvx_relay_endpoint' => 'lead_captured',
+	'_nvx_relay_origin'   => '',
+	'_nvx_relay_attempts' => '0',
+);
+
+unset( $GLOBALS['nvx_mock_options']['nvx_supabase_relay_drain_lock_v1'] );
+set_transient( 'nvx_rt_boot_' . $active_hash, '1' );
+
+// Responses:
+// 1st call: send returns 401
+// 2nd call: forced bootstrap returns 200
+// 3rd call: second delivery returns 401
+$GLOBALS['remote_post_log'] = array();
+$GLOBALS['mock_responses']  = array(
+	array( 'response' => array( 'code' => 401 ), 'body' => '{"error":"unauthorized"}' ),
+	array( 'response' => array( 'code' => 200 ), 'body' => '{"ok":true}' ),
+	array( 'response' => array( 'code' => 401 ), 'body' => '{"error":"unauthorized_still"}' ),
+);
+
+nvx_supabase_relay_queue_drain( 1 );
+
+// Assert that attempts is 2 (because two actual delivery transports were attempted)
+assert( '2' === (string) get_post_meta( 1000, '_nvx_relay_attempts', true ), 'Completed second delivery retry must increment attempts by 2' );
+assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected 3 HTTP calls: 1 failed delivery + 1 successful bootstrap + 1 retry delivery' );
+
+echo "RELAY_TOKEN_ROTATION_RECOVERY=PASS token_cache=isolated force_bootstrap=verified 401_recovery=bounded_retry retryable_on_bootstrap_fail=1 google_click_401=verified attempt_accounting=aligned expired_lock_cas=atomic drain_bootstrap_fail_accounting=1\n";
