@@ -140,18 +140,12 @@ function nvx_btl_govern_rendered_content( string $content ): string {
 				$governed
 			);
 		} else {
-			$count    = 0;
 			$governed = preg_replace(
 				'/(<section[^>]+nvx-closing-cta[^>]*>)/i',
 				$notice_shell . '$1',
 				$governed,
-				1,
-				$count
+				1
 			) ?? $governed;
-
-			if ( 0 === $count ) {
-				$governed .= $notice_shell;
-			}
 		}
 	}
 

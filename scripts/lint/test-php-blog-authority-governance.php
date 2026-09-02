@@ -53,9 +53,13 @@ nvx_block6_assert( 1 === substr_count( $once, 'data-nvx-btl-clinical-note="1"' )
 $twice = nvx_btl_govern_rendered_content( $once );
 nvx_block6_assert( 1 === substr_count( $twice, 'data-nvx-btl-clinical-note="1"' ), 'BTL_NOTE_IDEMPOTENT' );
 
+$with_cta = '<article><p>Contenido BTL</p><section class="nvx-closing-cta">CTA</section></article>';
+$via_cta  = nvx_btl_govern_rendered_content( $with_cta );
+nvx_block6_assert( 1 === substr_count( $via_cta, 'data-nvx-btl-clinical-note="1"' ), 'BTL_NOTE_INSERTED_VIA_CTA' );
+
 $without_anchor = '<article><p>Contenido BTL sin CTA ni anchor</p></article>';
-$fallback       = nvx_btl_govern_rendered_content( $without_anchor );
-nvx_block6_assert( 1 === substr_count( $fallback, 'data-nvx-btl-clinical-note="1"' ), 'BTL_NOTE_APPEND_FALLBACK' );
+$no_insertion   = nvx_btl_govern_rendered_content( $without_anchor );
+nvx_block6_assert( 0 === substr_count( $no_insertion, 'data-nvx-btl-clinical-note="1"' ), 'BTL_NOTE_NO_BLIND_APPEND' );
 
 $competitor = '<article><details><summary>Comparación</summary>Morpheus8 frente a EXION</details></article>';
 $governed   = nvx_btl_govern_rendered_content( $competitor );
