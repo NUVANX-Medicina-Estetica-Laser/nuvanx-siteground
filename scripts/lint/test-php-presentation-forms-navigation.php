@@ -67,12 +67,14 @@ nvx_block4_assert( false !== strpos( $pair, 'aria-haspopup="dialog"' ), 'DIALOG_
 // Full valoración page: even if a caller toggles the modal capability unexpectedly,
 // the canonical href must still target the first-party form stage.
 $GLOBALS['nvx_test_valoracion_page'] = true;
-$GLOBALS['nvx_test_modal_enabled']    = false;
+$GLOBALS['nvx_test_modal_enabled']    = true;
 $pair = nvx_cta_pair_markup();
 nvx_block4_assert(
 	false !== strpos( $pair, 'href="https://nuvanx.test/madrid/valoracion/#nvx-hubspot-form"' ),
 	'VALORACION_PAGE_FORM_ANCHOR'
 );
+nvx_block4_assert( false === strpos( $pair, 'nvx-open-valoracion-modal' ), 'VALORACION_PAGE_NO_MODAL_CLASS' );
+nvx_block4_assert( false === strpos( $pair, 'data-nvx-valoracion-modal="1"' ), 'VALORACION_PAGE_NO_MODAL_DATA' );
 nvx_block4_assert( false === strpos( $pair, 'aria-haspopup="dialog"' ), 'VALORACION_PAGE_NO_FALSE_DIALOG' );
 
 // Inventory guard: immutable request path API must exist for the later consolidation
