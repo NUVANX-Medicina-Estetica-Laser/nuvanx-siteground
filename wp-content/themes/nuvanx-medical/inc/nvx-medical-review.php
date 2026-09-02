@@ -171,7 +171,6 @@ function nvx_medical_review_governed_page( int $post_id = 0 ): bool {
 	$post_id = $post_id > 0 ? $post_id : (int) get_queried_object_id();
 	$path    = nvx_medical_review_current_path( $post_id );
 
-	// Governance is independent from whether approval data loaded successfully.
 	if ( nvx_medical_review_is_managed_path( $path ) ) {
 		return true;
 	}
@@ -181,10 +180,6 @@ function nvx_medical_review_governed_page( int $post_id = 0 ): bool {
 
 /**
  * Resolve one approval source without allowing page modules to author provenance.
- *
- * Exact managed-page registration has deterministic precedence over the generic
- * treatment classifier. A managed route with missing/invalid registry data
- * returns no approval and must not fall through to treatment post meta.
  *
  * @return array{status:string,reviewer:string,date:string,source:string}|null
  */
@@ -300,12 +295,6 @@ function nvx_medical_review_tag_has_class( string $tag_html, string $class_name 
 /**
  * Locate complete legacy provenance wrappers with balanced tag ownership.
  *
- * Fixed-depth regex removal is unsafe because a legacy wrapper may contain
- * arbitrary nested div blocks. This parser tracks div/address/p nesting and
- * returns only outermost governed wrapper ranges. If a governed wrapper is
- * malformed and never closes, the range extends to the end of the fragment so
- * unapproved provenance cannot fail open.
- *
  * @return array<int,array{start:int,length:int}>
  */
 function nvx_medical_review_legacy_wrapper_ranges( string $content ): array {
@@ -337,6 +326,19 @@ function nvx_medical_review_legacy_wrapper_ranges( string $content ): array {
 			}
 			if ( null === $match_index ) {
 				continue;
+			}
+
+			// Any still-open entries above the matched ancestor are malformed.
+			// Preserve the reliable ancestor closing tag, but fail closed on an
+			// orphaned outermost provenance target by removing it up to this boundary.
+			for ( $orphan_index = count( $stack ) - 1; $orphan_index > $match_index; --$orphan_index ) {
+				$orphan = $stack[ $orphan_index ];
+				if ( $orphan['remove'] && $offset > $orphan['start'] ) {
+					$ranges[] = array(
+						'start'  => $orphan['start'],
+						'length' => $offset - $orphan['start'],
+					);
+				}
 			}
 
 			$entry = $stack[ $match_index ];
@@ -448,14 +450,7 @@ function nvx_medical_review_schema_is_page_node( array $piece ): bool {
 		|| nvx_medical_review_schema_has_type( $piece['@type'], 'MedicalWebPage' );
 }
 
-/**
- * Enforce the canonical provenance owner on governed WebPage nodes.
- *
- * Earlier page-specific filters are not trusted as provenance authorities:
- * reviewedBy / lastReviewed are first removed from every governed page node,
- * then restored only from the validated approval record. Requests outside the
- * treatment/managed-page governance perimeter are left untouched.
- */
+/** Enforce the canonical provenance owner on governed WebPage nodes. */
 function nvx_medical_review_schema_graph( $graph ) {
 	if ( ! is_array( $graph ) || ! nvx_medical_review_governed_page() ) {
 		return $graph;
