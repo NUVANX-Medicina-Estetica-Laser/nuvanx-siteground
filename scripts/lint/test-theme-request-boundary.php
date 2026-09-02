@@ -86,6 +86,10 @@ function wp_parse_str( string $string, array &$result ): void {
 	parse_str( $string, $result );
 }
 
+function get_option( string $option ): string {
+	return 'home' === $option ? (string) $GLOBALS['nvx_test_home_url'] : '';
+}
+
 function home_url( string $path = '' ): string {
 	return rtrim( (string) $GLOBALS['nvx_test_home_url'], '/' ) . '/' . ltrim( $path, '/' );
 }
@@ -133,11 +137,13 @@ switch ( $scenario ) {
 	case 'immutable_uri':
 		$GLOBALS['nvx_test_home_url'] = 'https://nuvanx.com/';
 		$_SERVER['REQUEST_URI']        = '/first/?utm_source=google';
+		$_SERVER['QUERY_STRING']     = 'utm_source=google';
 		define( 'NVX_ENV', 'production' );
 		break;
 
 	case 'query_depth_limit':
 		$_SERVER['REQUEST_URI'] = '/?a[b][c][d][e]=blocked';
+		$_SERVER['QUERY_STRING'] = 'a[b][c][d][e]=blocked';
 		define( 'NVX_ENV', 'production' );
 		break;
 
@@ -147,11 +153,13 @@ switch ( $scenario ) {
 			$parts[] = 'k' . $i . '=v';
 		}
 		$_SERVER['REQUEST_URI'] = '/?' . implode( '&', $parts );
+		$_SERVER['QUERY_STRING'] = implode( '&', $parts );
 		define( 'NVX_ENV', 'production' );
 		break;
 
 	case 'query_value_limit':
 		$_SERVER['REQUEST_URI'] = '/?gclid=' . str_repeat( 'a', 3000 );
+		$_SERVER['QUERY_STRING'] = 'gclid=' . str_repeat( 'a', 3000 );
 		define( 'NVX_ENV', 'production' );
 		break;
 
