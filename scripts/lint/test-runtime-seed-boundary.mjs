@@ -90,6 +90,14 @@ assert.match(helper, /\$created_ids\s*\[\s*\$scope\s*\.\s*'\|'\s*\.\s*\$slug\s*\
   'Post-commit verification must consume the exact inserted ID, not re-resolve by slug');
 assert.match(helper, /post_meta_postcommit_runtime_verification_failed_/,
   'Post-commit verification must distinguish a stale WordPress runtime view');
+assert.match(helper, /function\s+nvx_h1_invalidate_post_cache\s*\(\s*int\s+\$post_id\s*\)/,
+  'H1 must provide bounded post and query cache invalidation');
+assert.match(helper, /wp_cache_delete\s*\(\s*'last_changed',\s*'posts'\s*\)/,
+  'Post-commit verification must invalidate post-query cache via last_changed');
+assert.match(helper, /journal_postcommit_runtime_verification_failed/,
+  'Post-commit verification must verify journal creation at runtime');
+assert.match(helper, /bridal_postcommit_runtime_verification_failed/,
+  'Post-commit verification must verify bridal retirement at runtime');
 const commitOffset = helper.indexOf("$wpdb->query( 'COMMIT' )");
 const runtimeVerifyOffset = helper.indexOf('nvx_h1_verify_runtime_plan( $plan, $created_ids )');
 assert.ok(commitOffset >= 0 && runtimeVerifyOffset > commitOffset,
