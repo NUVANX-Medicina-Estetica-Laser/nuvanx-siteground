@@ -137,19 +137,20 @@ function nvx_tariff_sanitize_schema_node( array $node ): array {
 		$node['acceptedAnswer'] = $answer;
 	}
 
+	// Iterate every nested array by key. This handles both list and associative
+	// schema structures without PHP 8.1's array_is_list(), preserving PHP 8.0.
 	foreach ( $node as $key => $value ) {
-		if ( is_array( $value ) ) {
-			if ( array_is_list( $value ) ) {
-				foreach ( $value as $index => $child ) {
-					if ( is_array( $child ) ) {
-						$value[ $index ] = nvx_tariff_sanitize_schema_node( $child );
-					}
-				}
-			} else {
-				$value = nvx_tariff_sanitize_schema_node( $value );
-			}
-			$node[ $key ] = $value;
+		if ( ! is_array( $value ) ) {
+			continue;
 		}
+
+		foreach ( $value as $child_key => $child ) {
+			if ( is_array( $child ) ) {
+				$value[ $child_key ] = nvx_tariff_sanitize_schema_node( $child );
+			}
+		}
+
+		$node[ $key ] = $value;
 	}
 
 	return $node;
