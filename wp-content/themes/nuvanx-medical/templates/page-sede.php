@@ -18,20 +18,31 @@ if ( function_exists( 'nvxIsClinicsHub' ) && nvxIsClinicsHub() ) {
 	return;
 }
 
-// Get clinic-specific data for individual clinic pages.
+// Individual clinic identity is resolved exclusively from clinics.json by the
+// business-config routing owner. Never infer NAP from a slug or fallback clinic.
 $clinics = function_exists( 'nvx_schema_clinics' ) ? nvx_schema_clinics() : array();
 $config  = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
 
-// Determine which clinic this page represents based on URL/slug.
-$current_slug = get_post_field( 'post_name', get_the_ID() );
-$clinic_key   = 'chamberi';
-
-if ( strpos( $current_slug, 'goya' ) !== false || strpos( $current_slug, 'salamanca' ) !== false ) {
-	$clinic_key = 'goya';
+$clinic_key = function_exists( 'get_query_var' )
+	? sanitize_key( (string) get_query_var( 'nvx_clinic_key', '' ) )
+	: '';
+if ( '' === $clinic_key && function_exists( 'nvx_current_clinic_landing_key' ) ) {
+	$resolved_clinic_key = nvx_current_clinic_landing_key();
+	$clinic_key          = is_string( $resolved_clinic_key ) ? sanitize_key( $resolved_clinic_key ) : '';
 }
 
-$clinic_data   = isset( $clinics[ $clinic_key ] ) && is_array( $clinics[ $clinic_key ] ) ? $clinics[ $clinic_key ] : array();
-$clinic_config = isset( $config[ $clinic_key ] ) && is_array( $config[ $clinic_key ] ) ? $config[ $clinic_key ] : array();
+if (
+	'' === $clinic_key
+	|| ! isset( $clinics[ $clinic_key ], $config[ $clinic_key ] )
+	|| ! is_array( $clinics[ $clinic_key ] )
+	|| ! is_array( $config[ $clinic_key ] )
+) {
+	get_template_part( 'template-parts/content/nvx-page-shell' );
+	return;
+}
+
+$clinic_data   = $clinics[ $clinic_key ];
+$clinic_config = $config[ $clinic_key ];
 
 $clinic_name    = ! empty( $clinic_data['name'] ) ? (string) $clinic_data['name'] : '';
 $clinic_address = ! empty( $clinic_config['address'] )
