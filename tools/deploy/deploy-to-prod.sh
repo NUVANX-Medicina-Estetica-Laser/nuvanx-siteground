@@ -255,6 +255,13 @@ rsync -a --delete \
   --exclude='backups-nuvanx' --exclude='quarantine' \
   --exclude='_archive*' --exclude='_disabled*' --exclude='*.bak*' \
   "$SOURCE_THEME/" "$STAGED_THEME/"
+
+[[ -f "$STAGED_THEME/tools/compile-theme-css.php" ]] || { echo 'ERROR: staged release missing canonical CSS compiler' >&2; exit 1; }
+echo "== Materialize exact production CSS distribution =="
+SOURCE_DATE_EPOCH=0 php "$STAGED_THEME/tools/compile-theme-css.php"
+[[ -s "$STAGED_THEME/dist/manifest.json" ]] || { echo 'ERROR: staged release missing compiled CSS manifest' >&2; exit 1; }
+echo 'PRODUCTION_CSS_RELEASE=PASS source=exact-release runtime=compiled-dist'
+
 printf '%s\n' "$SHA" > "$STAGED_THEME/.nvx-deploy-sha"
 [[ "$(tr -d '\r\n' < "$STAGED_THEME/.nvx-deploy-sha")" == "$SHA" ]]
 
@@ -275,6 +282,8 @@ STAMP
 [[ -f "$STAGED_THEME/.nvx-deploy-stamp.json" ]]
 
 for required in \
+  tools/compile-theme-css.php \
+  dist/manifest.json \
   assets/css/nvx-fonts.css \
   assets/css/nvx-tokens.css \
   assets/css/nvx-base.css \
@@ -471,11 +480,14 @@ echo "== Verify exact production release on disk =="
   trap - ERR
   cd "$PROD_ROOT"
   [[ "$(tr -d '\r\n' < wp-content/themes/nuvanx-medical/.nvx-deploy-sha)" == "$SHA" ]]
+  [[ -s wp-content/themes/nuvanx-medical/dist/manifest.json ]]
+  php wp-content/themes/nuvanx-medical/tools/compile-theme-css.php --verify-only
   [[ "$(wp config get DB_NAME)" == 'db0ecrycwv2tgb' ]]
   [[ "$(wp option get home)" == "$PROD_URL" ]]
   [[ "$(wp option get siteurl)" == "$PROD_URL" ]]
   [[ "$(wp option get blog_public)" == '1' ]]
   [[ "$(wp theme list --status=active --field=name)" == 'nuvanx-medical' ]]
+  echo 'PRODUCTION_CSS_RUNTIME=PASS source=live-theme runtime=compiled-dist fallback=not-required'
 )
 
 echo "== Run shared production content migration and divergence audit =="
