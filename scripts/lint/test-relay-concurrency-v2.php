@@ -8,14 +8,15 @@
  *   1. CLAIM_ACQUIRED          — first enqueue wins the add_option claim.
  *   2. CLAIM_IDEMPOTENT        — second enqueue for same body routes to existing item.
  *   3. CLAIM_BOUND_TO_POST_ID  — after publish, claim option value equals post_id.
- *   4. PENDING_SINGLE_PHASE    — post is inserted directly as pending (not draft).
+ *   4. PUBLICATION_FENCE       — pending status is not drain authority without the bound claim.
  *   5. METADATA_FAIL_RELEASES  — meta failure deletes post and releases claim option.
  *   6. ORPHAN_RECOVERY         — enqueue with expired in-flight claim takes over via CAS.
  *   7. ATTEMPTS_MONOTONIC      — record_existing_attempt never decreases _nvx_relay_attempts.
  *   8. INTERLEAVED_OWNER_SAFE  — active owner lease is never stolen or deleted by contender.
  *   9. LIFECYCLE_RELEASE       — completed/dead relays release claim so future retries succeed.
  *  10. ROLLOUT_ADOPTION        — legacy pending posts without claim option are safely adopted.
- *  11. SOURCE_INTEGRITY        — atomic primitives, release helpers, and single-phase guards in source.
+ *  11. SOURCE_INTEGRITY        — atomic primitives, release helpers, and publication fence in source.
+ *  12. EXPIRED_PUBLISHER       — lease expiry produces exactly one fenced, drainable retry.
  *
  * @package nuvanx-medical
  */
@@ -70,6 +71,7 @@ $GLOBALS['nvx_mock_deleted_options']          = array();
 $GLOBALS['nvx_mock_deleted_posts']            = array();
 $GLOBALS['nvx_mock_insert_failure']           = false;
 $GLOBALS['nvx_mock_meta_failure_on_post']     = 0;
+$GLOBALS['nvx_mock_adopt_inserted_post']      = false;
 
 // Option mocks
 function get_option( string $key, $default = false ) {
@@ -128,6 +130,10 @@ function add_post_meta( $post_id, $key, $value, $unique = false ): bool {
 	if ( $post_id === $GLOBALS['nvx_mock_meta_failure_on_post'] ) { return false; }
 	if ( $unique && array_key_exists( $key, $GLOBALS['nvx_mock_post_meta'][ $post_id ] ?? array() ) ) { return false; }
 	$GLOBALS['nvx_mock_post_meta'][ $post_id ][ $key ] = (string) $value;
+	if ( '_nvx_relay_dedupe_key' === $key && ! empty( $GLOBALS['nvx_mock_adopt_inserted_post'] ) ) {
+		$GLOBALS['nvx_mock_options'][ 'nvx_relay_claim_' . (string) $value ] = (string) $post_id;
+		$GLOBALS['nvx_mock_adopt_inserted_post'] = false;
+	}
 	return true;
 }
 function wp_insert_post( $postarr = array(), $wp_error = false ) {
@@ -194,9 +200,10 @@ $require( 1 === count( $GLOBALS['nvx_mock_posts'] ), 'NO_DUPLICATE_POST_CREATED'
 $claim_val = (string) get_option( $claim_key1, '0' );
 $require( $claim_val === (string) $post_id, 'CLAIM_BOUND_TO_POST_ID' );
 
-// ── Invariant 4: PENDING_SINGLE_PHASE ────────────────────────────────────────
+// ── Invariant 4: PUBLICATION_FENCE ───────────────────────────────────────────
 $post_obj = get_post( $post_id );
-$require( $post_obj instanceof WP_Post && 'pending' === $post_obj->post_status, 'PENDING_SINGLE_PHASE' );
+$require( $post_obj instanceof WP_Post && 'pending' === $post_obj->post_status, 'PENDING_ROW_PERSISTED' );
+$require( nvx_supabase_relay_queue_acquire_publication_fence( $post_id, $dedupe_key1 ), 'BOUND_PENDING_IS_DRAINABLE' );
 
 // ── Invariant 5: METADATA_FAIL_RELEASES ──────────────────────────────────────
 $body5           = '{"submission_id":"inv5-meta-fail"}';
@@ -364,12 +371,54 @@ foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
 }
 $require( 1 === $pending_for_dedupe, 'NO_DUPLICATE_PENDING_DELIVERIES_ON_EXPIRED_PUBLISHER' );
 
+// ── Invariant 13: EXPIRED_PUBLISHER_SUCCESSOR_ADOPTS_SAME_POST ───────────────
+// Interleave publication_duration > lease: after metadata exists, successor B
+// takes over and binds A's exact pending row. A's failed bind must preserve it.
+$body13       = '{"submission_id":"inv13-expired-adopted"}';
+$dedupe_key13 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body13, '' );
+$claim_key13  = nvx_supabase_relay_queue_claim_key( $dedupe_key13 );
+$GLOBALS['nvx_mock_adopt_inserted_post'] = true;
+
+$posts_before13 = count( $GLOBALS['nvx_mock_posts'] );
+$adopted13      = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body13, array(), 1 );
+
+$require( $adopted13 > 0, 'EXPIRED_SUCCESSOR_ADOPTION_RETURNS_POST' );
+$require( isset( $GLOBALS['nvx_mock_posts'][ $adopted13 ] ), 'ADOPTED_POST_NOT_DELETED_BY_EXPIRED_OWNER' );
+$require( (string) $adopted13 === (string) get_option( $claim_key13, '' ), 'ADOPTED_POST_OWNS_DURABLE_FENCE' );
+$require( count( $GLOBALS['nvx_mock_posts'] ) === $posts_before13 + 1, 'EXPIRED_ADOPTION_PRESERVES_EXACTLY_ONE_ROW' );
+
+$drainable13 = 0;
+foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
+	if (
+		'pending' === ( $p_obj->post_status ?? '' )
+		&& ( $GLOBALS['nvx_mock_post_meta'][ $p_id ]['_nvx_relay_dedupe_key'] ?? '' ) === $dedupe_key13
+		&& (string) get_option( $claim_key13, '' ) === (string) $p_id
+	) {
+		$drainable13++;
+	}
+}
+$require( 1 === $drainable13, 'PUBLICATION_DURATION_GT_LEASE_HAS_ONE_DRAINABLE_PENDING' );
+
+// A live successor token makes a pending row non-drainable; after expiry the
+// drainer can atomically recover that same row without creating a second copy.
+$body14       = '{"submission_id":"inv14-fence-recovery"}';
+$dedupe_key14 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body14, '' );
+$claim_key14  = nvx_supabase_relay_queue_claim_key( $dedupe_key14 );
+$post14       = wp_insert_post( array( 'post_status' => 'pending', 'post_content' => $body14 ) );
+add_post_meta( $post14, '_nvx_relay_dedupe_key', $dedupe_key14, true );
+$GLOBALS['nvx_mock_options'][ $claim_key14 ] = ( $GLOBALS['nvx_mock_time'] + 10 ) . '|successor-live';
+$require( ! nvx_supabase_relay_queue_acquire_publication_fence( $post14, $dedupe_key14 ), 'LIVE_SUCCESSOR_PREVENTS_DRAIN' );
+$GLOBALS['nvx_mock_time'] += 11;
+$require( nvx_supabase_relay_queue_acquire_publication_fence( $post14, $dedupe_key14 ), 'EXPIRED_SUCCESSOR_RECOVERED_BY_DRAINER' );
+$require( (string) $post14 === (string) get_option( $claim_key14, '' ), 'RECOVERY_BINDS_EXACT_POST_FENCE' );
+
 // ── Invariant 11: SOURCE_INTEGRITY ───────────────────────────────────────────
 $src = (string) file_get_contents( $queue_path );
 $require( false !== strpos( $src, 'nvx_relay_claim_' ), 'CLAIM_KEY_PREFIX_IN_SOURCE' );
 $require( false !== strpos( $src, 'add_option( $claim_key' ), 'ATOMIC_ACQUISITION_IN_SOURCE' );
 $require( false !== strpos( $src, 'nvx_supabase_relay_queue_release_claim' ), 'RELEASE_CLAIM_HELPER_IN_SOURCE' );
 $require( false !== strpos( $src, 'nvx_supabase_relay_queue_is_valid_pending_item' ), 'VALID_PENDING_HELPER_IN_SOURCE' );
+$require( false !== strpos( $src, 'nvx_supabase_relay_queue_acquire_publication_fence' ), 'PUBLICATION_FENCE_IN_SOURCE' );
 $require( false !== strpos( $src, 'claim_lost_during_publish' ), 'CLAIM_LOST_HANDLED_IN_SOURCE' );
 
 $enqueue_fn_pos = strpos( $src, 'function nvx_supabase_relay_queue_enqueue' );
@@ -388,4 +437,4 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 single_phase=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 expired_bind_cleanup=1 source_integrity=1\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 two_phase_fence=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 expired_bind_cleanup=1 adopted_retry_preserved=1 drainable_exactly_one=1 source_integrity=1\n";
