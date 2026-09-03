@@ -97,6 +97,11 @@ $GLOBALS['nvx_test_clinic_path'] = '/equipo-medico/';
 $team = nvx_clinic_identity_schema_graph( $graph );
 nvx_clinic_test_assert( 3 === count( $team ), 'TEAM_HUB_PRESERVES_BOTH_BRANCHES' );
 
+$GLOBALS['nvx_test_clinic_path'] = '/contacto/';
+$contact = nvx_clinic_identity_schema_graph( $graph );
+nvx_clinic_test_assert( 3 === count( $contact ), 'CONTACT_PRESERVES_BOTH_BRANCHES' );
+nvx_clinic_test_assert( 2 === count( $contact[0]['subOrganization'] ?? array() ), 'CONTACT_PRESERVES_BOTH_REFS' );
+
 $GLOBALS['nvx_test_front']       = true;
 $GLOBALS['nvx_test_clinic_path'] = '/';
 $home = nvx_clinic_identity_schema_graph( $graph );
@@ -116,9 +121,10 @@ $bootstrap       = (string) file_get_contents( $root . '/wp-content/themes/nuvan
 nvx_clinic_test_assert( ! str_contains( $identity_source, 'template_include' ), 'IDENTITY_FENCE_NOT_TEMPLATE_OWNER' );
 nvx_clinic_test_assert( ! str_contains( $identity_source, 'get_page_template_slug' ), 'PERSISTED_TEMPLATE_NOT_SCHEMA_OWNER' );
 nvx_clinic_test_assert( ! str_contains( $identity_source, 'strpos( $path' ), 'NO_SUBSTRING_ROUTE_OWNER' );
+nvx_clinic_test_assert( str_contains( $identity_source, "'/contacto/' === \$path" ), 'CONTACT_AGGREGATE_IS_EXACT_PATH' );
 nvx_clinic_test_assert( str_contains( $identity_source, 'nvx_current_clinic_landing_key()' ), 'SCHEMA_DELEGATES_TO_ROUTE_OWNER' );
 nvx_clinic_test_assert( str_contains( $business_source, 'function nvx_clinic_key_from_landing_path' ), 'BUSINESS_CONFIG_EXACT_RESOLVER' );
 nvx_clinic_test_assert( str_contains( $identity_source, 'PHP_INT_MAX - 1' ), 'FINAL_SCHEMA_FENCE_PRIORITY' );
 nvx_clinic_test_assert( strpos( $bootstrap, "'inc/nvx-business-config.php'" ) < strpos( $bootstrap, "'inc/nvx-clinic-identity-governance.php'" ), 'BOOTSTRAP_DEPENDENCY_ORDER' );
 
-echo 'CLINIC_IDENTITY_NAP=PASS route_owner=business-config schema_owner=delegated-final-fence exact=2 nested=blocked refs=list+associative-clean aggregate_surfaces=preserved' . PHP_EOL;
+echo 'CLINIC_IDENTITY_NAP=PASS route_owner=business-config schema_owner=delegated-final-fence exact=2 nested=blocked refs=list+associative-clean aggregate_surfaces=home+posts+team+clinics+contact' . PHP_EOL;
