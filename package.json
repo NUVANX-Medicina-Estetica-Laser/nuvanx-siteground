@@ -16,6 +16,7 @@
     "lint:integrations-runtime": "php scripts/lint/test-integrations-runtime-contract.php && php scripts/lint/test-php-presentation-forms-navigation.php",
     "lint:runtime-seeds": "node scripts/lint/test-runtime-seed-boundary.mjs && php scripts/lint/test-h1-review-preservation.php",
     "lint:bootstrap": "node scripts/lint/test-theme-bootstrap-single-owner.mjs && php scripts/lint/test-theme-request-boundary.php",
+    "lint:clinic-identity": "php scripts/lint/test-clinic-template-routing.php && php scripts/lint/test-clinic-identity-nap-governance.php",
     "lint:complianz": "node scripts/lint/test-complianz-a11y-sanitizer.mjs && node scripts/lint/test-complianz-policy-routing.mjs && php scripts/lint/test-complianz-policy-routing.php",
     "lint:schema": "node scripts/lint/test-schema-semantic-contract.mjs && php scripts/lint/test-robots-txt-governance.php && php scripts/lint/test-treatment-faqpage-contract.php && php scripts/lint/test-php-data-seo-schema-runtime.php",
     "lint:endolaser-approval": "node scripts/lint/test-endolaser-claim-approval.mjs",
@@ -26,8 +27,8 @@
     "lint:integrations": "node scripts/lint/test-conversion-ownership-contract.mjs && node scripts/lint/test-integration-config-fail-closed.mjs",
     "lint:performance-gate": "node scripts/lint/test-performance-regression-policy.mjs",
     "lint:wpcs": "cd wp-content/themes/nuvanx-medical && export COMPOSER_VENDOR_DIR=\"${RUNNER_TEMP:-/tmp}/nvx-php-vendor\" && composer install --no-interaction --no-progress --prefer-dist && \"$COMPOSER_VENDOR_DIR/bin/phpcs\" --standard=phpcs.xml.dist .",
-    "lint:manifest": "node scripts/lint/test-css-manifest-contract.mjs && php scripts/lint/test-cases-publication-policy.php && npm run lint:css-ownership && npm run lint:integrations && npm run lint:performance-gate && npm run lint:hook-priorities && npm run lint:function-collisions && npm run lint:integrations-runtime && npm run lint:runtime-seeds && npm run lint:bootstrap && npm run lint:clinical-evidence && npm run lint:tariff-ssot && npm run lint:wpcs",
-    "lint": "npm run lint:colors && npm run lint:fontsize && npm run lint:styles && npm run lint:routes && npm run lint:contrast && npm run lint:hook-priorities && npm run lint:function-collisions && npm run lint:integrations-runtime && npm run lint:runtime-seeds && npm run lint:bootstrap && npm run lint:complianz && npm run lint:schema && npm run lint:tariff-ssot && npm run lint:endolaser-approval && npm run lint:clinical-evidence && npm run lint:clinics-hub-equipment && npm run lint:manifest"
+    "lint:manifest": "node scripts/lint/test-css-manifest-contract.mjs && php scripts/lint/test-cases-publication-policy.php && npm run lint:css-ownership && npm run lint:integrations && npm run lint:performance-gate && npm run lint:hook-priorities && npm run lint:function-collisions && npm run lint:integrations-runtime && npm run lint:runtime-seeds && npm run lint:bootstrap && npm run lint:clinic-identity && npm run lint:clinical-evidence && npm run lint:tariff-ssot && npm run lint:wpcs",
+    "lint": "npm run lint:colors && npm run lint:fontsize && npm run lint:styles && npm run lint:routes && npm run lint:contrast && npm run lint:hook-priorities && npm run lint:function-collisions && npm run lint:integrations-runtime && npm run lint:runtime-seeds && npm run lint:bootstrap && npm run lint:clinic-identity && npm run lint:complianz && npm run lint:schema && npm run lint:tariff-ssot && npm run lint:endolaser-approval && npm run lint:clinical-evidence && npm run lint:clinics-hub-equipment && npm run lint:manifest"
   },
   "engines": {
     "node": ">=18"
