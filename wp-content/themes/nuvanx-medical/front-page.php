@@ -234,7 +234,15 @@ ob_start();
 		<h2 id="nvx-home-closure-title" class="nvx-home-closure__title">Primero el diagnóstico médico. Luego, el tratamiento adecuado</h2>
 		<p class="nvx-home-closure__desc">Presupuesto y plan documentado por escrito en la primera visita. Tiempos de recuperación informados según el protocolo.</p>
 		<div class="nvx-home-closure__actions">
-			<a href="<?php echo esc_url( home_url( '/madrid/valoracion/' ) ); ?>" class="nvx-brand-btn nvx-btn--light nvx-open-valoracion-modal" data-nvx-valoracion-modal="1" aria-haspopup="dialog" data-gtag="click-reserve">Definir mi plan clínico</a>
+			<?php
+			$nvx_home_modal_contract = function_exists( 'nvx_cta_valoracion_modal_contract' )
+				? nvx_cta_valoracion_modal_contract()
+				: array(
+					'class' => '',
+					'attrs' => '',
+				);
+			?>
+			<a href="<?php echo esc_url( function_exists( 'nvx_cta_valoracion_url' ) ? nvx_cta_valoracion_url() : home_url( '/madrid/valoracion/' ) ); ?>" class="nvx-brand-btn nvx-btn--light<?php echo esc_attr( $nvx_home_modal_contract['class'] ); ?>"<?php echo $nvx_home_modal_contract['attrs']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> data-gtag="click-reserve">Definir mi plan clínico</a>
 			<a href="<?php echo esc_url( nvx_cta_whatsapp_url() ); ?>" class="nvx-brand-btn nvx-btn--secondary-on-dark" target="_blank" rel="noopener noreferrer" data-gtag="click-whatsapp">Contactar por WhatsApp</a>
 		</div>
 	</section>

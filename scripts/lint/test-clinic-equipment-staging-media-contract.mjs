@@ -7,7 +7,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
 
 const hubPath = path.join(root, 'wp-content/themes/nuvanx-medical/inc/nvx-clinics-hub.php');
-const migrationPath = path.join(root, 'tools/migrations/content-hygiene-staging-only.php');
+const coreMigrationPath = path.join(root, 'tools/migrations/content-hygiene-staging-core.php');
+const legacyMigrationPath = path.join(root, 'tools/migrations/content-hygiene-staging-only.php');
+const migrationPath = (await fs.stat(coreMigrationPath).then(() => true, () => false))
+  ? coreMigrationPath
+  : legacyMigrationPath;
 const clinicMediaRuntimePath = path.join(root, 'scripts/staging2/clinic-media-runtime.mjs');
 
 const [hubSource, migrationSource, clinicMediaRuntimeSource] = await Promise.all([

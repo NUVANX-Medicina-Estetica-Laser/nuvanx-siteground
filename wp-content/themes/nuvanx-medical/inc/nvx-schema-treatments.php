@@ -17,9 +17,6 @@ function nvx_schema_treatment_node_laser( string $key, string $permalink, string
 	$label_b      = function_exists( 'nvx_co2_price_body_eur' ) ? nvx_format_price_eur( nvx_co2_price_body_eur() ) : '';
 
 	if ( 'endolift_facial' === $key ) {
-		$label_from   = nvx_endolift_price_from_eur();
-		$label_papada = function_exists( 'nvx_endolift_price_papada_eur' ) ? nvx_format_price_eur( nvx_endolift_price_papada_eur() ) : $label_from;
-
 		return array(
 			'@type'             => array( 'MedicalProcedure', 'Service' ),
 			'@id'               => $permalink . NVX_SD_ID_MEDICAL_PROCEDURE,
