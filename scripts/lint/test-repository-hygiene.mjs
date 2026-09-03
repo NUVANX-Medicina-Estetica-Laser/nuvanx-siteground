@@ -6,6 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const repoRoot = process.cwd();
+const themeRoot = 'wp-content/themes/nuvanx-medical/';
 const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
   .split('\0')
   .filter(Boolean)
@@ -94,11 +95,11 @@ for (const workflow of workflowFiles) {
   assertLiteralRefs(workflow, fs.readFileSync(path.join(repoRoot, workflow), 'utf8'));
 }
 
-const bootstrapPath = 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php';
+const bootstrapPath = `${themeRoot}inc/nvx-theme-bootstrap.php`;
 assert.ok(trackedSet.has(bootstrapPath), 'Canonical theme bootstrap must be tracked');
 const bootstrapSource = fs.readFileSync(path.join(repoRoot, bootstrapPath), 'utf8');
 for (const match of bootstrapSource.matchAll(/['"](inc\/[A-Za-z0-9_./-]+\.php)['"]/g)) {
-  const modulePath = `wp-content/themes/nuvanx-medical/${match[1]}`;
+  const modulePath = `${themeRoot}${match[1]}`;
   if (!trackedSet.has(modulePath)) {
     fail('BOOTSTRAP_MODULE_MISSING', modulePath);
   }
@@ -121,7 +122,10 @@ function assertPhpInclude(file, baseDirectory, target) {
 }
 
 const phpFiles = tracked.filter((file) => file.endsWith('.php'));
-for (const file of phpFiles) {
+const includeCheckedPhpFiles = phpFiles.filter((file) =>
+  file.startsWith(themeRoot) || file.startsWith('tools/migrations/'),
+);
+for (const file of includeCheckedPhpFiles) {
   const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
   const fileDirectory = path.posix.dirname(file);
 
@@ -165,11 +169,30 @@ for (const file of textFiles) {
   }
 }
 
+// Every immediate theme/inc PHP module must be owned by another runtime PHP
+// file. Test-only references do not count as production ownership.
+const themeRuntimePhpFiles = phpFiles.filter((file) => file.startsWith(themeRoot));
+const themeRuntimeSources = new Map(
+  themeRuntimePhpFiles.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]),
+);
+const immediateThemeModules = themeRuntimePhpFiles.filter((file) =>
+  new RegExp(`^${themeRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}inc/[^/]+\\.php$`).test(file),
+);
+for (const modulePath of immediateThemeModules) {
+  const basename = path.posix.basename(modulePath);
+  const owned = [...themeRuntimeSources].some(
+    ([owner, source]) => owner !== modulePath && source.includes(basename),
+  );
+  if (!owned) {
+    fail('UNREFERENCED_THEME_MODULE', modulePath);
+  }
+}
+
 const retainedMigrationGuards = new Map([
   [
     'tools/migrations/migrate-contacto-template.php',
     {
-      owner: 'wp-content/themes/nuvanx-medical/inc/nvx-contacto-valoracion-page.php',
+      owner: `${themeRoot}inc/nvx-contacto-valoracion-page.php`,
       marker: 'templates/template-contact.php',
       reason: 'legacy_contact_template_runtime_compatibility',
     },
@@ -235,8 +258,9 @@ console.log(
   `REPOSITORY_HYGIENE=PASS tracked=${tracked.length}`
   + ` workflows=${workflowFiles.length}`
   + ` php=${phpFiles.length}`
+  + ` theme_modules=${immediateThemeModules.length}`
   + ` migrations=${migrations.length}`
   + ` retained_legacy_migrations=${retainedLegacyMigrations.length}`
   + ` external_runtime_dependencies=${new Set(externalRuntimeOwners).size}`
-  + ` zero_byte=0 root_code=0 residue=0 broken_refs=0`,
+  + ` zero_byte=0 root_code=0 residue=0 broken_refs=0 orphan_theme_modules=0`,
 );
