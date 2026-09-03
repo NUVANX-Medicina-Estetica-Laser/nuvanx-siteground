@@ -993,6 +993,10 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_acquire_publication_fence' ) )
 				nvx_supabase_relay_queue_is_valid_pending_item( $current_post_id, $dedupe_key )
 				|| nvx_supabase_relay_queue_is_valid_prepared_item( $current_post_id, $dedupe_key )
 			) {
+				// This row is a proven non-owner. Retire it now so it cannot
+				// become a later delivery after the canonical owner releases.
+				wp_delete_post( $post_id, true );
+
 				return false;
 			}
 
@@ -1349,9 +1353,13 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 							);
 						}
 
-						// A bound prepared row remains the canonical retry even if its
-						// idempotent status finalization is temporarily unavailable.
-						return $existing_post_id;
+						// Preserve accounting even when the idempotent prepared→pending
+						// transition is temporarily unavailable.
+						return nvx_supabase_relay_queue_record_existing_attempt(
+							$existing_post_id,
+							$endpoint,
+							$attempts
+						);
 					}
 
 					// Referenced item is not pending (drained, dead, or deleted).
@@ -1401,7 +1409,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 							);
 						}
 
-						return $existing_post_id;
+						return nvx_supabase_relay_queue_record_existing_attempt(
+							$existing_post_id,
+							$endpoint,
+							$attempts
+						);
 					}
 				}
 
@@ -1462,7 +1474,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 						);
 					}
 
-					return $current_post_id;
+					return nvx_supabase_relay_queue_record_existing_attempt(
+						$current_post_id,
+						$endpoint,
+						$attempts
+					);
 				}
 			}
 
@@ -2036,6 +2052,15 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_mark_dead' ) ) {
 		string $reason
 	): void {
 		$post_id = absint( $post_id );
+		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		if (
+			'' !== $dedupe_key
+			&& (string) $post_id === nvx_supabase_relay_queue_fresh_option(
+				nvx_supabase_relay_queue_claim_key( $dedupe_key )
+			)
+		) {
+			nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key );
+		}
 
 		wp_update_post(
 			array(
@@ -2044,7 +2069,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_mark_dead' ) ) {
 			)
 		);
 
-		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
 		if ( '' !== $dedupe_key && function_exists( 'nvx_supabase_relay_queue_release_claim' ) ) {
 			nvx_supabase_relay_queue_release_claim( $dedupe_key, (string) $post_id );
 		}
@@ -2210,6 +2234,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 
 				if ( 'SUCCESS' === $class['outcome'] ) {
 					$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+					if ( '' !== $dedupe_key ) {
+						nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key );
+					}
 
 					wp_delete_post(
 						$post_id,
