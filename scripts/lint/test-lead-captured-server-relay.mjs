@@ -15,18 +15,23 @@ const bridge = fs.readFileSync(bridgePath, 'utf8');
 const consent = fs.readFileSync(consentPath, 'utf8');
 const bootstrap = fs.readFileSync(bootstrapPath, 'utf8');
 
-// With centralized bootstrap, verify both modules are in manifest in correct order
+// With centralized bootstrap, verify consent, HubSpot and relay are in manifest in correct order.
+const consentIndex = bootstrap.indexOf("'inc/nvx-marketing-consent.php'");
 const hubspotIndex = bootstrap.indexOf("'inc/nvx-hubspot-secure-attribution.php'");
 const relayIndex = bootstrap.indexOf("'inc/nvx-lead-captured-relay.php'");
+assert.ok(consentIndex >= 0, 'Canonical consent owner must be in bootstrap manifest');
 assert.ok(hubspotIndex >= 0, 'Secure HubSpot bridge must be in bootstrap manifest');
 assert.ok(relayIndex >= 0, 'Lead-captured relay must be in bootstrap manifest');
+assert.ok(hubspotIndex > consentIndex, 'Secure HubSpot bridge must load after canonical consent owner');
 assert.ok(relayIndex > hubspotIndex, 'Lead-captured relay must load after the secure HubSpot bridge in manifest');
 assert.doesNotMatch(gtm, /require_once.*nvx-hubspot-secure-attribution/,
   'GTM integration must not laterally load HubSpot (bootstrap manifest owns this)');
 assert.doesNotMatch(gtm, /require_once.*nvx-lead-captured-relay/,
   'GTM integration must not laterally load relay (bootstrap manifest owns this)');
-assert.match(bridge, /require_once (?:\$dependency|__DIR__ \. '\/nvx-marketing-consent\.php');/,
-  'Secure bridge must load the shared consent owner before any attribution filtering');
+assert.doesNotMatch(bridge, /require_once[^;]*nvx-marketing-consent\.php/,
+  'Secure bridge must not laterally load the shared consent owner');
+assert.doesNotMatch(bridge, /nvx_hubspot_secure_load_dependencies/,
+  'Secure bridge must not register a second consent dependency owner');
 
 assert.match(relay, /add_filter\(\s*'http_response',\s*'nvx_lead_captured_on_http_response',\s*10,\s*3\s*\)/,
   'Relay must observe completed HTTP responses rather than browser events');
@@ -68,8 +73,10 @@ const consentAware = /'marketing_consent'\s*=>/.test(payloadBlock);
 if (consentAware) {
   assert.match(consent, /function nvx_marketing_consent_granted\(\): bool/,
     'There must be one shared server-side marketing-consent owner');
-  assert.doesNotMatch(consent, /\$_POST/,
-    'Shared authority must not trust a browser POST marker');
+  assert.match(consent, /if \( ! function_exists\( 'cmplz_has_consent' \) \) \{\s*return false;/,
+    'Shared consent authority must fail closed without Complianz server API');
+  assert.doesNotMatch(consent, /\$_COOKIE|\$_POST|\$_GET|\$_REQUEST/,
+    'Shared authority must not trust browser-controlled consent markers');
   assert.doesNotMatch(consent, /nvx_hubspot_secure_post_value|'\s*nvx_marketing_consent\s*'/,
     'Shared authority must not read the hidden POST consent field');
   assert.match(bridge, /\$marketing_consent\s*=\s*nvx_marketing_consent_granted\(\);/,
