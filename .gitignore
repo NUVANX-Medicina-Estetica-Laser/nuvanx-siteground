@@ -38,6 +38,7 @@ wp-content/upgrade/
 wp-content/wflogs/
 wp-content/themes/nuvanx-medical/vendor/
 wp-content/themes/nuvanx-medical/dist/
+wp-content/themes/nuvanx-medical/.nvx-deploy-stamp.json
 vendor/
 dist/
 supabase/.temp/

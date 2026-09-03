@@ -34,7 +34,11 @@ assert.ok(buckets.theme.length >= 100,
 assert.ok(buckets.scripts.length > 0, 'Expected tracked PHP QA scripts');
 assert.ok(buckets.tools.length > 0, 'Expected tracked PHP tooling/migrations');
 assert.ok(buckets.lib.length > 0, 'Expected tracked shared PHP libraries');
-assert.ok(buckets.root.length > 0, 'Expected tracked repository-root PHP files');
+assert.equal(
+  buckets.root.length,
+  0,
+  `Repository-root PHP is forbidden; move runtime code to the theme and QA/tooling to canonical directories: ${buckets.root.join(', ')}`,
+);
 
 const classifiedTotal = buckets.theme.length
   + buckets.scripts.length
