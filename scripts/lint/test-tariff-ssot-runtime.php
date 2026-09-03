@@ -31,6 +31,7 @@ $guard_source      = (string) file_get_contents( $root . '/wp-content/themes/nuv
 $structured_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-structured-data.php' );
 $constants_source  = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php' );
 
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-tariff-output-guard.php';
 
@@ -56,7 +57,6 @@ nvx_tariff_ssot_assert( 'Desde 290 €' === ( $by_n['01']['price'] ?? '' ), 'LIP
 nvx_tariff_ssot_assert( 'Desde 348 € (según principio activo y zona)' === ( $by_n['05']['price'] ?? '' ), 'BIO_HYDRATED_ON_TREATMENT_05' );
 nvx_tariff_ssot_assert( $neutral_copy === ( $by_n['04']['price'] ?? '' ), 'NON_CANONICAL_CARD_FAILS_CLOSED' );
 
-// Aesthetic mappings survive reorder because treatment identity, not position, owns hydration.
 $shuffled = array(
 	'treatments' => array(
 		array( 'n' => '05', 'price' => 'legacy 999 €' ),
@@ -74,7 +74,6 @@ foreach ( $shuffled['treatments'] as $treatment ) {
 nvx_tariff_ssot_assert( 'Desde 348 € (según principio activo y zona)' === $shuffled_by_n['05'], 'BIO_REORDER_SAFE' );
 nvx_tariff_ssot_assert( $neutral_copy === $shuffled_by_n['04'], 'NON_CANONICAL_CARD_REORDER_FAIL_CLOSED' );
 
-// Pricing FAQ identity is semantic and therefore independent of array order.
 $endolift_fixture = array(
 	'investment' => array( 'body' => 'legacy 999 €' ),
 	'faq'        => array(
@@ -95,7 +94,6 @@ $endolift_reordered = nvx_catalog_apply_tariff_truth( $endolift_reordered, 'endo
 nvx_tariff_ssot_assert( false === strpos( $endolift_reordered['faq']['items'][0]['a'], '999' ), 'FAQ_REORDER_SAFE' );
 nvx_tariff_ssot_assert( 'Respuesta clínica sin precio.' === $endolift_reordered['faq']['items'][1]['a'], 'FAQ_REORDER_NON_PRICE_UNTOUCHED' );
 
-// Duplicate pricing identities fail closed; neither answer may retain stale numeric copy.
 $duplicate_pricing = array(
 	'investment' => array( 'body' => 'legacy 999 €' ),
 	'faq'        => array(
@@ -110,7 +108,6 @@ nvx_tariff_ssot_assert( $neutral_copy === $duplicate_pricing['investment']['body
 nvx_tariff_ssot_assert( $neutral_copy === $duplicate_pricing['faq']['items'][0]['a'], 'FAQ_DUPLICATE_FIRST_NEUTRAL' );
 nvx_tariff_ssot_assert( $neutral_copy === $duplicate_pricing['faq']['items'][1]['a'], 'FAQ_DUPLICATE_SECOND_NEUTRAL' );
 
-// Malformed editorial destinations must never throw or receive fabricated nested structures.
 $malformed_cases = array(
 	array(
 		'name'    => 'ENDOLIFT_MALFORMED_FAQ',
@@ -144,14 +141,12 @@ foreach ( $malformed_cases as $case ) {
 	nvx_tariff_ssot_assert( false === strpos( (string) ( $result[ $case['block'] ]['body'] ?? '' ), '999' ), $case['name'] . '_NO_STALE_NUMERIC_PRICE' );
 }
 
-// Final HTML fence removes a legacy renderer's reconstructed price on outage.
 $legacy_html = '<section class="nvx-brand-section nvx-endolift-investment"><div><h2>Presupuesto</h2><p class="nvx-body nvx-body--measure">Tarifa 999 €</p><ul><li>Incluye control</li></ul></div></section>'
 	. '<section class="nvx-brand-section nvx-endolift-faq"><div><details><p>Desde 999 €</p></details><details><p>Respuesta clínica</p></details></div></section>';
 $guarded_html = nvx_tariff_sanitize_endolift_content( $legacy_html );
 nvx_tariff_ssot_assert( false === strpos( $guarded_html, '999 €' ), 'HTML_OUTAGE_REMOVES_RECONSTRUCTED_PRICE' );
 nvx_tariff_ssot_assert( false !== strpos( $guarded_html, 'Respuesta clínica' ), 'HTML_OUTAGE_PRESERVES_NON_PRICE_FAQ' );
 
-// Final schema fence strips numeric price fields and price-bearing fallback prose.
 $legacy_graph = array(
 	array(
 		'@type'       => array( 'MedicalProcedure', 'Service' ),
@@ -175,7 +170,6 @@ nvx_tariff_ssot_assert( is_string( $guarded_json ) && false === strpos( $guarded
 nvx_tariff_ssot_assert( 'Descripción clínica conservada.' === $guarded_graph[0]['description'], 'SCHEMA_OUTAGE_PRESERVES_CLINICAL_DESCRIPTION' );
 nvx_tariff_ssot_assert( $neutral_copy === $guarded_graph[2]['acceptedAnswer']['text'], 'SCHEMA_OUTAGE_NEUTRALIZES_FAQ_PRICE' );
 
-// Structural ownership contracts for the three confirmed review findings.
 nvx_tariff_ssot_assert( false === strpos( $catalog_source, "'perfilado_hidratacion'" ), 'LEGACY_TARIFF_LOOKUP_REMOVED' );
 nvx_tariff_ssot_assert( false === strpos( $catalog_source, "['treatments'][3]" ), 'POSITIONAL_BIO_OWNER_REMOVED' );
 nvx_tariff_ssot_assert( false === strpos( $catalog_source, 'price_faq_index' ), 'FAQ_POSITIONAL_OWNER_REMOVED' );
