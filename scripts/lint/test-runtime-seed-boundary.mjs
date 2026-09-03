@@ -60,6 +60,23 @@ assert.match(orchestrator, /hygiene_core_start/,
 assert.match(orchestrator, /if \( 0 !== \$core_status \)/,
   'Child non-zero exit must fail the outer migration');
 
+// The historical core may normalize legacy seed content and excerpts, but it
+// must never write the H1 provenance/review metadata. Those values are planned,
+// applied and verified only by h1-content-seed-reconciliation.php in the outer
+// owner, avoiding cross-process cache/write races.
+assert.doesNotMatch(
+  core,
+  /update_post_meta\s*\(\s*\$pid\s*,\s*'_nvx_aesthetic_treatment_key'/,
+  'Legacy hygiene core must not write aesthetic treatment provenance meta',
+);
+assert.doesNotMatch(
+  core,
+  /update_post_meta\s*\(\s*\$pid\s*,\s*'_nvx_medical_review_status'/,
+  'Legacy hygiene core must not write medical review status',
+);
+assert.match(core, /outer H1\s+\/\/ reconciliation transaction|outer H1[\s\S]{0,120}reconciliation transaction/,
+  'Legacy core must document the canonical H1 metadata owner');
+
 // Bridal partial provenance is repairable only in two exact, bounded states:
 // stale legacy meta without marker, or exact legacy marker with an empty meta.
 // A conflicting non-empty key must remain fail-closed and dry-run must not write.
@@ -86,4 +103,4 @@ assert.match(helper, /get_post_meta\s*\(/);
 assert.match(helper, /wp_insert_post\s*\(/);
 assert.match(helper, /wp_update_post\s*\(/);
 
-console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 bridal_partial_provenance=bounded_fail_closed approvals=preserved');
+console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single bridal_partial_provenance=bounded_fail_closed approvals=preserved');
