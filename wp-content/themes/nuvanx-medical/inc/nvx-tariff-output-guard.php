@@ -106,7 +106,7 @@ function nvx_tariff_guard_public_content( $content ) {
 
 	return nvx_tariff_sanitize_endolift_content( $content );
 }
-add_filter( 'the_content', 'nvx_tariff_guard_public_content', 999 );
+add_filter( 'the_content', 'nvx_tariff_guard_public_content', NVX_HOOK_PRIO_TARIFF_OUTPUT_GUARD );
 
 /** Whether a schema type list contains a type. */
 function nvx_tariff_schema_has_type( array $node, string $type ): bool {
