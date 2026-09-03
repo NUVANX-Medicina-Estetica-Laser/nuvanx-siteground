@@ -31,8 +31,8 @@ function nvx_content_is_dr_rivera_page( string $content ): bool {
 
 	if (
 		is_string( $path )
-		&& function_exists( 'nvx_schema_path_matches' )
-		&& nvx_schema_path_matches( $path, '/dr-javier-rivera-tejeda/' )
+		&& function_exists( 'nvx_schema_normalize_path' )
+		&& nvx_schema_normalize_path( $path ) === '/dr-javier-rivera-tejeda/'
 	) {
 		return true;
 	}

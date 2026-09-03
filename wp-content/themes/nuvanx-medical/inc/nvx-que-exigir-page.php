@@ -31,8 +31,8 @@ function nvx_content_is_que_exigir_page( string $content ): bool {
 
 	if (
 		is_string( $path )
-		&& function_exists( 'nvx_schema_path_matches' )
-		&& nvx_schema_path_matches( $path, '/que-exigir-antes-de-operarte/' )
+		&& function_exists( 'nvx_schema_normalize_path' )
+		&& nvx_schema_normalize_path( $path ) === '/que-exigir-antes-de-operarte/'
 	) {
 		return true;
 	}
