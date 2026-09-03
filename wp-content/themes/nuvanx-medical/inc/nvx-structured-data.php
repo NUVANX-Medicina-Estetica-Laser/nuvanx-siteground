@@ -15,3 +15,4 @@ require_once __DIR__ . '/nvx-schema-faq.php';
 require_once __DIR__ . '/nvx-schema-treatments.php';
 require_once __DIR__ . '/nvx-schema-physicians.php';
 require_once __DIR__ . '/nvx-schema-graph.php';
+require_once __DIR__ . '/nvx-tariff-output-guard.php';
