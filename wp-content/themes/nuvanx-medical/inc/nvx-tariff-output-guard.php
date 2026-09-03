@@ -116,7 +116,14 @@ function nvx_tariff_schema_has_type( array $node, string $type ): bool {
 
 /** Remove price-bearing schema values while preserving clinical description. */
 function nvx_tariff_sanitize_schema_node( array $node ): array {
-	unset( $node['price'], $node['priceCurrency'] );
+	unset(
+		$node['price'],
+		$node['priceCurrency'],
+		$node['lowPrice'],
+		$node['highPrice'],
+		$node['minPrice'],
+		$node['maxPrice']
+	);
 
 	if ( isset( $node['description'] ) && is_string( $node['description'] ) ) {
 		$description = $node['description'];
@@ -137,20 +144,13 @@ function nvx_tariff_sanitize_schema_node( array $node ): array {
 		$node['acceptedAnswer'] = $answer;
 	}
 
-	// Iterate every nested array by key. This handles both list and associative
-	// schema structures without PHP 8.1's array_is_list(), preserving PHP 8.0.
+	// Recurse into the nested array itself, not only its children. This is
+	// required for associative schema objects such as MedicalProcedure.offers
+	// and priceSpecification, while also traversing numeric lists on PHP 8.0.
 	foreach ( $node as $key => $value ) {
-		if ( ! is_array( $value ) ) {
-			continue;
+		if ( is_array( $value ) ) {
+			$node[ $key ] = nvx_tariff_sanitize_schema_node( $value );
 		}
-
-		foreach ( $value as $child_key => $child ) {
-			if ( is_array( $child ) ) {
-				$value[ $child_key ] = nvx_tariff_sanitize_schema_node( $child );
-			}
-		}
-
-		$node[ $key ] = $value;
 	}
 
 	return $node;
@@ -158,12 +158,7 @@ function nvx_tariff_sanitize_schema_node( array $node ): array {
 
 /** Pure schema sanitizer used by runtime and blocking tests. */
 function nvx_tariff_sanitize_schema_graph( array $graph ): array {
-	foreach ( $graph as $index => $node ) {
-		if ( is_array( $node ) ) {
-			$graph[ $index ] = nvx_tariff_sanitize_schema_node( $node );
-		}
-	}
-	return $graph;
+	return nvx_tariff_sanitize_schema_node( $graph );
 }
 
 /** Final schema fail-closed fence after all price-producing owners. */
