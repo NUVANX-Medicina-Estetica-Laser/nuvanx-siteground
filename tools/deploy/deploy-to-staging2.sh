@@ -232,6 +232,7 @@ SOURCE_REQUIRED_FILES=(
   style.css
   functions.php
   header.php
+  tools/compile-theme-css.php
   assets/css/nvx-fonts.css
   assets/css/nvx-tokens.css
   assets/css/nvx-base.css
@@ -260,6 +261,11 @@ SOURCE_REQUIRED_FILES=(
 for required_file in "${SOURCE_REQUIRED_FILES[@]}"; do
   [[ -f "$SOURCE_THEME/$required_file" ]] || fail "source theme is missing $required_file"
 done
+
+echo '== Materialize exact release CSS distribution =='
+SOURCE_DATE_EPOCH=0 php "$SOURCE_THEME/tools/compile-theme-css.php"
+[[ -s "$SOURCE_THEME/dist/manifest.json" ]] || fail 'compiled CSS manifest is missing from immutable staging payload'
+echo 'STAGING_CSS_RELEASE=PASS source=exact-release runtime=compiled-dist'
 
 LIVE_THEME="$WP_ROOT/$THEME_REL"
 [[ -d "$LIVE_THEME" ]] || fail "live staging2 theme does not exist: $LIVE_THEME"
@@ -378,6 +384,9 @@ echo '== Verify deployed files and marker =='
 for required_file in "${SOURCE_REQUIRED_FILES[@]}"; do
   [[ -f "$LIVE_THEME/$required_file" ]] || fail "deployed theme is missing $required_file"
 done
+[[ -s "$LIVE_THEME/dist/manifest.json" ]] || fail 'deployed theme is missing compiled CSS manifest'
+php "$LIVE_THEME/tools/compile-theme-css.php" --verify-only
+echo 'STAGING_CSS_RUNTIME=PASS source=deployed-theme runtime=compiled-dist fallback=not-required'
 [[ "$(tr -d '\r\n' < "$LIVE_THEME/.nvx-deploy-sha")" == "$DEPLOY_SHA" ]] || fail 'deployed SHA marker does not match'
 grep -Fq 'nvx-patterns-editorial.css' "$LIVE_THEME/functions.php" || fail 'functions.php does not enqueue the canonical editorial stylesheet'
 if grep -Fq 'nvx-theme-bootstrap.php' "$LIVE_THEME/functions.php"; then
@@ -418,5 +427,3 @@ rm -f "$CONFIG_BACKUP"
 CONFIG_BACKUP=''
 trap - EXIT ERR INT TERM
 MUTATION_STARTED=0
-
-echo "DEPLOY_STAGING2_OK sha=$DEPLOY_SHA backup=$BACKUP_DIR"
