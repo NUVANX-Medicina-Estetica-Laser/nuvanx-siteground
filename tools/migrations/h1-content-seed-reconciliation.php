@@ -143,8 +143,6 @@ function nvx_h1_build_plan(): array {
 			$current_key    = (string) get_post_meta( $existing->ID, '_nvx_aesthetic_treatment_key', true );
 			$current_review = strtolower( trim( (string) get_post_meta( $existing->ID, '_nvx_medical_review_status', true ) ) );
 
-			// Approved records are always reasserted after the legacy hygiene core,
-			// which historically normalized seed review status to pending.
 			if ( $approved || $key !== $current_key || $target_review !== $current_review ) {
 				nvx_h1_plan_add(
 					$plan,
@@ -263,7 +261,7 @@ function nvx_h1_set_meta_verified( int $post_id, string $meta_key, string $value
 }
 
 /** Resolve and verify the WordPress runtime metadata view after COMMIT. */
-function nvx_h1_verify_runtime_plan( array $plan ): void {
+function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 	wp_cache_flush();
 
 	$ops = isset( $plan['ops'] ) && is_array( $plan['ops'] ) ? $plan['ops'] : array();
@@ -274,13 +272,8 @@ function nvx_h1_verify_runtime_plan( array $plan ): void {
 		$payload = isset( $op['payload'] ) && is_array( $op['payload'] ) ? $op['payload'] : array();
 		$post_id = (int) ( $payload['id'] ?? 0 );
 
-		if ( 'strategy' === $scope && 'create_seed' === $action ) {
-			$post = get_page_by_path( $slug, OBJECT, 'page' );
-			$post_id = $post instanceof WP_Post ? (int) $post->ID : 0;
-		}
-		if ( 'aesthetic' === $scope && 'create_seed' === $action ) {
-			$post = get_page_by_path( $slug, OBJECT, 'page' );
-			$post_id = $post instanceof WP_Post ? (int) $post->ID : 0;
+		if ( 'create_seed' === $action && in_array( $scope, array( 'strategy', 'aesthetic' ), true ) ) {
+			$post_id = (int) ( $created_ids[ $scope . '|' . $slug ] ?? 0 );
 		}
 
 		if ( 'strategy' === $scope && in_array( $action, array( 'update_seed_review_meta', 'create_seed' ), true ) ) {
@@ -329,8 +322,9 @@ function nvx_h1_apply_plan( array $plan ): array {
 		throw new RuntimeException( 'transaction_start_failed' );
 	}
 
-	$applied   = 0;
-	$committed = false;
+	$applied     = 0;
+	$committed   = false;
+	$created_ids = array();
 	try {
 		foreach ( $ops as $op ) {
 			$scope   = (string) ( $op['scope'] ?? '' );
@@ -361,6 +355,7 @@ function nvx_h1_apply_plan( array $plan ): array {
 				if ( is_wp_error( $result ) || (int) $result <= 0 ) {
 					throw new RuntimeException( 'strategy_insert_failed' );
 				}
+				$created_ids[ $scope . '|' . $slug ] = (int) $result;
 				nvx_h1_set_meta_verified( (int) $result, '_nvx_strategy_review_status', (string) ( $payload['review_status'] ?? '' ) );
 			} elseif ( 'aesthetic' === $scope && 'repair_seed_meta' === $action ) {
 				$post = nvx_h1_require_post( (int) ( $payload['id'] ?? 0 ) );
@@ -402,6 +397,7 @@ function nvx_h1_apply_plan( array $plan ): array {
 				if ( is_wp_error( $result ) || (int) $result <= 0 ) {
 					throw new RuntimeException( 'aesthetic_insert_failed' );
 				}
+				$created_ids[ $scope . '|' . $slug ] = (int) $result;
 				nvx_h1_set_meta_verified( (int) $result, '_nvx_aesthetic_treatment_key', $key );
 				nvx_h1_set_meta_verified( (int) $result, '_nvx_medical_review_status', 'pending' );
 			} elseif ( 'journal' === $scope && 'create_seed' === $action ) {
@@ -448,7 +444,7 @@ function nvx_h1_apply_plan( array $plan ): array {
 			throw new RuntimeException( 'transaction_commit_failed' );
 		}
 		$committed = true;
-		nvx_h1_verify_runtime_plan( $plan );
+		nvx_h1_verify_runtime_plan( $plan, $created_ids );
 	} catch ( Throwable $error ) {
 		if ( ! $committed ) {
 			$wpdb->query( 'ROLLBACK' );
