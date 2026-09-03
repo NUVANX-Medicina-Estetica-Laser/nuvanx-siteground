@@ -4,7 +4,7 @@
   "description": "NUVANX Medical Aesthetics Website & Infrastructure",
   "private": true,
   "scripts": {
-    "build:css": "NVX_CSS_EMIT_BASE64=1 php wp-content/themes/nuvanx-medical/tools/compile-css.php",
+    "build:css": "NVX_CSS_EMIT_BASE64=1 php scripts/build/compile-theme-css.php",
     "build": "npm run build:css",
     "lint:colors": "node scripts/lint/no-hardcoded-colors.mjs",
     "lint:fontsize": "node scripts/lint/no-hardcoded-fontsize.mjs",
