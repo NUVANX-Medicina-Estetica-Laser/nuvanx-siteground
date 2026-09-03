@@ -519,6 +519,49 @@ if ( ! function_exists( 'nvx_supabase_relay_existing_item' ) ) {
 }
 
 /**
+ * Retire every non-canonical persisted row for one dedupe identity.
+ *
+ * A successor can miss a publisher that has inserted its private row but has
+ * not written the final dedupe readiness marker yet. Whichever row later binds
+ * the durable claim must therefore remove all other ready rows before becoming
+ * drainable. This prevents an old prepared row from being adopted after the
+ * winner drains and releases its claim.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_retire_duplicate_rows' ) ) {
+	function nvx_supabase_relay_queue_retire_duplicate_rows(
+		int $canonical_post_id,
+		string $dedupe_key
+	): void {
+		$canonical_post_id = absint( $canonical_post_id );
+		$ids               = get_posts(
+			array(
+				'post_type'              => NVX_SUPABASE_RELAY_QUEUE_CPT,
+				'post_status'            => array( 'pending', NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ),
+				'posts_per_page'         => -1,
+				'fields'                 => 'ids',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'meta_query'             => array(
+					array(
+						'key'     => '_nvx_relay_dedupe_key',
+						'value'   => $dedupe_key,
+						'compare' => '=',
+					),
+				),
+			)
+		);
+
+		foreach ( $ids as $candidate_id ) {
+			$candidate_id = absint( $candidate_id );
+			if ( $candidate_id > 0 && $candidate_id !== $canonical_post_id ) {
+				wp_delete_post( $candidate_id, true );
+			}
+		}
+	}
+}
+
+/**
  * Resolve server-only signing root.
  */
 if ( ! function_exists( 'nvx_supabase_relay_google_click_token' ) ) {
@@ -862,6 +905,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_finalize_publication' ) ) {
 		if ( (string) $post_id !== nvx_supabase_relay_queue_fresh_option( $claim_key ) ) {
 			return false;
 		}
+
+		nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key );
 
 		if ( nvx_supabase_relay_queue_is_valid_pending_item( $post_id, $dedupe_key ) ) {
 			return true;
