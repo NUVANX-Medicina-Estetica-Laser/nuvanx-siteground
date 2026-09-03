@@ -236,14 +236,7 @@ function nvx_h1_build_plan(): array {
 	return $plan;
 }
 
-/**
- * Persist one meta value and verify both durable storage and the runtime view.
- *
- * The H1 plan is built before the legacy core executes in a child WP-CLI
- * process. A successful write therefore must not be accepted from an object
- * cache observation alone. The database is the transaction authority; caches
- * are invalidated before the final WordPress API verification.
- */
+/** Persist one meta value and verify durable storage inside the transaction. */
 function nvx_h1_set_meta_verified( int $post_id, string $meta_key, string $value ): void {
 	global $wpdb;
 
@@ -251,9 +244,6 @@ function nvx_h1_set_meta_verified( int $post_id, string $meta_key, string $value
 	if ( $value !== $current ) {
 		update_post_meta( $post_id, $meta_key, $value );
 	}
-
-	wp_cache_delete( $post_id, 'post_meta' );
-	clean_post_cache( $post_id );
 
 	$stored_values = $wpdb->get_col(
 		$wpdb->prepare(
@@ -270,11 +260,47 @@ function nvx_h1_set_meta_verified( int $post_id, string $meta_key, string $value
 			throw new RuntimeException( 'post_meta_durable_verification_failed:' . sanitize_key( $meta_key ) );
 		}
 	}
+}
 
-	wp_cache_delete( $post_id, 'post_meta' );
-	clean_post_cache( $post_id );
-	if ( $value !== (string) get_post_meta( $post_id, $meta_key, true ) ) {
-		throw new RuntimeException( 'post_meta_runtime_verification_failed:' . sanitize_key( $meta_key ) );
+/** Resolve and verify the WordPress runtime metadata view after COMMIT. */
+function nvx_h1_verify_runtime_plan( array $plan ): void {
+	wp_cache_flush();
+
+	$ops = isset( $plan['ops'] ) && is_array( $plan['ops'] ) ? $plan['ops'] : array();
+	foreach ( $ops as $op ) {
+		$scope   = (string) ( $op['scope'] ?? '' );
+		$action  = (string) ( $op['action'] ?? '' );
+		$slug    = (string) ( $op['slug'] ?? '' );
+		$payload = isset( $op['payload'] ) && is_array( $op['payload'] ) ? $op['payload'] : array();
+		$post_id = (int) ( $payload['id'] ?? 0 );
+
+		if ( 'strategy' === $scope && 'create_seed' === $action ) {
+			$post = get_page_by_path( $slug, OBJECT, 'page' );
+			$post_id = $post instanceof WP_Post ? (int) $post->ID : 0;
+		}
+		if ( 'aesthetic' === $scope && 'create_seed' === $action ) {
+			$post = get_page_by_path( $slug, OBJECT, 'page' );
+			$post_id = $post instanceof WP_Post ? (int) $post->ID : 0;
+		}
+
+		if ( 'strategy' === $scope && in_array( $action, array( 'update_seed_review_meta', 'create_seed' ), true ) ) {
+			$expected = (string) ( $payload['review_status'] ?? '' );
+			if ( $post_id <= 0 || $expected !== (string) get_post_meta( $post_id, '_nvx_strategy_review_status', true ) ) {
+				throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_nvx_strategy_review_status' );
+			}
+			continue;
+		}
+
+		if ( 'aesthetic' === $scope && in_array( $action, array( 'repair_seed_meta', 'create_seed' ), true ) ) {
+			$expected_key    = sanitize_key( (string) ( $payload['key'] ?? '' ) );
+			$expected_review = 'create_seed' === $action ? 'pending' : (string) ( $payload['target_review'] ?? 'pending' );
+			if ( $post_id <= 0 || $expected_key !== (string) get_post_meta( $post_id, '_nvx_aesthetic_treatment_key', true ) ) {
+				throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_nvx_aesthetic_treatment_key' );
+			}
+			if ( $expected_review !== strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_review_status', true ) ) ) ) {
+				throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_nvx_medical_review_status' );
+			}
+		}
 	}
 }
 
@@ -303,7 +329,8 @@ function nvx_h1_apply_plan( array $plan ): array {
 		throw new RuntimeException( 'transaction_start_failed' );
 	}
 
-	$applied = 0;
+	$applied   = 0;
+	$committed = false;
 	try {
 		foreach ( $ops as $op ) {
 			$scope   = (string) ( $op['scope'] ?? '' );
@@ -420,8 +447,12 @@ function nvx_h1_apply_plan( array $plan ): array {
 		if ( false === $wpdb->query( 'COMMIT' ) ) {
 			throw new RuntimeException( 'transaction_commit_failed' );
 		}
+		$committed = true;
+		nvx_h1_verify_runtime_plan( $plan );
 	} catch ( Throwable $error ) {
-		$wpdb->query( 'ROLLBACK' );
+		if ( ! $committed ) {
+			$wpdb->query( 'ROLLBACK' );
+		}
 		wp_cache_flush();
 		throw $error;
 	}
