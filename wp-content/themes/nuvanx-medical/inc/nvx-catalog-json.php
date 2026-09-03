@@ -200,10 +200,18 @@ function nvx_catalog_set_aesthetic_treatment_price( array &$catalog, string $num
 	return true;
 }
 
+/** Whether an FAQ question is the stable semantic pricing identity. */
+function nvx_catalog_is_pricing_faq_question( string $question ): bool {
+	$question = strtolower( trim( $question ) );
+	return false !== strpos( $question, 'cuánto cuesta' ) || false !== strpos( $question, 'precio' );
+}
+
 /**
  * Resolve exactly one governed FAQ by stable identity.
  *
- * Missing and duplicated identities both fail closed by returning null.
+ * Explicit `id=pricing` wins when present. Existing catalogs without ids use a
+ * unique semantic pricing-question identity. Reordering is therefore safe,
+ * while missing or duplicated identities fail closed.
  */
 function nvx_catalog_faq_index_by_id( array $catalog, string $faq_id ): ?int {
 	if (
@@ -216,14 +224,24 @@ function nvx_catalog_faq_index_by_id( array $catalog, string $faq_id ): ?int {
 		return null;
 	}
 
-	$matches = array();
+	$id_matches = array();
 	foreach ( $catalog['faq']['items'] as $index => $item ) {
 		if ( is_array( $item ) && $faq_id === (string) ( $item['id'] ?? '' ) ) {
-			$matches[] = (int) $index;
+			$id_matches[] = (int) $index;
+		}
+	}
+	if ( ! empty( $id_matches ) ) {
+		return 1 === count( $id_matches ) ? $id_matches[0] : null;
+	}
+
+	$semantic_matches = array();
+	foreach ( $catalog['faq']['items'] as $index => $item ) {
+		if ( is_array( $item ) && nvx_catalog_is_pricing_faq_question( (string) ( $item['q'] ?? '' ) ) ) {
+			$semantic_matches[] = (int) $index;
 		}
 	}
 
-	return 1 === count( $matches ) ? $matches[0] : null;
+	return 1 === count( $semantic_matches ) ? $semantic_matches[0] : null;
 }
 
 /** Whether a governed editorial price destination has the expected shape. */
@@ -275,13 +293,9 @@ function nvx_catalog_suppress_faq_price_copy( array &$catalog, string $faq_id, s
 		if ( ! is_array( $item ) || ! array_key_exists( 'a', $item ) ) {
 			continue;
 		}
-		$question = strtolower( (string) ( $item['q'] ?? '' ) );
+		$question = (string) ( $item['q'] ?? '' );
 		$answer   = (string) $item['a'];
-		if (
-			false !== strpos( $answer, '€' )
-			|| false !== strpos( $question, 'cuánto cuesta' )
-			|| false !== strpos( $question, 'precio' )
-		) {
+		if ( false !== strpos( $answer, '€' ) || nvx_catalog_is_pricing_faq_question( $question ) ) {
 			$catalog['faq']['items'][ $index ]['a'] = $neutral;
 		}
 	}
