@@ -99,9 +99,10 @@ function get_post( $post_id ) {
 }
 function get_posts( $args = array() ): array {
 	$meta_query = $args['meta_query'] ?? array();
+	$statuses   = (array) ( $args['post_status'] ?? array() );
 	$result     = array();
 	foreach ( $GLOBALS['nvx_mock_posts'] as $id => $post ) {
-		if ( ( $args['post_status'] ?? '' ) !== ( $post->post_status ?? '' ) ) { continue; }
+		if ( ! in_array( ( $post->post_status ?? '' ), $statuses, true ) ) { continue; }
 		$match = true;
 		foreach ( $meta_query as $mq ) {
 			$key   = $mq['key']   ?? '';
@@ -412,6 +413,35 @@ $GLOBALS['nvx_mock_time'] += 11;
 $require( nvx_supabase_relay_queue_acquire_publication_fence( $post14, $dedupe_key14 ), 'EXPIRED_SUCCESSOR_RECOVERED_BY_DRAINER' );
 $require( (string) $post14 === (string) get_option( $claim_key14, '' ), 'RECOVERY_BINDS_EXACT_POST_FENCE' );
 
+// A complete oldest-first batch of structurally incomplete prepared rows must
+// be quarantined so the valid due row behind it can acquire its fence.
+$invalid_batch = array();
+for ( $index = 0; $index < NVX_SUPABASE_RELAY_QUEUE_BATCH; $index++ ) {
+	$invalid_id = wp_insert_post(
+		array(
+			'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+			'post_content' => '{}',
+		)
+	);
+	add_post_meta( $invalid_id, '_nvx_relay_next_attempt', '0', true );
+	$invalid_batch[] = $invalid_id;
+}
+
+$drain_lock = 'invalid-batch-recovery-lock';
+$GLOBALS['nvx_mock_options']['nvx_supabase_relay_drain_lock_v1'] = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|' . $drain_lock;
+foreach ( $invalid_batch as $invalid_id ) {
+	$require( ! nvx_supabase_relay_queue_item_due( $invalid_id, $drain_lock, 60 ), 'INCOMPLETE_PREPARED_NOT_DUE_' . $invalid_id );
+	$require( 'draft' === get_post( $invalid_id )->post_status, 'INCOMPLETE_PREPARED_QUARANTINED_' . $invalid_id );
+}
+
+$valid_body15   = '{"submission_id":"inv15-after-invalid-batch"}';
+$valid_dedupe15 = nvx_supabase_relay_dedupe_key( 'lead_captured', $valid_body15, '' );
+$valid_post15   = wp_insert_post( array( 'post_status' => 'pending', 'post_content' => $valid_body15 ) );
+add_post_meta( $valid_post15, '_nvx_relay_dedupe_key', $valid_dedupe15, true );
+add_post_meta( $valid_post15, '_nvx_relay_next_attempt', '0', true );
+$require( nvx_supabase_relay_queue_item_due( $valid_post15, $drain_lock, 60 ), 'VALID_ROW_AFTER_INVALID_BATCH_IS_DUE' );
+$require( (string) $valid_post15 === (string) get_option( nvx_supabase_relay_queue_claim_key( $valid_dedupe15 ), '' ), 'VALID_ROW_AFTER_BATCH_OWNS_FENCE' );
+
 // ── Invariant 11: SOURCE_INTEGRITY ───────────────────────────────────────────
 $src = (string) file_get_contents( $queue_path );
 $require( false !== strpos( $src, 'nvx_relay_claim_' ), 'CLAIM_KEY_PREFIX_IN_SOURCE' );
@@ -419,6 +449,7 @@ $require( false !== strpos( $src, 'add_option( $claim_key' ), 'ATOMIC_ACQUISITIO
 $require( false !== strpos( $src, 'nvx_supabase_relay_queue_release_claim' ), 'RELEASE_CLAIM_HELPER_IN_SOURCE' );
 $require( false !== strpos( $src, 'nvx_supabase_relay_queue_is_valid_pending_item' ), 'VALID_PENDING_HELPER_IN_SOURCE' );
 $require( false !== strpos( $src, 'nvx_supabase_relay_queue_acquire_publication_fence' ), 'PUBLICATION_FENCE_IN_SOURCE' );
+$require( false !== strpos( $src, 'NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS' ), 'PRIVATE_PREPARED_STATUS_IN_SOURCE' );
 $require( false !== strpos( $src, 'claim_lost_during_publish' ), 'CLAIM_LOST_HANDLED_IN_SOURCE' );
 
 $enqueue_fn_pos = strpos( $src, 'function nvx_supabase_relay_queue_enqueue' );
@@ -437,4 +468,4 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 two_phase_fence=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 expired_bind_cleanup=1 adopted_retry_preserved=1 drainable_exactly_one=1 source_integrity=1\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 two_phase_fence=1 private_prepare=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 expired_bind_cleanup=1 adopted_retry_preserved=1 drainable_exactly_one=1 incomplete_batch_quarantined=1 source_integrity=1\n";
