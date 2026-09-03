@@ -12,8 +12,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/nvx-page-render-helpers.php';
-
 /**
  * Whether the current main query is a singular page suitable for rewrite.
  */

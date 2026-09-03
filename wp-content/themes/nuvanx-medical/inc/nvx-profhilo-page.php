@@ -12,8 +12,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/nvx-page-render-helpers.php';
-
 /**
  * Singular context for Profhilo rewrite.
  */
@@ -89,6 +87,18 @@ function nvx_profhilo_hero_copy_markup(): string {
 	$html  = '<div class="nvx-brand-hero__copy">';
 	$html .= '<p class="nvx-brand-kicker">' . esc_html( $data['kicker'] ?? '' ) . '</p>';
 	$html .= '<h1 class="nvx-brand-hero__title" id="nvx-profhilo-h1">' . esc_html( $data['h1'] ?? '' ) . '</h1>';
+
+	$post_id       = (int) get_queried_object_id();
+	$review_status = ( $post_id > 0 && function_exists( 'get_post_meta' ) )
+		? (string) get_post_meta( $post_id, '_nvx_medical_review_status', true )
+		: '';
+	if ( 'approved' === $review_status ) {
+		$html .= '<div class="nvx-medical-byline" data-nvx-medical-review="approved">';
+		$html .= '<div class="nvx-medical-byline__text">';
+		$html .= '<strong>' . esc_html__( 'Dr. José Javier Rivera Tejeda', 'nuvanx-medical' ) . '</strong><br>';
+		$html .= '<span class="nvx-medical-byline__title">' . esc_html__( 'Director Médico · Colegiado ICOMEM Nº ', 'nuvanx-medical' ) . esc_html( $colegiado ) . '</span>';
+		$html .= '</div></div>';
+	}
 	$html .= '<p class="nvx-brand-hero__lead">' . esc_html( $data['lead'] ?? '' ) . '</p>';
 	$html .= '<p class="nvx-brand-hero__description">' . esc_html(
 		sprintf(
