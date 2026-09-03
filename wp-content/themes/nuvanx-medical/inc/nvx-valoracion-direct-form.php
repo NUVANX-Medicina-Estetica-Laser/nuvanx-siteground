@@ -15,8 +15,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/nvx-marketing-consent.php';
-
 /**
  * Markup for the consent-independent valoración form.
  */
