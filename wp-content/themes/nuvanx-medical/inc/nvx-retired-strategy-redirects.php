@@ -42,24 +42,21 @@ function nvx_retired_strategy_page_ids(): array {
 }
 
 /**
- * Build redirect URL with preserved query string.
+ * Build redirect URL with preserved governed query arguments.
  *
- * @param string $target The target path.
- * @param string $query  The query string.
- * @return string The full redirect URL.
+ * @param string              $target     Target path.
+ * @param array<string,mixed> $query_args Sanitized query arguments from the immutable request context.
  */
-function nvx_build_redirect_url( string $target, string $query ): string {
+function nvx_build_redirect_url( string $target, array $query_args ): string {
 	$redirect_url = home_url( $target );
-	if ( '' !== $query ) {
-		$query_args = array();
-		wp_parse_str( $query, $query_args );
-		// Never carry post-resolution args: they would re-select the retired
-		// record on the target URL and loop this redirect indefinitely.
-		unset( $query_args['p'], $query_args['page_id'], $query_args['name'], $query_args['pagename'], $query_args['attachment_id'], $query_args['preview'], $query_args['preview_id'], $query_args['post_type'] );
-		if ( ! empty( $query_args ) ) {
-			$redirect_url = add_query_arg( $query_args, $redirect_url );
-		}
+
+	// Never carry post-resolution args: they would re-select the retired record
+	// on the target URL and loop this redirect indefinitely.
+	unset( $query_args['p'], $query_args['page_id'], $query_args['name'], $query_args['pagename'], $query_args['attachment_id'], $query_args['preview'], $query_args['preview_id'], $query_args['post_type'] );
+	if ( ! empty( $query_args ) ) {
+		$redirect_url = add_query_arg( $query_args, $redirect_url );
 	}
+
 	return $redirect_url;
 }
 
@@ -71,9 +68,13 @@ function nvx_redirect_retired_strategy_slugs(): void {
 		return;
 	}
 
-	$uri   = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-	$path  = strtolower( trim( (string) wp_parse_url( $uri, PHP_URL_PATH ), '/' ) );
-	$query = isset( $_SERVER['QUERY_STRING'] ) ? (string) wp_unslash( $_SERVER['QUERY_STRING'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+	$context = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : array();
+	$path    = isset( $context['path'] ) && is_string( $context['path'] )
+		? strtolower( trim( rawurldecode( $context['path'] ), '/' ) )
+		: '';
+	$query_args = isset( $context['query_args'] ) && is_array( $context['query_args'] )
+		? $context['query_args']
+		: array();
 
 	$targets = array(
 		'liposculpt-air'       => '/remodelacion-corporal-laser-madrid/',
@@ -83,7 +84,7 @@ function nvx_redirect_retired_strategy_slugs(): void {
 
 	// Check path-based redirect for top-level pages.
 	if ( isset( $targets[ $path ] ) ) {
-		$redirect_url = nvx_build_redirect_url( $targets[ $path ], $query );
+		$redirect_url = nvx_build_redirect_url( $targets[ $path ], $query_args );
 		wp_safe_redirect( $redirect_url, 301, 'NUVANX' );
 		exit;
 	}
@@ -92,7 +93,7 @@ function nvx_redirect_retired_strategy_slugs(): void {
 	if ( is_singular() ) {
 		$queried_object = get_queried_object();
 		if ( $queried_object && isset( $queried_object->post_name ) && isset( $targets[ $queried_object->post_name ] ) ) {
-			$redirect_url = nvx_build_redirect_url( $targets[ $queried_object->post_name ], $query );
+			$redirect_url = nvx_build_redirect_url( $targets[ $queried_object->post_name ], $query_args );
 			wp_safe_redirect( $redirect_url, 301, 'NUVANX' );
 			exit;
 		}
