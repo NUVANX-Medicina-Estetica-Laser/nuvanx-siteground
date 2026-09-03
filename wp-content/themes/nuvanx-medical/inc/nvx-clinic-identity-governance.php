@@ -58,7 +58,7 @@ function nvx_clinic_identity_allowed_schema_keys(): array {
 	if ( function_exists( 'is_singular' ) && is_singular( 'post' ) ) {
 		return nvx_clinic_identity_all_keys();
 	}
-	if ( '/equipo-medico/' === $path ) {
+	if ( '/equipo-medico/' === $path || '/contacto/' === $path ) {
 		return nvx_clinic_identity_all_keys();
 	}
 	if ( function_exists( 'nvxIsClinicsHub' ) && nvxIsClinicsHub() ) {
