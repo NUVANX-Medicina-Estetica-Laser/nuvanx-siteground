@@ -106,8 +106,17 @@ function get_posts( $args = array() ): array {
 		if ( ! in_array( ( $post->post_status ?? '' ), $statuses, true ) ) { continue; }
 		$match = true;
 		foreach ( $meta_query as $mq ) {
-			$key   = $mq['key']   ?? '';
-			$val   = $mq['value'] ?? '';
+			$key     = $mq['key']     ?? '';
+			$val     = $mq['value']   ?? '';
+			$compare = strtoupper( (string) ( $mq['compare'] ?? '=' ) );
+			$exists  = array_key_exists( $key, $GLOBALS['nvx_mock_post_meta'][ $id ] ?? array() );
+			if ( 'NOT EXISTS' === $compare ) {
+				if ( $exists && '' !== (string) ( $GLOBALS['nvx_mock_post_meta'][ $id ][ $key ] ?? '' ) ) {
+					$match = false;
+					break;
+				}
+				continue;
+			}
 			$found = $GLOBALS['nvx_mock_post_meta'][ $id ][ $key ] ?? '';
 			if ( $found !== $val ) { $match = false; break; }
 		}
@@ -160,6 +169,9 @@ function wp_update_post( $postarr = array(), $wp_error = false ) {
 	}
 	if ( isset( $postarr['post_status'] ) ) {
 		$GLOBALS['nvx_mock_posts'][ $id ]->post_status = (string) $postarr['post_status'];
+		if ( 'draft' === $postarr['post_status'] && isset( $GLOBALS['nvx_mock_hook_on_status_draft'] ) && is_callable( $GLOBALS['nvx_mock_hook_on_status_draft'] ) ) {
+			( $GLOBALS['nvx_mock_hook_on_status_draft'] )( $id );
+		}
 	}
 	return $id;
 }

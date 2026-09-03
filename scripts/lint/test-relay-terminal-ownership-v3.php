@@ -300,6 +300,62 @@ if ( $retire_reflection->getNumberOfParameters() >= 3 ) {
 	);
 }
 
+// ── Contract 5b: candidate retirement cannot cross an ownership transfer. ──
+// A concurrent lifecycle path transfers ownership after the candidate check.
+// The retirement lifecycle protocol must abort and preserve the candidate.
+$body_race       = '{"submission_id":"v3-interleaved-retirement"}';
+$dedupe_race     = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_race, '' );
+$claim_key_race  = nvx_supabase_relay_queue_claim_key( $dedupe_race );
+$canonical_id    = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => 'pending',
+		'post_content' => wp_slash( $body_race ),
+	),
+	true
+);
+$canonical_id = absint( $canonical_id );
+add_post_meta( $canonical_id, '_nvx_relay_dedupe_key', $dedupe_race, true );
+add_post_meta( $canonical_id, '_nvx_relay_ready', '1', true );
+$GLOBALS['nvx_mock_options'][ $claim_key_race ] = (string) $canonical_id;
+
+$candidate_race_id = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => 'pending',
+		'post_content' => wp_slash( $body_race ),
+	),
+	true
+);
+$candidate_race_id = absint( $candidate_race_id );
+add_post_meta( $candidate_race_id, '_nvx_relay_dedupe_key', $dedupe_race, true );
+add_post_meta( $candidate_race_id, '_nvx_relay_ready', '1', true );
+
+// When the candidate is transitioned to draft, simulate a concurrent successor
+// that adopts the candidate and claims ownership before physical deletion.
+$GLOBALS['nvx_mock_hook_on_status_draft'] = static function ( int $post_id ) use ( $claim_key_race, $candidate_race_id ) {
+	if ( $post_id === $candidate_race_id ) {
+		$GLOBALS['nvx_mock_options'][ $claim_key_race ] = (string) $candidate_race_id;
+	}
+};
+
+$retired_race = nvx_supabase_relay_queue_retire_duplicate_rows(
+	$canonical_id,
+	$dedupe_race,
+	(string) $canonical_id
+);
+unset( $GLOBALS['nvx_mock_hook_on_status_draft'] );
+
+$require_v3( false === $retired_race, 'INTERLEAVED_RETIREMENT_ABORTS_ON_OWNERSHIP_TRANSFER' );
+$require_v3(
+	isset( $GLOBALS['nvx_mock_posts'][ $candidate_race_id ] ),
+	'INTERLEAVED_CANDIDATE_SURVIVES_OWNERSHIP_TRANSFER'
+);
+$require_v3(
+	'pending' === ( $GLOBALS['nvx_mock_posts'][ $candidate_race_id ]->post_status ?? '' ),
+	'INTERLEAVED_CANDIDATE_RESTORED_TO_PENDING'
+);
+
 // ── Contract 6: terminal claim fences the SUCCESS cleanup/release window. ────
 $require_v3(
 	function_exists( 'nvx_supabase_relay_queue_begin_terminal_lifecycle' )
@@ -481,7 +537,8 @@ $require_v3(
 $require_v3(
 	str_contains( $queue_source, 'nvx_supabase_relay_queue_item_adoptable_for_claim' )
 	&& str_contains( $queue_source, '_nvx_relay_publish_claim' )
-	&& str_contains( $queue_source, '_nvx_relay_ready' ),
+	&& str_contains( $queue_source, '_nvx_relay_ready' )
+	&& str_contains( $queue_source, "post_status' => 'draft'" ),
 	'OUTBOX_V3_SOURCE_INTEGRITY'
 );
 
@@ -490,4 +547,4 @@ if ( ! empty( $failures_v3 ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_TERMINAL_OWNERSHIP_V3=PASS generation_fenced=1 readiness_explicit=1 due_visibility_last=1 active_prepare_safe=1 invisible_prepare_recovered=1 active_invisible_preserved=1 abandoned_prepare_quarantined=1 stale_generation_rejected=1 stale_finalizer_safe=1 success_terminal_atomic=1 dead_terminal_atomic=1 escaped_generation_rejected=1\n";
+echo "OUTBOX_TERMINAL_OWNERSHIP_V3=PASS generation_fenced=1 readiness_explicit=1 due_visibility_last=1 active_prepare_safe=1 invisible_prepare_recovered=1 active_invisible_preserved=1 abandoned_prepare_quarantined=1 stale_generation_rejected=1 stale_finalizer_safe=1 success_terminal_atomic=1 dead_terminal_atomic=1 escaped_generation_rejected=1 interleaved_retirement_safe=1\n";

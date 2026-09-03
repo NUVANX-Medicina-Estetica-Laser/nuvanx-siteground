@@ -388,17 +388,57 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_retire_duplicate_rows' ) ) {
 			)
 		);
 		foreach ( $ids as $candidate_id ) {
+			$candidate_id = absint( $candidate_id );
+			if ( $candidate_id < 1 || $candidate_id === $canonical_post_id ) {
+				continue;
+			}
 			if ( ! $has_database_fence && $expected_claim !== nvx_supabase_relay_queue_fresh_option( $claim_key ) ) {
 				return false;
 			}
-			$candidate_id = absint( $candidate_id );
-			if ( $candidate_id > 0 && $candidate_id !== $canonical_post_id ) {
-				if ( false === wp_delete_post( $candidate_id, true ) ) {
-					if ( $started_transaction ) {
-						$wpdb->query( 'ROLLBACK' );
-					}
+			if ( (string) $candidate_id === ( $has_database_fence ? $locked_claim : nvx_supabase_relay_queue_fresh_option( $claim_key ) ) ) {
+				if ( $started_transaction ) {
+					$wpdb->query( 'ROLLBACK' );
+				}
+				return false;
+			}
+
+			// Lifecycle fencing protocol: transition candidate to non-adoptable draft status before deletion.
+			$cand_post    = get_post( $candidate_id );
+			$orig_status  = $cand_post instanceof WP_Post ? (string) $cand_post->post_status : 'pending';
+			$transitioned = wp_update_post(
+				array(
+					'ID'          => $candidate_id,
+					'post_status' => 'draft',
+				),
+				true
+			);
+			if ( is_wp_error( $transitioned ) || absint( $transitioned ) !== $candidate_id ) {
+				if ( $started_transaction ) {
+					$wpdb->query( 'ROLLBACK' );
+				}
+				return false;
+			}
+
+			// Verify ownership did not transfer during or immediately after the per-candidate status transition.
+			if ( ! $has_database_fence ) {
+				$fresh = nvx_supabase_relay_queue_fresh_option( $claim_key );
+				if ( $expected_claim !== $fresh || (string) $candidate_id === $fresh ) {
+					wp_update_post(
+						array(
+							'ID'          => $candidate_id,
+							'post_status' => $orig_status,
+						),
+						true
+					);
 					return false;
 				}
+			}
+
+			if ( false === wp_delete_post( $candidate_id, true ) ) {
+				if ( $started_transaction ) {
+					$wpdb->query( 'ROLLBACK' );
+				}
+				return false;
 			}
 		}
 
@@ -883,7 +923,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 		$endpoint      = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
 		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
 		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
-			nvx_supabase_relay_queue_mark_dead( $post_id, $endpoint, 0, 'invalid_dedupe_metadata' );
+			wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
+			nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'invalid_dedupe_metadata' );
 			return false;
 		}
 
@@ -893,7 +934,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 			if ( '' !== $publish_claim && $publish_claim === $current && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
 				return false;
 			}
-			nvx_supabase_relay_queue_mark_dead( $post_id, $endpoint, 0, 'publication_incomplete' );
+			wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
+			nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'publication_incomplete' );
 			return false;
 		}
 
