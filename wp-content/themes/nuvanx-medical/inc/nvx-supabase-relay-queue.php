@@ -916,6 +916,23 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
 					return false;
 				}
 			}
+			// Legacy prepared rows predate the readiness marker and the in-flight
+			// publish claim. A crash after claim binding leaves the dedupe claim
+			// numerically bound to this exact row: recover it through the fence
+			// instead of stranding a deliverable payload.
+			if ( '' === $publish_claim
+				&& 1 === preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key )
+				&& (string) $post_id === nvx_supabase_relay_queue_fresh_option( nvx_supabase_relay_queue_claim_key( $dedupe_key ) )
+			) {
+				$next_attempt = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
+				if ( $next_attempt > nvx_supabase_relay_time() ) {
+					return false;
+				}
+				if ( ! nvx_supabase_relay_queue_acquire_publication_fence( $post_id, $dedupe_key ) ) {
+					return false;
+				}
+				return nvx_supabase_relay_queue_renew_lock( $lock, $lease_ttl );
+			}
 			$endpoint = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
 			nvx_supabase_relay_queue_mark_dead( $post_id, $endpoint, 0, 'publication_incomplete' );
 			return false;
@@ -1107,9 +1124,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		}
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_publish_claim', $in_flight_value, true ) && $meta_ok;
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_dedupe_key', $dedupe_key, true ) && $meta_ok;
-		$meta_ok = add_post_meta( $post_id, '_nvx_relay_ready', '1', true ) && $meta_ok;
-		// Due visibility is written last so the drainer cannot observe a partial generation.
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_next_attempt', (string) $next_attempt, true ) && $meta_ok;
+		// Readiness is written last. A row is never ready without due-visibility, so
+		// an interrupted publication can never leave a ready-but-invisible row, and
+		// the drainer still fails closed on any prepared row that is not yet ready.
+		$meta_ok = add_post_meta( $post_id, '_nvx_relay_ready', '1', true ) && $meta_ok;
 		if ( ! $meta_ok ) {
 			wp_delete_post( $post_id, true );
 			nvx_supabase_relay_queue_release_claim( $dedupe_key, $in_flight_value );

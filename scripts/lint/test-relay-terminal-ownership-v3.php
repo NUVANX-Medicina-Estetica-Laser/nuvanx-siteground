@@ -48,17 +48,17 @@ $enqueue_body  = false !== $enqueue_start && false !== $enqueue_end
 	? substr( $queue_source, $enqueue_start, $enqueue_end - $enqueue_start )
 	: '';
 $dedupe_offset = strpos( $enqueue_body, "'_nvx_relay_dedupe_key'" );
-$ready_offset  = strpos( $enqueue_body, "'_nvx_relay_ready'", false === $dedupe_offset ? 0 : $dedupe_offset );
-$next_offset   = strpos( $enqueue_body, "'_nvx_relay_next_attempt'", false === $ready_offset ? 0 : $ready_offset );
+$next_offset   = strpos( $enqueue_body, "'_nvx_relay_next_attempt'", false === $dedupe_offset ? 0 : $dedupe_offset );
+$ready_offset  = strpos( $enqueue_body, "'_nvx_relay_ready'", false === $next_offset ? 0 : $next_offset );
 $bind_comment  = strpos( $enqueue_body, '// Bind claim to published post_id atomically via CAS.' );
 $require_v3(
 	false !== $dedupe_offset
-	&& false !== $ready_offset
 	&& false !== $next_offset
+	&& false !== $ready_offset
 	&& false !== $bind_comment
-	&& $dedupe_offset < $ready_offset
-	&& $ready_offset < $next_offset
-	&& $next_offset < $bind_comment,
+	&& $dedupe_offset < $next_offset
+	&& $next_offset < $ready_offset
+	&& $ready_offset < $bind_comment,
 	'IDENTITY_READY_DUE_VISIBILITY_ORDERED'
 );
 
@@ -73,8 +73,9 @@ $require_v3(
 
 // ── Contract 2: active prepared row is not quarantined before readiness. ─────
 // This fixture models legacy/corrupt ordering where next_attempt became visible
-// before readiness. New publications prevent this state by writing next_attempt
-// last, while runtime still fails closed if it encounters one.
+// before readiness. New publications write readiness last, so a row is never
+// ready without due-visibility, while runtime still fails closed if it encounters
+// a due but not-yet-ready row.
 $body_active      = '{"submission_id":"v3-active-prepared"}';
 $dedupe_active    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_active, '' );
 $claim_key_active = nvx_supabase_relay_queue_claim_key( $dedupe_active );
