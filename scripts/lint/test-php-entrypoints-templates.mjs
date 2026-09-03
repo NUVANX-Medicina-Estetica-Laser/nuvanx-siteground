@@ -215,13 +215,18 @@ assert.ok(
 const sede = fs.readFileSync(path.join(theme, 'templates/page-sede.php'), 'utf8');
 assert.match(
   sede,
-  /\$clinic_key\s*=\s*'chamberi';/,
-  'Known page-sede default-clinic routing debt must remain visible until clinic-route consolidation'
+  /nvx_current_clinic_landing_key/,
+  'page-sede must resolve clinic identity from canonical landing path'
 );
-assert.match(
+assert.doesNotMatch(
   sede,
-  /strpos\( \$current_slug, 'goya' \)/,
-  'Known page-sede substring routing debt must remain visible until clinic-route consolidation'
+  /\$clinic_key\s*=\s*'chamberi';/,
+  'page-sede must not default to Chamberí'
+);
+assert.doesNotMatch(
+  sede,
+  /strpos\(\s*\$current_slug,\s*'goya'\s*\)/,
+  'page-sede must not use substring slug inference'
 );
 
 console.log(

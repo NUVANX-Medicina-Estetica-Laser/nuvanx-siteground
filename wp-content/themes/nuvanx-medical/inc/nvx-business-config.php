@@ -94,6 +94,96 @@ function nvx_get_clinics_config(): array {
 	return $clinics;
 }
 
+/** Normalize a public route for exact clinic landing comparisons. */
+function nvx_clinic_normalize_landing_path( string $path ): string {
+	$without_query = strtok( $path, '?' );
+	$path          = false === $without_query ? $path : $without_query;
+	$normalized    = '/' . trim( $path, '/' ) . '/';
+
+	return ( '/' === $normalized || '//' === $normalized ) ? '/' : $normalized;
+}
+
+/** Whether a route is exactly the canonical clinics hub. */
+function nvx_clinic_is_exact_hub_path( string $path ): bool {
+	return '/clinicas-de-medicina-estetica-nuvanx/' === nvx_clinic_normalize_landing_path( $path );
+}
+
+/**
+ * Resolve exactly one clinic key from clinics.json landing_path.
+ *
+ * Deliberately does not use slug substrings or nested-prefix matching: clinic
+ * identity/NAP must never be inferred from a partial path.
+ */
+function nvx_clinic_key_from_landing_path( string $path ): ?string {
+	$path = nvx_clinic_normalize_landing_path( $path );
+	if ( '/' === $path ) {
+		return null;
+	}
+
+	foreach ( nvx_get_clinics_config() as $key => $clinic ) {
+		if ( ! is_string( $key ) || ! is_array( $clinic ) ) {
+			continue;
+		}
+
+		$landing_path = nvx_clinic_normalize_landing_path( (string) ( $clinic['landing_path'] ?? '' ) );
+		if ( '/' !== $landing_path && $path === $landing_path ) {
+			return $key;
+		}
+	}
+
+	return null;
+}
+
+/** Resolve the current clinic landing strictly from the immutable request path. */
+function nvx_current_clinic_landing_key(): ?string {
+	if ( ! function_exists( 'nvx_theme_request_path' ) ) {
+		return null;
+	}
+
+	return nvx_clinic_key_from_landing_path( (string) nvx_theme_request_path() );
+}
+
+/**
+ * Prevent the Sede Local template from rendering a guessed clinic identity.
+ *
+ * The clinics hub keeps its managed owner only on its exact immutable route.
+ * An individual clinic template is allowed only when the immutable request path
+ * exactly matches a landing_path in clinics.json. Any unrelated/misassigned
+ * page falls back to page.php rather than leaking Chamberí or Goya NAP.
+ *
+ * @param mixed $template Selected WordPress template path.
+ * @return mixed
+ */
+function nvx_clinic_template_fail_closed( $template ) {
+	$template = is_string( $template ) ? $template : '';
+	if ( '' === $template || 'page-sede.php' !== basename( $template ) ) {
+		return $template;
+	}
+
+	$request_path = function_exists( 'nvx_theme_request_path' ) ? (string) nvx_theme_request_path() : '/';
+	if ( nvx_clinic_is_exact_hub_path( $request_path ) ) {
+		return $template;
+	}
+
+	$clinic_key = nvx_current_clinic_landing_key();
+	if ( null !== $clinic_key ) {
+		if ( function_exists( 'set_query_var' ) ) {
+			set_query_var( 'nvx_clinic_key', $clinic_key );
+		}
+		return $template;
+	}
+
+	if ( function_exists( 'get_theme_file_path' ) ) {
+		$page_template = (string) get_theme_file_path( '/page.php' );
+		if ( '' !== $page_template ) {
+			return $page_template;
+		}
+	}
+
+	return $template;
+}
+add_filter( 'template_include', 'nvx_clinic_template_fail_closed', 99 );
+
 /** Build a Google Maps embed URL from canonical clinic data. */
 function nvx_clinic_map_embed_url( array $clinic ): string {
 	$address = sprintf(
