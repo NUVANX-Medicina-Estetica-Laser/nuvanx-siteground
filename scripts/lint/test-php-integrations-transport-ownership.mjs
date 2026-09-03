@@ -46,6 +46,9 @@ assert.doesNotMatch(hubspot, /require_once[^;]*nvx-marketing-consent\.php/,
   'HubSpot must not laterally load the consent owner');
 assert.doesNotMatch(hubspot, /after_setup_theme[\s\S]*nvx_hubspot_secure_load_dependencies/,
   'HubSpot must not register a lifecycle dependency loader');
+assert.doesNotMatch(read('wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php'),
+  /require_once[^;]*nvx-marketing-consent\.php/,
+  'Valoracion direct form must not laterally load the consent owner');
 
 assert.match(googleAuth, /hash_hmac\(\s*'sha256'/,
   'Google attribution transport must remain HMAC signed');
