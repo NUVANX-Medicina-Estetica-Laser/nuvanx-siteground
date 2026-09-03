@@ -72,6 +72,7 @@ $GLOBALS['nvx_mock_deleted_posts']            = array();
 $GLOBALS['nvx_mock_insert_failure']           = false;
 $GLOBALS['nvx_mock_meta_failure_on_post']     = 0;
 $GLOBALS['nvx_mock_adopt_inserted_post']      = false;
+$GLOBALS['nvx_mock_update_failure_on_post']   = 0;
 
 // Option mocks
 function get_option( string $key, $default = false ) {
@@ -151,6 +152,9 @@ function wp_insert_post( $postarr = array(), $wp_error = false ) {
 }
 function wp_update_post( $postarr = array(), $wp_error = false ) {
 	$id = (int) ( $postarr['ID'] ?? 0 );
+	if ( $id === $GLOBALS['nvx_mock_update_failure_on_post'] ) {
+		return $wp_error ? new WP_Error( 'mock_update_failed', 'Mock update failure.' ) : 0;
+	}
 	if ( $id < 1 || ! isset( $GLOBALS['nvx_mock_posts'][ $id ] ) ) {
 		return $wp_error ? new WP_Error( 'mock_post_missing', 'Mock post missing.' ) : 0;
 	}
@@ -467,6 +471,44 @@ foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
 	}
 }
 $require( 1 === $remaining16, 'WINNER_RETIRES_ALL_OTHER_READY_ROWS' );
+
+$late_non_owner16 = wp_insert_post( array( 'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS, 'post_content' => $body16 ) );
+add_post_meta( $late_non_owner16, '_nvx_relay_dedupe_key', $dedupe_key16, true );
+$require( ! nvx_supabase_relay_queue_acquire_publication_fence( $late_non_owner16, $dedupe_key16 ), 'LATE_NON_OWNER_CANNOT_ACQUIRE_FENCE' );
+$require( ! isset( $GLOBALS['nvx_mock_posts'][ $late_non_owner16 ] ), 'LATE_NON_OWNER_RETIRES_ON_CANONICAL_FENCE' );
+
+$pre_drain_duplicate16 = wp_insert_post( array( 'post_status' => 'pending', 'post_content' => $body16 ) );
+add_post_meta( $pre_drain_duplicate16, '_nvx_relay_dedupe_key', $dedupe_key16, true );
+nvx_supabase_relay_queue_retire_duplicate_rows( $winner16, $dedupe_key16 );
+$require( ! isset( $GLOBALS['nvx_mock_posts'][ $pre_drain_duplicate16 ] ), 'DRAIN_COMPLETION_RETIRES_LATE_DUPLICATE' );
+wp_delete_post( $winner16, true );
+nvx_supabase_relay_queue_release_claim( $dedupe_key16, (string) $winner16 );
+
+$after_drain16 = 0;
+foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
+	if ( ( $GLOBALS['nvx_mock_post_meta'][ $p_id ]['_nvx_relay_dedupe_key'] ?? '' ) === $dedupe_key16 ) {
+		$after_drain16++;
+	}
+}
+$require( 0 === $after_drain16, 'NO_DUPLICATE_SURVIVES_CANONICAL_DRAIN' );
+
+// A claimed prepared row retains attempt accounting when its idempotent
+// prepared→pending transition fails temporarily.
+$body17       = '{"submission_id":"inv17-finalize-failure"}';
+$dedupe_key17 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body17, '' );
+$claim_key17  = nvx_supabase_relay_queue_claim_key( $dedupe_key17 );
+$prepared17   = wp_insert_post( array( 'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS, 'post_content' => $body17 ) );
+add_post_meta( $prepared17, '_nvx_relay_attempts', '1', true );
+add_post_meta( $prepared17, '_nvx_relay_next_attempt', '0', true );
+add_post_meta( $prepared17, '_nvx_relay_dedupe_key', $dedupe_key17, true );
+$GLOBALS['nvx_mock_options'][ $claim_key17 ] = (string) $prepared17;
+$GLOBALS['nvx_mock_update_failure_on_post'] = $prepared17;
+$failed_finalize17 = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body17, array(), 2 );
+$GLOBALS['nvx_mock_update_failure_on_post'] = 0;
+
+$require( $prepared17 === $failed_finalize17, 'FAILED_FINALIZATION_RETURNS_CANONICAL_PREPARED' );
+$require( '3' === (string) get_post_meta( $prepared17, '_nvx_relay_attempts', true ), 'FAILED_FINALIZATION_PRESERVES_ATTEMPTS' );
+$require( NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS === get_post( $prepared17 )->post_status, 'FAILED_FINALIZATION_REMAINS_RECOVERABLE' );
 
 // ── Invariant 11: SOURCE_INTEGRITY ───────────────────────────────────────────
 $src = (string) file_get_contents( $queue_path );
