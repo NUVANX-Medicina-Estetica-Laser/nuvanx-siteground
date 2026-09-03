@@ -2,11 +2,12 @@
 /**
  * Outbox v3 ownership contract.
  *
- * Extends the canonical v2 concurrency harness with regressions for the three
+ * Extends the canonical v2 concurrency harness with regressions for the
  * post-#1056 races tracked by #1072:
  * - stale duplicate cleanup after claim ownership changed;
  * - late rows from a completed generation becoming adoptable after release;
- * - active prepared publication being quarantined before its readiness marker.
+ * - active prepared publication being quarantined before its readiness marker;
+ * - SUCCESS/DEAD cleanup-to-release interleavings.
  *
  * @package nuvanx-medical
  */
@@ -28,7 +29,7 @@ $queue_source = file_get_contents(
 );
 $queue_source = is_string( $queue_source ) ? $queue_source : '';
 
-// ── Contract 1: identity, readiness and batch visibility are separate. ───────
+// ── Contract 1: identity, readiness and due visibility are ordered. ─────────
 $require_v3(
 	str_contains( $queue_source, "'_nvx_relay_publish_claim'" ),
 	'PUBLISH_GENERATION_META_EXISTS'
@@ -46,8 +47,8 @@ $enqueue_body  = false !== $enqueue_start && false !== $enqueue_end
 	? substr( $queue_source, $enqueue_start, $enqueue_end - $enqueue_start )
 	: '';
 $dedupe_offset = strpos( $enqueue_body, "'_nvx_relay_dedupe_key'" );
-$ready_offset  = strpos( $enqueue_body, "'_nvx_relay_ready'", $dedupe_offset === false ? 0 : $dedupe_offset );
-$next_offset   = strpos( $enqueue_body, "'_nvx_relay_next_attempt'", $ready_offset === false ? 0 : $ready_offset );
+$ready_offset  = strpos( $enqueue_body, "'_nvx_relay_ready'", false === $dedupe_offset ? 0 : $dedupe_offset );
+$next_offset   = strpos( $enqueue_body, "'_nvx_relay_next_attempt'", false === $ready_offset ? 0 : $ready_offset );
 $bind_comment  = strpos( $enqueue_body, '// Bind claim to published post_id atomically via CAS.' );
 $require_v3(
 	false !== $dedupe_offset
@@ -57,7 +58,7 @@ $require_v3(
 	&& $dedupe_offset < $ready_offset
 	&& $ready_offset < $next_offset
 	&& $next_offset < $bind_comment,
-	'IDENTITY_READY_THEN_DUE_VISIBILITY_BEFORE_BIND'
+	'IDENTITY_READY_DUE_VISIBILITY_ORDERED'
 );
 
 $require_v3(
@@ -71,8 +72,8 @@ $require_v3(
 
 // ── Contract 2: active prepared row is not quarantined before readiness. ─────
 // This fixture models legacy/corrupt ordering where next_attempt became visible
-// before readiness. New publications must prevent this state by writing
-// next_attempt last, but runtime still fails closed if it encounters one.
+// before readiness. New publications prevent this state by writing next_attempt
+// last, while runtime still fails closed if it encounters one.
 $body_active      = '{"submission_id":"v3-active-prepared"}';
 $dedupe_active    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_active, '' );
 $claim_key_active = nvx_supabase_relay_queue_claim_key( $dedupe_active );
@@ -107,10 +108,10 @@ $require_v3(
 );
 
 // ── Contract 3: a completed generation cannot be adopted after release. ─────
-$body_stale       = '{"submission_id":"v3-stale-generation"}';
-$dedupe_stale     = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_stale, '' );
-$claim_key_stale  = nvx_supabase_relay_queue_claim_key( $dedupe_stale );
-$stale_post_id    = wp_insert_post(
+$body_stale      = '{"submission_id":"v3-stale-generation"}';
+$dedupe_stale    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_stale, '' );
+$claim_key_stale = nvx_supabase_relay_queue_claim_key( $dedupe_stale );
+$stale_post_id   = wp_insert_post(
 	array(
 		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
 		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
@@ -188,7 +189,177 @@ if ( $retire_reflection->getNumberOfParameters() >= 3 ) {
 	);
 }
 
-// Source ratchet: cleanup must refresh ownership; adoption must be generation-aware.
+// ── Contract 5: terminal claim fences the SUCCESS cleanup/release window. ────
+$require_v3(
+	function_exists( 'nvx_supabase_relay_queue_begin_terminal_lifecycle' )
+	&& function_exists( 'nvx_supabase_relay_queue_finish_terminal_lifecycle' ),
+	'TERMINAL_LIFECYCLE_OWNER_EXISTS'
+);
+
+$body_success      = '{"submission_id":"v3-terminal-success"}';
+$dedupe_success    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_success, '' );
+$claim_key_success = nvx_supabase_relay_queue_claim_key( $dedupe_success );
+$success_post_id   = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => 'pending',
+		'post_content' => wp_slash( $body_success ),
+	),
+	true
+);
+$success_post_id = absint( $success_post_id );
+add_post_meta( $success_post_id, '_nvx_relay_dedupe_key', $dedupe_success, true );
+add_post_meta( $success_post_id, '_nvx_relay_endpoint', 'lead_captured', true );
+add_post_meta( $success_post_id, '_nvx_relay_ready', '1', true );
+$GLOBALS['nvx_mock_options'][ $claim_key_success ] = (string) $success_post_id;
+
+$success_terminal = nvx_supabase_relay_queue_begin_terminal_lifecycle( $success_post_id, $dedupe_success );
+$require_v3( '' !== $success_terminal, 'SUCCESS_TERMINAL_FENCE_ACQUIRED' );
+$require_v3( nvx_supabase_relay_queue_publish_claim_live( $success_terminal ), 'SUCCESS_TERMINAL_FENCE_LIVE' );
+
+$late_success_claim = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|late_success_generation';
+$late_success_id    = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+		'post_content' => wp_slash( $body_success ),
+	),
+	true
+);
+$late_success_id = absint( $late_success_id );
+add_post_meta( $late_success_id, '_nvx_relay_dedupe_key', $dedupe_success, true );
+add_post_meta( $late_success_id, '_nvx_relay_publish_claim', $late_success_claim, true );
+add_post_meta( $late_success_id, '_nvx_relay_endpoint', 'lead_captured', true );
+add_post_meta( $late_success_id, '_nvx_relay_attempts', '1', true );
+add_post_meta( $late_success_id, '_nvx_relay_ready', '1', true );
+add_post_meta( $late_success_id, '_nvx_relay_next_attempt', (string) ( $GLOBALS['nvx_mock_time'] - 1 ), true );
+$require_v3(
+	false === nvx_supabase_relay_queue_acquire_publication_fence( $late_success_id, $dedupe_success ),
+	'LATE_SUCCESS_GENERATION_BLOCKED_BY_TERMINAL_FENCE'
+);
+$require_v3(
+	nvx_supabase_relay_queue_retire_duplicate_rows( $success_post_id, $dedupe_success, $success_terminal ),
+	'SUCCESS_TERMINAL_FINAL_SWEEP_OWNED'
+);
+$require_v3( ! isset( $GLOBALS['nvx_mock_posts'][ $late_success_id ] ), 'LATE_SUCCESS_GENERATION_RETIRED' );
+wp_delete_post( $success_post_id, true );
+$require_v3(
+	nvx_supabase_relay_queue_finish_terminal_lifecycle( $success_post_id, $dedupe_success, $success_terminal ),
+	'SUCCESS_TERMINAL_RELEASE_CONDITIONAL'
+);
+$require_v3(
+	! array_key_exists( $claim_key_success, $GLOBALS['nvx_mock_options'] ),
+	'SUCCESS_TERMINAL_CLAIM_RELEASED'
+);
+
+// A publisher materialized after the final sweep but before release still
+// cannot bind its stale generation after the terminal owner releases.
+$body_escaped      = '{"submission_id":"v3-terminal-escaped"}';
+$dedupe_escaped    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_escaped, '' );
+$claim_key_escaped = nvx_supabase_relay_queue_claim_key( $dedupe_escaped );
+$escaped_owner_id  = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => 'pending',
+		'post_content' => wp_slash( $body_escaped ),
+	),
+	true
+);
+$escaped_owner_id = absint( $escaped_owner_id );
+add_post_meta( $escaped_owner_id, '_nvx_relay_dedupe_key', $dedupe_escaped, true );
+$GLOBALS['nvx_mock_options'][ $claim_key_escaped ] = (string) $escaped_owner_id;
+$escaped_terminal = nvx_supabase_relay_queue_begin_terminal_lifecycle( $escaped_owner_id, $dedupe_escaped );
+$require_v3( '' !== $escaped_terminal, 'ESCAPED_TERMINAL_FENCE_ACQUIRED' );
+$require_v3(
+	nvx_supabase_relay_queue_retire_duplicate_rows( $escaped_owner_id, $dedupe_escaped, $escaped_terminal ),
+	'ESCAPED_TERMINAL_FINAL_SWEEP_OWNED'
+);
+wp_delete_post( $escaped_owner_id, true );
+
+$escaped_late_id = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+		'post_content' => wp_slash( $body_escaped ),
+	),
+	true
+);
+$escaped_late_id = absint( $escaped_late_id );
+add_post_meta( $escaped_late_id, '_nvx_relay_dedupe_key', $dedupe_escaped, true );
+add_post_meta( $escaped_late_id, '_nvx_relay_publish_claim', ( $GLOBALS['nvx_mock_time'] + 60 ) . '|escaped_old_generation', true );
+add_post_meta( $escaped_late_id, '_nvx_relay_ready', '1', true );
+add_post_meta( $escaped_late_id, '_nvx_relay_next_attempt', (string) ( $GLOBALS['nvx_mock_time'] - 1 ), true );
+$require_v3(
+	nvx_supabase_relay_queue_finish_terminal_lifecycle( $escaped_owner_id, $dedupe_escaped, $escaped_terminal ),
+	'ESCAPED_TERMINAL_RELEASE_CONDITIONAL'
+);
+$require_v3(
+	false === nvx_supabase_relay_queue_acquire_publication_fence( $escaped_late_id, $dedupe_escaped ),
+	'ESCAPED_OLD_GENERATION_NOT_ADOPTABLE_AFTER_RELEASE'
+);
+$require_v3( ! isset( $GLOBALS['nvx_mock_posts'][ $escaped_late_id ] ), 'ESCAPED_OLD_GENERATION_QUARANTINED_AFTER_RELEASE' );
+
+// ── Contract 6: DEAD uses the same terminal fence before release. ────────────
+$body_dead      = '{"submission_id":"v3-terminal-dead"}';
+$dedupe_dead    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_dead, '' );
+$claim_key_dead = nvx_supabase_relay_queue_claim_key( $dedupe_dead );
+$dead_post_id   = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => 'pending',
+		'post_content' => wp_slash( $body_dead ),
+	),
+	true
+);
+$dead_post_id = absint( $dead_post_id );
+add_post_meta( $dead_post_id, '_nvx_relay_dedupe_key', $dedupe_dead, true );
+add_post_meta( $dead_post_id, '_nvx_relay_endpoint', 'lead_captured', true );
+$GLOBALS['nvx_mock_options'][ $claim_key_dead ] = (string) $dead_post_id;
+$dead_terminal = nvx_supabase_relay_queue_begin_terminal_lifecycle( $dead_post_id, $dedupe_dead );
+$require_v3( '' !== $dead_terminal, 'DEAD_TERMINAL_FENCE_ACQUIRED' );
+$require_v3(
+	nvx_supabase_relay_queue_retire_duplicate_rows( $dead_post_id, $dedupe_dead, $dead_terminal ),
+	'DEAD_TERMINAL_INITIAL_SWEEP_OWNED'
+);
+$dead_update = wp_update_post( array( 'ID' => $dead_post_id, 'post_status' => 'draft' ), true );
+$require_v3( ! is_wp_error( $dead_update ) && absint( $dead_update ) === $dead_post_id, 'DEAD_CANONICAL_TRANSITION' );
+
+$late_dead_id = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+		'post_content' => wp_slash( $body_dead ),
+	),
+	true
+);
+$late_dead_id = absint( $late_dead_id );
+add_post_meta( $late_dead_id, '_nvx_relay_dedupe_key', $dedupe_dead, true );
+add_post_meta( $late_dead_id, '_nvx_relay_publish_claim', ( $GLOBALS['nvx_mock_time'] + 60 ) . '|late_dead_generation', true );
+add_post_meta( $late_dead_id, '_nvx_relay_ready', '1', true );
+add_post_meta( $late_dead_id, '_nvx_relay_next_attempt', (string) ( $GLOBALS['nvx_mock_time'] - 1 ), true );
+$require_v3(
+	nvx_supabase_relay_queue_retire_duplicate_rows( $dead_post_id, $dedupe_dead, $dead_terminal ),
+	'DEAD_TERMINAL_FINAL_SWEEP_OWNED'
+);
+$require_v3( ! isset( $GLOBALS['nvx_mock_posts'][ $late_dead_id ] ), 'LATE_DEAD_GENERATION_RETIRED' );
+$require_v3(
+	nvx_supabase_relay_queue_finish_terminal_lifecycle( $dead_post_id, $dedupe_dead, $dead_terminal ),
+	'DEAD_TERMINAL_RELEASE_CONDITIONAL'
+);
+$require_v3(
+	! array_key_exists( $claim_key_dead, $GLOBALS['nvx_mock_options'] ),
+	'DEAD_TERMINAL_CLAIM_RELEASED'
+);
+
+// Source ratchet: both terminal outcomes must use one canonical lifecycle owner.
+$require_v3(
+	str_contains( $queue_source, 'nvx_supabase_relay_queue_complete_terminal_state' )
+	&& str_contains( $queue_source, 'nvx_supabase_relay_queue_begin_terminal_lifecycle' )
+	&& str_contains( $queue_source, 'nvx_supabase_relay_queue_finish_terminal_lifecycle' )
+	&& str_contains( $queue_source, 'START TRANSACTION' )
+	&& str_contains( $queue_source, 'FOR UPDATE' ),
+	'TERMINAL_ATOMIC_BOUNDARY_SOURCE_INTEGRITY'
+);
 $require_v3(
 	str_contains( $queue_source, 'nvx_supabase_relay_queue_item_adoptable_for_claim' )
 	&& str_contains( $queue_source, '_nvx_relay_publish_claim' )
@@ -201,4 +372,4 @@ if ( ! empty( $failures_v3 ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_TERMINAL_OWNERSHIP_V3=PASS generation_fenced=1 readiness_explicit=1 due_visibility_last=1 active_prepare_safe=1 stale_generation_rejected=1 stale_finalizer_safe=1\n";
+echo "OUTBOX_TERMINAL_OWNERSHIP_V3=PASS generation_fenced=1 readiness_explicit=1 due_visibility_last=1 active_prepare_safe=1 stale_generation_rejected=1 stale_finalizer_safe=1 success_terminal_atomic=1 dead_terminal_atomic=1 escaped_generation_rejected=1\n";
