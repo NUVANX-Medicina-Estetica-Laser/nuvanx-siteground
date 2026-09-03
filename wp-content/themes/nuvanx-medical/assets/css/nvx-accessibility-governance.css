@@ -103,6 +103,21 @@
   color: var(--nvx-hero-muted);
 }
 
+/* Medical provenance is injected after the H1 and uses the generic editorial
+ * byline component. On an ink hero the accessibility owner must override that
+ * component's light-surface muted color instead of relying on inheritance. */
+.nvx-brand-hero--surface-ink .nvx-medical-byline,
+.nvx-brand-hero--surface-ink .nvx-medical-byline__text,
+.nvx-brand-hero--surface-ink .nvx-medical-byline__text strong,
+.nvx-brand-hero--surface-ink .nvx-medical-byline__text a {
+  color: var(--nvx-hero-fg);
+}
+
+.nvx-brand-hero--surface-ink .nvx-medical-byline__title {
+  color: var(--nvx-hero-muted);
+  opacity: 1;
+}
+
 /* Canonical conversion-control geometry. Color variants keep ownership of
  * their button custom properties; this layer owns shape, typography and focus.
  * Gutenberg links consume this same contract instead of maintaining a parallel
