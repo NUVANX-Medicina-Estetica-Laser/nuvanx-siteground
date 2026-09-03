@@ -23,10 +23,9 @@ $bootstrap = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medi
 nvx_block9_assert( false === strpos( $retired, '$_SERVER' ), 'RETIRED_REDIRECTS_NO_LATE_SERVER_READS' );
 nvx_block9_assert( false !== strpos( $retired, 'nvx_theme_request_context()' ), 'RETIRED_REDIRECTS_USE_IMMUTABLE_CONTEXT' );
 nvx_block9_assert( false !== strpos( $request, "'query_args'" ), 'REQUEST_CONTEXT_OWNS_QUERY_ARGS' );
-
-// Confirmed follow-up debt: page-hygiene still has several direct URI reads and
-// will be migrated as one redirect/hygiene consolidation rather than piecemeal.
-nvx_block9_assert( false !== strpos( $hygiene, '$_SERVER[\'REQUEST_URI\']' ), 'PAGE_HYGIENE_DIRECT_URI_DEBT_RECORDED' );
+nvx_block9_assert( false === strpos( $hygiene, '$_SERVER' ), 'PAGE_HYGIENE_NO_LATE_SERVER_READS' );
+nvx_block9_assert( false !== strpos( $hygiene, 'nvx_theme_request_context()' ), 'PAGE_HYGIENE_USES_IMMUTABLE_CONTEXT' );
+nvx_block9_assert( false !== strpos( $hygiene, "['query_args']" ), 'PAGE_HYGIENE_USES_CONTEXT_QUERY_ARGS' );
 
 $core = array(
 	'nvx-page-registry.php',
@@ -60,4 +59,4 @@ $sorted = $positions;
 sort( $sorted, SORT_NUMERIC );
 nvx_block9_assert( $positions === $sorted, 'CORE_MANIFEST_ORDER_STABLE' );
 
-echo 'PHP_CORE_INFRASTRUCTURE=PASS modules=' . count( $core ) . ' retired_redirects=immutable page_hygiene_debt=guarded' . PHP_EOL;
+echo 'PHP_CORE_INFRASTRUCTURE=PASS modules=' . count( $core ) . ' retired_redirects=immutable page_hygiene=immutable' . PHP_EOL;
