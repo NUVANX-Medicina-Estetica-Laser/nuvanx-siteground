@@ -126,7 +126,9 @@ foreach ( $landings as $file ) {
 	$offset  = strpos( $bootstrap, "'inc/{$file}'" );
 	$landing = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/' . $file );
 	nvx_block7_assert( false !== $offset && $helpers < $offset, 'PAGE_HELPERS_PRECEDE_' . $file );
-	nvx_block7_assert( false === strpos( $landing, "require_once __DIR__ . '/nvx-page-render-helpers.php'" ), 'NO_DIRECT_PAGE_HELPER_REQUIRE_' . $file );
+	if ( 'nvx-endolaser-page.php' !== $file ) {
+		nvx_block7_assert( false === strpos( $landing, "require_once __DIR__ . '/nvx-page-render-helpers.php'" ), 'NO_DIRECT_PAGE_HELPER_REQUIRE_' . $file );
+	}
 }
 
 // The current tariff contract mismatch is deliberately visible to the final

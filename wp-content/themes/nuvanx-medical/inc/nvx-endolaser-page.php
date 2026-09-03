@@ -12,6 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/nvx-page-render-helpers.php';
+
 /**
  * Singular context for Endoláser rewrite.
  */
