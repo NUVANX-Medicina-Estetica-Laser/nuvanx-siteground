@@ -633,6 +633,33 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_finish_terminal_lifecycle' ) )
 }
 
 /**
+ * Whether a prepared row is a structurally complete publication whose only
+ * missing write is the readiness marker.
+ *
+ * Readiness is the final metadata write of a publication. A prepared row that
+ * already carries a valid identity and durable due-visibility, and whose
+ * in-flight publish claim is empty or expired, is an interrupted or legacy
+ * publication that can be safely recovered instead of stranded or deleted.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_prepared_row_recoverable' ) ) {
+	function nvx_supabase_relay_queue_prepared_row_recoverable( int $post_id, string $dedupe_key ): bool {
+		$post_id = absint( $post_id );
+		if ( $post_id < 1 || 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
+			return false;
+		}
+		$stored_dedupe = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		if ( '' === $stored_dedupe || ! hash_equals( $dedupe_key, $stored_dedupe ) ) {
+			return false;
+		}
+		if ( '' === (string) get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) ) {
+			return false;
+		}
+		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
+		return '' === $publish_claim || ! nvx_supabase_relay_queue_publish_claim_live( $publish_claim );
+	}
+}
+
+/**
  * Decide whether a prepared row belongs to the exact publication generation.
  * Pending rows are already public queue rows and remain rollout-compatible.
  */
@@ -699,7 +726,18 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_finalize_publication' ) ) {
 		}
 		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
 		if ( '' !== $publish_claim && ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
-			return false;
+			// Readiness is the final write of a publication. A row that already owns
+			// this exact numeric claim and carries durable identity plus due-visibility
+			// is structurally complete: an interruption merely lost the readiness
+			// marker. Repair it so the payload is delivered instead of stranded. A
+			// row still missing due-visibility is a genuinely partial preparation.
+			$has_due_visibility = '' !== (string) get_post_meta( $post_id, '_nvx_relay_next_attempt', true );
+			if ( ! $has_due_visibility ) {
+				return false;
+			}
+			if ( ! add_post_meta( $post_id, '_nvx_relay_ready', '1', true ) && ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
+				return false;
+			}
 		}
 		if ( ! nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key, $expected ) ) {
 			return false;
@@ -741,7 +779,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_acquire_publication_fence' ) )
 			return nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
 		}
 		if ( '' === $current ) {
-			if ( $is_prepared ) {
+			// A prepared row with no surviving claim is normally abandoned, but a
+			// structurally complete publication that merely lost its readiness write
+			// is recoverable: rebind the claim to this exact row and finalize it
+			// instead of deleting a deliverable payload.
+			if ( $is_prepared && ! nvx_supabase_relay_queue_prepared_row_recoverable( $post_id, $dedupe_key ) ) {
 				wp_delete_post( $post_id, true );
 				return false;
 			}
@@ -764,7 +806,14 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_acquire_publication_fence' ) )
 		}
 		if ( $is_prepared ) {
 			$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
-			if ( '' !== $publish_claim && ! nvx_supabase_relay_queue_item_adoptable_for_claim( $post_id, $dedupe_key, $current ) ) {
+			// A row from a different, non-adoptable generation is redundant and is
+			// retired. A structurally complete publication that merely lost its
+			// readiness write is instead recovered by taking over the expired claim
+			// and finalizing it, so an interrupted payload is delivered, not deleted.
+			if ( '' !== $publish_claim
+				&& ! nvx_supabase_relay_queue_item_adoptable_for_claim( $post_id, $dedupe_key, $current )
+				&& ! nvx_supabase_relay_queue_prepared_row_recoverable( $post_id, $dedupe_key )
+			) {
 				wp_delete_post( $post_id, true );
 				return false;
 			}
@@ -908,22 +957,26 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
 		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
 		$dedupe_key    = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
 		if ( $is_prepared && ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
+			$dedupe_valid = 1 === preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key );
 			if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
-				if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
+				if ( ! $dedupe_valid ) {
 					return false;
 				}
 				if ( $publish_claim === nvx_supabase_relay_queue_fresh_option( nvx_supabase_relay_queue_claim_key( $dedupe_key ) ) ) {
 					return false;
 				}
 			}
-			// Legacy prepared rows predate the readiness marker and the in-flight
-			// publish claim. A crash after claim binding leaves the dedupe claim
-			// numerically bound to this exact row: recover it through the fence
-			// instead of stranding a deliverable payload.
-			if ( '' === $publish_claim
-				&& 1 === preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key )
-				&& (string) $post_id === nvx_supabase_relay_queue_fresh_option( nvx_supabase_relay_queue_claim_key( $dedupe_key ) )
-			) {
+			// A prepared row that carries a valid identity and durable due-visibility
+			// is a structurally complete publication whose only missing write is the
+			// readiness marker (a crash between next_attempt and ready, or a legacy
+			// pre-marker row). While its dedupe claim is still bound to this exact
+			// row or its in-flight claim has expired, recover it through the fence,
+			// which repairs readiness and finalizes it, instead of stranding a
+			// deliverable payload.
+			$has_due_visibility = '' !== (string) get_post_meta( $post_id, '_nvx_relay_next_attempt', true );
+			$claim_recoverable  = '' === $publish_claim
+				|| ! nvx_supabase_relay_queue_publish_claim_live( $publish_claim );
+			if ( $dedupe_valid && $has_due_visibility && $claim_recoverable ) {
 				$next_attempt = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
 				if ( $next_attempt > nvx_supabase_relay_time() ) {
 					return false;
