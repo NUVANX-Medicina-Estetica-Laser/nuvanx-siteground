@@ -7,6 +7,7 @@
  * - stale duplicate cleanup after claim ownership changed;
  * - late rows from a completed generation becoming adoptable after release;
  * - active prepared publication being quarantined before its readiness marker;
+ * - invisible prepared rows after interrupted metadata publication;
  * - SUCCESS/DEAD cleanup-to-release interleavings.
  *
  * @package nuvanx-medical
@@ -107,7 +108,116 @@ $require_v3(
 	'ACTIVE_PREPARED_NOT_DELETED'
 );
 
-// ── Contract 3: a completed generation cannot be adopted after release. ─────
+// ── Contract 3: invisible prepared lifecycle has a deterministic recovery. ───
+$require_v3(
+	function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' )
+	&& function_exists( 'nvx_supabase_relay_queue_recover_invisible_prepared' ),
+	'INVISIBLE_PREPARED_RECOVERY_OWNER_EXISTS'
+);
+
+// Ready generation crashed before writing the final due marker. Once the
+// generation lease is expired, recovery must bind the row and make it visible.
+$body_invisible       = '{"submission_id":"v3-invisible-ready"}';
+$dedupe_invisible     = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_invisible, '' );
+$claim_key_invisible  = nvx_supabase_relay_queue_claim_key( $dedupe_invisible );
+$expired_ready_claim  = ( $GLOBALS['nvx_mock_time'] - 10 ) . '|expired_ready_generation';
+$invisible_post_id    = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+		'post_content' => wp_slash( $body_invisible ),
+	),
+	true
+);
+$invisible_post_id = absint( $invisible_post_id );
+add_post_meta( $invisible_post_id, '_nvx_relay_dedupe_key', $dedupe_invisible, true );
+add_post_meta( $invisible_post_id, '_nvx_relay_publish_claim', $expired_ready_claim, true );
+add_post_meta( $invisible_post_id, '_nvx_relay_endpoint', 'lead_captured', true );
+add_post_meta( $invisible_post_id, '_nvx_relay_attempts', '1', true );
+add_post_meta( $invisible_post_id, '_nvx_relay_ready', '1', true );
+$GLOBALS['nvx_mock_options'][ $claim_key_invisible ] = $expired_ready_claim;
+
+$require_v3(
+	nvx_supabase_relay_queue_recover_prepared_without_due( $invisible_post_id ),
+	'INVISIBLE_READY_PREPARED_RECOVERED'
+);
+$invisible_post = get_post( $invisible_post_id );
+$require_v3(
+	$invisible_post instanceof WP_Post && 'pending' === $invisible_post->post_status,
+	'INVISIBLE_READY_PREPARED_FINALIZED'
+);
+$require_v3(
+	absint( get_post_meta( $invisible_post_id, '_nvx_relay_next_attempt', true ) ) > 0,
+	'INVISIBLE_READY_PREPARED_DUE_VISIBLE'
+);
+$require_v3(
+	(string) $invisible_post_id === (string) get_option( $claim_key_invisible, '' ),
+	'INVISIBLE_READY_PREPARED_CLAIM_BOUND'
+);
+
+// Incomplete row owned by a live publisher is never quarantined by recovery.
+$body_live_invisible      = '{"submission_id":"v3-invisible-live"}';
+$dedupe_live_invisible    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_live_invisible, '' );
+$claim_key_live_invisible = nvx_supabase_relay_queue_claim_key( $dedupe_live_invisible );
+$live_invisible_claim     = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|live_invisible_generation';
+$live_invisible_post_id   = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+		'post_content' => wp_slash( $body_live_invisible ),
+	),
+	true
+);
+$live_invisible_post_id = absint( $live_invisible_post_id );
+add_post_meta( $live_invisible_post_id, '_nvx_relay_dedupe_key', $dedupe_live_invisible, true );
+add_post_meta( $live_invisible_post_id, '_nvx_relay_publish_claim', $live_invisible_claim, true );
+add_post_meta( $live_invisible_post_id, '_nvx_relay_endpoint', 'lead_captured', true );
+$GLOBALS['nvx_mock_options'][ $claim_key_live_invisible ] = $live_invisible_claim;
+$require_v3(
+	false === nvx_supabase_relay_queue_recover_prepared_without_due( $live_invisible_post_id ),
+	'INVISIBLE_ACTIVE_PREPARED_PRESERVED'
+);
+$live_invisible_post = get_post( $live_invisible_post_id );
+$require_v3(
+	$live_invisible_post instanceof WP_Post
+	&& NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS === $live_invisible_post->post_status,
+	'INVISIBLE_ACTIVE_PREPARED_STILL_PREPARED'
+);
+
+// Incomplete row whose generation is expired must be quarantined without
+// stealing or releasing a successor claim.
+$body_abandoned       = '{"submission_id":"v3-invisible-abandoned"}';
+$dedupe_abandoned     = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_abandoned, '' );
+$claim_key_abandoned  = nvx_supabase_relay_queue_claim_key( $dedupe_abandoned );
+$expired_abandon_claim = ( $GLOBALS['nvx_mock_time'] - 10 ) . '|expired_abandoned_generation';
+$abandoned_post_id    = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+		'post_content' => wp_slash( $body_abandoned ),
+	),
+	true
+);
+$abandoned_post_id = absint( $abandoned_post_id );
+add_post_meta( $abandoned_post_id, '_nvx_relay_dedupe_key', $dedupe_abandoned, true );
+add_post_meta( $abandoned_post_id, '_nvx_relay_publish_claim', $expired_abandon_claim, true );
+add_post_meta( $abandoned_post_id, '_nvx_relay_endpoint', 'lead_captured', true );
+$GLOBALS['nvx_mock_options'][ $claim_key_abandoned ] = $expired_abandon_claim;
+$require_v3(
+	false === nvx_supabase_relay_queue_recover_prepared_without_due( $abandoned_post_id ),
+	'INVISIBLE_ABANDONED_RECOVERY_NOT_DRAINABLE'
+);
+$abandoned_post = get_post( $abandoned_post_id );
+$require_v3(
+	$abandoned_post instanceof WP_Post && 'draft' === $abandoned_post->post_status,
+	'INVISIBLE_ABANDONED_PREPARED_QUARANTINED'
+);
+$require_v3(
+	$expired_abandon_claim === (string) get_option( $claim_key_abandoned, '' ),
+	'INVISIBLE_ABANDONED_CLAIM_NOT_STOLEN'
+);
+
+// ── Contract 4: a completed generation cannot be adopted after release. ─────
 $body_stale      = '{"submission_id":"v3-stale-generation"}';
 $dedupe_stale    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_stale, '' );
 $claim_key_stale = nvx_supabase_relay_queue_claim_key( $dedupe_stale );
@@ -140,7 +250,7 @@ $require_v3(
 	'FRESH_GENERATION_OWNS_CLAIM'
 );
 
-// ── Contract 4: stale finalizer cannot delete a replacement publisher. ──────
+// ── Contract 5: stale finalizer cannot delete a replacement publisher. ──────
 $body_owner         = '{"submission_id":"v3-stale-finalizer"}';
 $dedupe_owner       = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_owner, '' );
 $claim_key_owner    = nvx_supabase_relay_queue_claim_key( $dedupe_owner );
@@ -189,7 +299,7 @@ if ( $retire_reflection->getNumberOfParameters() >= 3 ) {
 	);
 }
 
-// ── Contract 5: terminal claim fences the SUCCESS cleanup/release window. ────
+// ── Contract 6: terminal claim fences the SUCCESS cleanup/release window. ────
 $require_v3(
 	function_exists( 'nvx_supabase_relay_queue_begin_terminal_lifecycle' )
 	&& function_exists( 'nvx_supabase_relay_queue_finish_terminal_lifecycle' ),
@@ -299,7 +409,7 @@ $require_v3(
 );
 $require_v3( ! isset( $GLOBALS['nvx_mock_posts'][ $escaped_late_id ] ), 'ESCAPED_OLD_GENERATION_QUARANTINED_AFTER_RELEASE' );
 
-// ── Contract 6: DEAD uses the same terminal fence before release. ────────────
+// ── Contract 7: DEAD uses the same terminal fence before release. ────────────
 $body_dead      = '{"submission_id":"v3-terminal-dead"}';
 $dedupe_dead    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_dead, '' );
 $claim_key_dead = nvx_supabase_relay_queue_claim_key( $dedupe_dead );
@@ -351,7 +461,8 @@ $require_v3(
 	'DEAD_TERMINAL_CLAIM_RELEASED'
 );
 
-// Source ratchet: both terminal outcomes must use one canonical lifecycle owner.
+// Source ratchet: both terminal outcomes use one atomic authority boundary and
+// invisible prepared rows have an explicit NOT EXISTS recovery owner.
 $require_v3(
 	str_contains( $queue_source, 'nvx_supabase_relay_queue_complete_terminal_state' )
 	&& str_contains( $queue_source, 'nvx_supabase_relay_queue_begin_terminal_lifecycle' )
@@ -359,6 +470,12 @@ $require_v3(
 	&& str_contains( $queue_source, 'START TRANSACTION' )
 	&& str_contains( $queue_source, 'FOR UPDATE' ),
 	'TERMINAL_ATOMIC_BOUNDARY_SOURCE_INTEGRITY'
+);
+$require_v3(
+	str_contains( $queue_source, 'nvx_supabase_relay_queue_recover_prepared_without_due' )
+	&& str_contains( $queue_source, 'nvx_supabase_relay_queue_recover_invisible_prepared' )
+	&& str_contains( $queue_source, "'compare' => 'NOT EXISTS'" ),
+	'INVISIBLE_PREPARED_RECOVERY_SOURCE_INTEGRITY'
 );
 $require_v3(
 	str_contains( $queue_source, 'nvx_supabase_relay_queue_item_adoptable_for_claim' )
@@ -372,4 +489,4 @@ if ( ! empty( $failures_v3 ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_TERMINAL_OWNERSHIP_V3=PASS generation_fenced=1 readiness_explicit=1 due_visibility_last=1 active_prepare_safe=1 stale_generation_rejected=1 stale_finalizer_safe=1 success_terminal_atomic=1 dead_terminal_atomic=1 escaped_generation_rejected=1\n";
+echo "OUTBOX_TERMINAL_OWNERSHIP_V3=PASS generation_fenced=1 readiness_explicit=1 due_visibility_last=1 active_prepare_safe=1 invisible_prepare_recovered=1 active_invisible_preserved=1 abandoned_prepare_quarantined=1 stale_generation_rejected=1 stale_finalizer_safe=1 success_terminal_atomic=1 dead_terminal_atomic=1 escaped_generation_rejected=1\n";
