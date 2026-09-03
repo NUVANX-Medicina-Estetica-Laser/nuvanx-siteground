@@ -30,14 +30,17 @@ assert.match(direct, /nvx_marketing_consent_granted\(\)/,
   'Direct form must delegate consent to the shared server authority');
 
 assert.match(consent, /function nvx_marketing_consent_granted\(\): bool/);
-assert.match(consent, /cmplz_has_consent\( 'marketing' \)/);
-assert.match(consent, /\$_COOKIE\['cmplz_marketing'\]/);
-assert.doesNotMatch(consent, /\$_POST/,
-  'Canonical consent authority must never trust browser POST markers');
+assert.match(consent, /if \( ! function_exists\( 'cmplz_has_consent' \) \) \{\s*return false;/,
+  'Consent must fail closed when the Complianz server API is unavailable');
+assert.match(consent, /cmplz_has_consent\( 'marketing' \) === true/);
+assert.doesNotMatch(consent, /\$_COOKIE|\$_POST|\$_GET|\$_REQUEST/,
+  'Canonical consent authority must not trust browser-controlled consent markers');
 assert.doesNotMatch(consent, /nvx_hubspot_secure_post_value|'\s*nvx_marketing_consent\s*'/,
   'Canonical consent authority must not read the hidden POST consent field');
 
-assert.match(bridge, /require_once (?:\$dependency|__DIR__ \. '\/nvx-marketing-consent\.php');/);
+// Bootstrap is the sole module loader: lateral loaders are strictly forbidden.
+assert.doesNotMatch(bridge, /require_once\s+\$dependency;|nvx_hubspot_secure_load_dependencies/,
+  'HubSpot module must not contain lateral dependency loader');
 assert.match(bridge, /\$marketing_consent = nvx_marketing_consent_granted\(\);/,
   'Secure HubSpot bridge must use the shared server authority');
 assert.doesNotMatch(bridge, /\$marketing_consent\s*=\s*'1' === nvx_hubspot_secure_post_value\( 'nvx_marketing_consent'/,
@@ -58,4 +61,4 @@ assert.ok(cookieFirst >= 0 && postedFallback > cookieFirst,
 assert.match(relay, /foreach\s*\(\s*nvx_lead_captured_meta_identity\(\s*true\s*\)[\s\S]*?as\s*\$key\s*=>\s*\$value\s*\)/);
 assert.doesNotMatch(relay, /nvx_meta_fbc|nvx_meta_fbp/);
 
-console.log('META_ATTRIBUTION_IDENTITY=PASS consent=single-server-owner fbclid=validated fbc=bounded fbp=real-only nojs=preserved');
+console.log('META_ATTRIBUTION_IDENTITY=PASS consent=server-api-fail-closed fbclid=validated fbc=bounded fbp=real-only nojs=preserved');

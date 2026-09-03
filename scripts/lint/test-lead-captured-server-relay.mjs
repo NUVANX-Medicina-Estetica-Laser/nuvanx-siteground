@@ -23,10 +23,10 @@ assert.ok(relayIndex >= 0, 'Lead-captured relay must be in bootstrap manifest');
 assert.ok(relayIndex > hubspotIndex, 'Lead-captured relay must load after the secure HubSpot bridge in manifest');
 assert.doesNotMatch(gtm, /require_once.*nvx-hubspot-secure-attribution/,
   'GTM integration must not laterally load HubSpot (bootstrap manifest owns this)');
-assert.doesNotMatch(gtm, /require_once.*nvx-lead-captured-relay/,
-  'GTM integration must not laterally load relay (bootstrap manifest owns this)');
-assert.match(bridge, /require_once (?:\$dependency|__DIR__ \. '\/nvx-marketing-consent\.php');/,
-  'Secure bridge must load the shared consent owner before any attribution filtering');
+assert.ok(hubspotIndex > bootstrap.indexOf("'inc/nvx-marketing-consent.php'"),
+  'Shared consent owner must load before HubSpot bridge in bootstrap manifest');
+assert.doesNotMatch(bridge, /require_once.*nvx-marketing-consent|\$dependency/,
+  'Secure bridge must not laterally load consent (bootstrap manifest owns this)');
 
 assert.match(relay, /add_filter\(\s*'http_response',\s*'nvx_lead_captured_on_http_response',\s*10,\s*3\s*\)/,
   'Relay must observe completed HTTP responses rather than browser events');

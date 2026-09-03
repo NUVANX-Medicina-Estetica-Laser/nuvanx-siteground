@@ -18,33 +18,6 @@ if ( ! defined( 'NVX_HUBSPOT_SECURE_MAX_BODY_BYTES' ) ) {
 	define( 'NVX_HUBSPOT_SECURE_MAX_BODY_BYTES', 65536 );
 }
 
-/**
- * Load the consent dependency inside the theme lifecycle.
- *
- * The module itself is still loaded by the existing canonical theme bootstrap.
- * Dependency ownership can be moved completely to the bootstrap in a separate
- * lifecycle refactor once the current executable contracts are updated.
- */
-if ( ! function_exists( 'nvx_hubspot_secure_load_dependencies' ) ) {
-	function nvx_hubspot_secure_load_dependencies(): void {
-		if ( function_exists( 'nvx_marketing_consent_granted' ) ) {
-			return;
-		}
-
-		$dependency = __DIR__ . '/nvx-marketing-consent.php';
-
-		if ( ! is_readable( $dependency ) ) {
-			error_log( 'NVX_HUBSPOT_SECURE=FAILURE reason=consent_dependency_missing' );
-			return;
-		}
-
-		require_once $dependency;
-	}
-}
-
-if ( function_exists( 'has_action' ) && false === has_action( 'after_setup_theme', 'nvx_hubspot_secure_load_dependencies' ) ) {
-	add_action( 'after_setup_theme', 'nvx_hubspot_secure_load_dependencies', 1 );
-}
 
 /**
  * Emit bounded operational telemetry.

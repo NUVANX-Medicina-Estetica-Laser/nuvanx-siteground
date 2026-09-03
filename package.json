@@ -23,7 +23,7 @@
     "lint:tariff-ssot": "php scripts/lint/test-tariff-ssot-runtime.php && php scripts/lint/test-tariff-schema-nested-fail-closed.php",
     "lint:clinics-hub-equipment": "node scripts/lint/test-clinics-hub-equipment-contract.mjs",
     "lint:css-ownership": "node scripts/lint/test-css-ownership-contract.mjs",
-    "lint:integrations": "node scripts/lint/test-conversion-ownership-contract.mjs && node scripts/lint/test-integration-config-fail-closed.mjs",
+    "lint:integrations": "node scripts/lint/test-conversion-ownership-contract.mjs && node scripts/lint/test-integration-config-fail-closed.mjs && node scripts/lint/test-php-integrations-transport-ownership.mjs",
     "lint:performance-gate": "node scripts/lint/test-performance-regression-policy.mjs",
     "lint:php-inventory": "node scripts/lint/test-php-repository-inventory.mjs",
     "lint:wpcs": "cd wp-content/themes/nuvanx-medical && export COMPOSER_VENDOR_DIR=\"${RUNNER_TEMP:-/tmp}/nvx-php-vendor\" && composer install --no-interaction --no-progress --prefer-dist && \"$COMPOSER_VENDOR_DIR/bin/phpcs\" --standard=phpcs.xml.dist .",
