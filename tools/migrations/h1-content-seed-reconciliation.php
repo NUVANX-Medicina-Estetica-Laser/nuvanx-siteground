@@ -236,14 +236,45 @@ function nvx_h1_build_plan(): array {
 	return $plan;
 }
 
-/** Persist one meta value and verify the effective value, including no-op writes. */
+/**
+ * Persist one meta value and verify both durable storage and the runtime view.
+ *
+ * The H1 plan is built before the legacy core executes in a child WP-CLI
+ * process. A successful write therefore must not be accepted from an object
+ * cache observation alone. The database is the transaction authority; caches
+ * are invalidated before the final WordPress API verification.
+ */
 function nvx_h1_set_meta_verified( int $post_id, string $meta_key, string $value ): void {
+	global $wpdb;
+
 	$current = (string) get_post_meta( $post_id, $meta_key, true );
 	if ( $value !== $current ) {
 		update_post_meta( $post_id, $meta_key, $value );
 	}
+
+	wp_cache_delete( $post_id, 'post_meta' );
+	clean_post_cache( $post_id );
+
+	$stored_values = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s ORDER BY meta_id ASC",
+			$post_id,
+			$meta_key
+		)
+	);
+	if ( ! is_array( $stored_values ) || array() === $stored_values ) {
+		throw new RuntimeException( 'post_meta_durable_value_missing:' . sanitize_key( $meta_key ) );
+	}
+	foreach ( $stored_values as $stored_value ) {
+		if ( $value !== (string) maybe_unserialize( $stored_value ) ) {
+			throw new RuntimeException( 'post_meta_durable_verification_failed:' . sanitize_key( $meta_key ) );
+		}
+	}
+
+	wp_cache_delete( $post_id, 'post_meta' );
+	clean_post_cache( $post_id );
 	if ( $value !== (string) get_post_meta( $post_id, $meta_key, true ) ) {
-		throw new RuntimeException( 'post_meta_verification_failed:' . sanitize_key( $meta_key ) );
+		throw new RuntimeException( 'post_meta_runtime_verification_failed:' . sanitize_key( $meta_key ) );
 	}
 }
 

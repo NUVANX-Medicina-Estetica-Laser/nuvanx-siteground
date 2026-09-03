@@ -77,6 +77,16 @@ assert.doesNotMatch(
 assert.match(core, /outer H1\s+\/\/ reconciliation transaction|outer H1[\s\S]{0,120}reconciliation transaction/,
   'Legacy core must document the canonical H1 metadata owner');
 
+// H1 metadata verification is transaction-aware: durable wp_postmeta state is
+// authoritative, while the WordPress API view is checked only after targeted
+// cache invalidation. This distinguishes a failed write from a stale cache read.
+assert.match(helper, /\$wpdb->postmeta/, 'H1 metadata verification must inspect durable postmeta storage');
+assert.match(helper, /wp_cache_delete\s*\(\s*\$post_id\s*,\s*'post_meta'\s*\)/,
+  'H1 metadata verification must invalidate the post-meta cache');
+assert.match(helper, /post_meta_durable_value_missing/);
+assert.match(helper, /post_meta_durable_verification_failed/);
+assert.match(helper, /post_meta_runtime_verification_failed/);
+
 // Bridal partial provenance is repairable only in two exact, bounded states:
 // stale legacy meta without marker, or exact legacy marker with an empty meta.
 // A conflicting non-empty key must remain fail-closed and dry-run must not write.
@@ -103,4 +113,4 @@ assert.match(helper, /get_post_meta\s*\(/);
 assert.match(helper, /wp_insert_post\s*\(/);
 assert.match(helper, /wp_update_post\s*\(/);
 
-console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single bridal_partial_provenance=bounded_fail_closed approvals=preserved');
+console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single meta_verification=durable+runtime bridal_partial_provenance=bounded_fail_closed approvals=preserved');
