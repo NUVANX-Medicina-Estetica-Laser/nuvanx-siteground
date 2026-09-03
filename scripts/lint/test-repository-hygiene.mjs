@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 
 const repoRoot = process.cwd();
 const themeRoot = 'wp-content/themes/nuvanx-medical/';
+const hygieneOwner = 'scripts/lint/test-repository-hygiene.mjs';
 const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
   .split('\0')
   .filter(Boolean)
@@ -54,45 +55,35 @@ const forbiddenOneShotNames = tracked.filter((file) =>
   && !file.startsWith('scripts/lint/')
   && !file.startsWith('scripts/ci/')
   && !file.startsWith('scripts/staging2/')
-  && !file.startsWith('scripts/production/')
+  && !file.startsWith('scripts/production/'),
 );
 for (const file of forbiddenOneShotNames) {
   fail('UNOWNED_ONE_SHOT_SURFACE', file);
 }
 
-function isIgnoredGeneratedPath(ref) {
-  try {
-    execFileSync('git', ['check-ignore', '-q', '--', ref], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
+// Workflows contain both executable inputs and runtime outputs. Only executable
+// source references are repository-owned inputs. JSON/CSS artifacts, credentials,
+// evidence files and remote deployment stamps are intentionally outside this gate.
+const executableRefPattern = /(?:^|[\s"'=(:])((?:scripts|tools|lib|wp-content)\/[A-Za-z0-9_./@-]+\.(?:mjs|js|cjs|php|sh|py))(?:$|[\s"'):,])/g;
 
-const executableRefPattern = /(?:^|[\s"'=(:])((?:scripts|tools|lib|wp-content)\/[A-Za-z0-9_./@-]+\.(?:mjs|js|cjs|php|sh|py|json|css))(?:$|[\s"'):,])/g;
-
-function assertLiteralRefs(owner, source) {
+function assertExecutableRefs(owner, source) {
   executableRefPattern.lastIndex = 0;
   for (const match of source.matchAll(executableRefPattern)) {
     const ref = match[1].replace(/^\.\//, '');
-    if (
-      !trackedSet.has(ref)
-      && !fs.existsSync(path.join(repoRoot, ref))
-      && !isIgnoredGeneratedPath(ref)
-    ) {
-      fail('BROKEN_LOCAL_REFERENCE', `${owner} -> ${ref}`);
+    if (!trackedSet.has(ref) && !fs.existsSync(path.join(repoRoot, ref))) {
+      fail('BROKEN_EXECUTABLE_REFERENCE', `${owner} -> ${ref}`);
     }
   }
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 for (const [name, command] of Object.entries(packageJson.scripts || {})) {
-  assertLiteralRefs(`package.json#${name}`, String(command));
+  assertExecutableRefs(`package.json#${name}`, String(command));
 }
 
 const workflowFiles = tracked.filter((file) => /^\.github\/workflows\/.*\.ya?ml$/i.test(file));
 for (const workflow of workflowFiles) {
-  assertLiteralRefs(workflow, fs.readFileSync(path.join(repoRoot, workflow), 'utf8'));
+  assertExecutableRefs(workflow, fs.readFileSync(path.join(repoRoot, workflow), 'utf8'));
 }
 
 const bootstrapPath = `${themeRoot}inc/nvx-theme-bootstrap.php`;
@@ -125,31 +116,93 @@ const phpFiles = tracked.filter((file) => file.endsWith('.php'));
 const includeCheckedPhpFiles = phpFiles.filter((file) =>
   file.startsWith(themeRoot) || file.startsWith('tools/migrations/'),
 );
+
+// token_get_all() is the syntax boundary for PHP includes. Starting only from
+// T_REQUIRE/T_REQUIRE_ONCE/T_INCLUDE/T_INCLUDE_ONCE means quoted assertions,
+// comments and fixture strings cannot masquerade as executable includes. Each
+// token expression is collected until its semicolon, so multiline formatting
+// and multiple includes on one physical line are both covered.
+const phpTokenizer = String.raw`
+$files = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
+$out = [];
+$include_tokens = [T_REQUIRE, T_REQUIRE_ONCE, T_INCLUDE, T_INCLUDE_ONCE];
+foreach ($files as $file) {
+    $source = file_get_contents($file);
+    if ($source === false) {
+        throw new RuntimeException('Unable to read PHP source: ' . $file);
+    }
+    $tokens = token_get_all($source);
+    $count = count($tokens);
+    foreach ($tokens as $index => $token) {
+        if (!is_array($token) || !in_array($token[0], $include_tokens, true)) {
+            continue;
+        }
+        $expression = '';
+        for ($cursor = $index + 1; $cursor < $count; $cursor++) {
+            $next = $tokens[$cursor];
+            if (!is_array($next) && $next === ';') {
+                break;
+            }
+            if (is_array($next)) {
+                if (in_array($next[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+                    continue;
+                }
+                if ($next[0] === T_WHITESPACE) {
+                    $expression .= ' ';
+                    continue;
+                }
+                $expression .= $next[1];
+                continue;
+            }
+            $expression .= $next;
+        }
+        $out[$file][] = trim($expression);
+    }
+}
+echo json_encode($out, JSON_THROW_ON_ERROR);
+`;
+
+let phpIncludeExpressions = {};
+try {
+  const encoded = execFileSync('php', ['-r', phpTokenizer], {
+    cwd: repoRoot,
+    input: JSON.stringify(includeCheckedPhpFiles),
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  phpIncludeExpressions = JSON.parse(encoded || '{}');
+} catch (error) {
+  fail('PHP_TOKENIZER_FAILED', error instanceof Error ? error.message : String(error));
+}
+
+const dirnameIncludePattern = /dirname\s*\(\s*__DIR__(?:\s*,\s*(\d+))?\s*\)\s*\.\s*(['"])([^'"]+\.php)\2/;
+const directIncludePattern = /__DIR__\s*\.\s*(['"])([^'"]+\.php)\1/;
+
 for (const file of includeCheckedPhpFiles) {
-  const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
   const fileDirectory = path.posix.dirname(file);
-
-  for (const line of source.split(/\r?\n/)) {
-    if (!/\b(?:require|require_once|include|include_once)\b/.test(line)) continue;
-
-    const dirnameMatch = line.match(
-      /\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?dirname\s*\(\s*__DIR__(?:\s*,\s*(\d+))?\s*\)\s*\.\s*['"]([^'"]+\.php)['"]/
-    );
+  for (const expression of phpIncludeExpressions[file] || []) {
+    const dirnameMatch = expression.match(dirnameIncludePattern);
     if (dirnameMatch) {
       let baseDirectory = fileDirectory;
       const levels = dirnameMatch[1] ? Number.parseInt(dirnameMatch[1], 10) : 1;
       for (let level = 0; level < levels; level += 1) {
         baseDirectory = path.posix.dirname(baseDirectory);
       }
-      assertPhpInclude(file, baseDirectory, dirnameMatch[2]);
+      assertPhpInclude(file, baseDirectory, dirnameMatch[3]);
       continue;
     }
 
-    const directMatch = line.match(
-      /\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?__DIR__\s*\.\s*['"]([^'"]+\.php)['"]/
-    );
+    const directMatch = expression.match(directIncludePattern);
     if (directMatch) {
-      assertPhpInclude(file, fileDirectory, directMatch[1]);
+      assertPhpInclude(file, fileDirectory, directMatch[2]);
+      continue;
+    }
+
+    // Dynamic includes are intentionally outside the literal-path contract.
+    // If an expression contains both __DIR__ and a literal PHP suffix, however,
+    // it is repository-owned syntax we do not understand and must fail closed.
+    if (/__DIR__/.test(expression) && /['"][^'"]+\.php['"]/.test(expression)) {
+      fail('UNSUPPORTED_LITERAL_PHP_INCLUDE', `${file} -> ${expression}`);
     }
   }
 }
@@ -203,10 +256,9 @@ const migrations = tracked.filter((file) => /^tools\/migrations\/.*\.php$/i.test
 const orphanMigrations = [];
 const retainedLegacyMigrations = [];
 for (const migration of migrations) {
-  const basename = path.posix.basename(migration);
-  const referencedElsewhere = [...textCorpus].some(([owner, source]) => owner !== migration && source.includes(basename));
-  if (referencedElsewhere) continue;
-
+  // Retained legacy migrations have an explicit runtime compatibility contract.
+  // Validate that contract before generic textual ownership so this registry
+  // cannot accidentally count as the migration's own external owner.
   const retained = retainedMigrationGuards.get(migration);
   if (retained) {
     const ownerSource = textCorpus.get(retained.owner) || '';
@@ -217,6 +269,12 @@ for (const migration of migrations) {
     }
     continue;
   }
+
+  const basename = path.posix.basename(migration);
+  const referencedElsewhere = [...textCorpus].some(
+    ([owner, source]) => owner !== migration && owner !== hygieneOwner && source.includes(basename),
+  );
+  if (referencedElsewhere) continue;
 
   orphanMigrations.push(migration);
 }
@@ -262,5 +320,5 @@ console.log(
   + ` migrations=${migrations.length}`
   + ` retained_legacy_migrations=${retainedLegacyMigrations.length}`
   + ` external_runtime_dependencies=${new Set(externalRuntimeOwners).size}`
-  + ` zero_byte=0 root_code=0 residue=0 broken_refs=0 orphan_theme_modules=0`,
+  + ` zero_byte=0 root_code=0 residue=0 broken_exec_refs=0 orphan_theme_modules=0`,
 );
