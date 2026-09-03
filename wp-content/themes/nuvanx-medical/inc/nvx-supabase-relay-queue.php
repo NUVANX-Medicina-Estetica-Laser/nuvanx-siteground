@@ -318,7 +318,12 @@ if ( ! function_exists( 'nvx_supabase_relay_existing_item' ) ) {
 }
 
 /**
- * Retire non-canonical rows only while the caller still owns the exact claim.
+ * Retire non-canonical rows under the exact claim-row lock.
+ *
+ * In production the claim option is SELECT ... FOR UPDATE before enumeration,
+ * so ownership cannot transfer between the per-candidate check and deletion.
+ * If the caller already owns a transaction (terminal lifecycle), this function
+ * reuses it and never commits the caller's transaction.
  *
  * @return bool True when cleanup completed under uninterrupted ownership.
  */
@@ -326,12 +331,48 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_retire_duplicate_rows' ) ) {
 	function nvx_supabase_relay_queue_retire_duplicate_rows( int $canonical_post_id, string $dedupe_key, string $expected_claim = '' ): bool {
 		$canonical_post_id = absint( $canonical_post_id );
 		$claim_key         = nvx_supabase_relay_queue_claim_key( $dedupe_key );
-		if ( '' === $expected_claim ) {
-			$expected_claim = nvx_supabase_relay_queue_fresh_option( $claim_key );
+		global $wpdb;
+
+		$has_database_fence = isset( $wpdb )
+			&& method_exists( $wpdb, 'query' )
+			&& method_exists( $wpdb, 'prepare' )
+			&& method_exists( $wpdb, 'get_var' )
+			&& isset( $wpdb->options );
+		$started_transaction = false;
+
+		if ( $has_database_fence ) {
+			$options_table  = (string) $wpdb->options;
+			$in_transaction = 1 === absint( $wpdb->get_var( 'SELECT @@in_transaction' ) );
+			if ( ! $in_transaction ) {
+				if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+					return false;
+				}
+				$started_transaction = true;
+			}
+			$locked_claim = (string) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT option_value FROM {$options_table} WHERE option_name = %s FOR UPDATE",
+					$claim_key
+				)
+			);
+			if ( '' === $expected_claim ) {
+				$expected_claim = $locked_claim;
+			}
+			if ( '' === $expected_claim || $expected_claim !== $locked_claim ) {
+				if ( $started_transaction ) {
+					$wpdb->query( 'ROLLBACK' );
+				}
+				return false;
+			}
+		} else {
+			if ( '' === $expected_claim ) {
+				$expected_claim = nvx_supabase_relay_queue_fresh_option( $claim_key );
+			}
+			if ( '' === $expected_claim || $expected_claim !== nvx_supabase_relay_queue_fresh_option( $claim_key ) ) {
+				return false;
+			}
 		}
-		if ( '' === $expected_claim || $expected_claim !== nvx_supabase_relay_queue_fresh_option( $claim_key ) ) {
-			return false;
-		}
+
 		$ids = get_posts(
 			array(
 				'post_type'              => NVX_SUPABASE_RELAY_QUEUE_CPT,
@@ -347,15 +388,31 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_retire_duplicate_rows' ) ) {
 			)
 		);
 		foreach ( $ids as $candidate_id ) {
-			if ( $expected_claim !== nvx_supabase_relay_queue_fresh_option( $claim_key ) ) {
+			if ( ! $has_database_fence && $expected_claim !== nvx_supabase_relay_queue_fresh_option( $claim_key ) ) {
 				return false;
 			}
 			$candidate_id = absint( $candidate_id );
 			if ( $candidate_id > 0 && $candidate_id !== $canonical_post_id ) {
-				wp_delete_post( $candidate_id, true );
+				if ( false === wp_delete_post( $candidate_id, true ) ) {
+					if ( $started_transaction ) {
+						$wpdb->query( 'ROLLBACK' );
+					}
+					return false;
+				}
 			}
 		}
-		return $expected_claim === nvx_supabase_relay_queue_fresh_option( $claim_key );
+
+		if ( $started_transaction ) {
+			if ( false === $wpdb->query( 'COMMIT' ) ) {
+				$wpdb->query( 'ROLLBACK' );
+				return false;
+			}
+			if ( function_exists( 'wp_cache_delete' ) ) {
+				wp_cache_delete( $claim_key, 'options' );
+			}
+			return true;
+		}
+		return $has_database_fence || $expected_claim === nvx_supabase_relay_queue_fresh_option( $claim_key );
 	}
 }
 
@@ -696,7 +753,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_acquire_publication_fence' ) )
 		if ( ctype_digit( $current ) ) {
 			$current_post_id = absint( $current );
 			if ( nvx_supabase_relay_queue_is_valid_pending_item( $current_post_id, $dedupe_key ) || nvx_supabase_relay_queue_is_valid_prepared_item( $current_post_id, $dedupe_key ) ) {
-				wp_delete_post( $post_id, true );
+				nvx_supabase_relay_queue_retire_duplicate_rows( $current_post_id, $dedupe_key, $current );
 				return false;
 			}
 			$acquired = nvx_supabase_relay_compare_and_swap_option( $claim_key, $current, $expected );
@@ -758,6 +815,78 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_set_next_attempt_monotonic' ) 
 			}
 		}
 		return false;
+	}
+}
+
+/** Recover a prepared publication that never received its final due marker. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' ) ) {
+	function nvx_supabase_relay_queue_recover_prepared_without_due( int $post_id ): bool {
+		$post_id = absint( $post_id );
+		$post    = get_post( $post_id );
+		if ( ! $post instanceof WP_Post || NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS !== $post->post_status ) {
+			return false;
+		}
+		if ( '' !== (string) get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) ) {
+			return false;
+		}
+
+		$dedupe_key    = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		$endpoint      = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
+		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
+		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
+			nvx_supabase_relay_queue_mark_dead( $post_id, $endpoint, 0, 'invalid_dedupe_metadata' );
+			return false;
+		}
+
+		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
+		$current   = nvx_supabase_relay_queue_fresh_option( $claim_key );
+		if ( ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
+			if ( '' !== $publish_claim && $publish_claim === $current && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
+				return false;
+			}
+			nvx_supabase_relay_queue_mark_dead( $post_id, $endpoint, 0, 'publication_incomplete' );
+			return false;
+		}
+
+		if ( '' !== $publish_claim && $publish_claim === $current && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
+			return false;
+		}
+		if ( ! nvx_supabase_relay_queue_acquire_publication_fence( $post_id, $dedupe_key ) ) {
+			return false;
+		}
+		$due = (string) nvx_supabase_relay_time();
+		if ( add_post_meta( $post_id, '_nvx_relay_next_attempt', $due, true ) ) {
+			return true;
+		}
+		$current_due = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
+		return $current_due > 0 || nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, absint( $due ) );
+	}
+}
+
+/** Discover prepared rows hidden from the normal due query and recover them. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_recover_invisible_prepared' ) ) {
+	function nvx_supabase_relay_queue_recover_invisible_prepared( int $limit ): void {
+		$limit = max( 1, min( $limit, (int) NVX_SUPABASE_RELAY_QUEUE_BATCH ) );
+		$query = new WP_Query(
+			array(
+				'post_type'              => NVX_SUPABASE_RELAY_QUEUE_CPT,
+				'post_status'            => array( NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ),
+				'posts_per_page'         => $limit,
+				'orderby'                => 'ID',
+				'order'                  => 'ASC',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => true,
+				'update_post_term_cache' => false,
+				'meta_query'             => array(
+					array( 'key' => '_nvx_relay_next_attempt', 'compare' => 'NOT EXISTS' ),
+				),
+			)
+		);
+		foreach ( $query->posts as $post ) {
+			if ( $post instanceof WP_Post ) {
+				nvx_supabase_relay_queue_recover_prepared_without_due( absint( $post->ID ) );
+			}
+		}
 	}
 }
 
@@ -1327,6 +1456,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 			return;
 		}
 		try {
+			nvx_supabase_relay_queue_recover_invisible_prepared( $limit );
 			$now   = time();
 			$query = new WP_Query(
 				array(
