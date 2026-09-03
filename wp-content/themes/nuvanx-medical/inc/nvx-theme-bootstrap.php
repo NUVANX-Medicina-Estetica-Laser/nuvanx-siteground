@@ -32,6 +32,7 @@ function nvx_theme_bootstrap_manifest(): array {
 		// Infrastructure and request-independent governance.
 		'inc/nvx-page-registry.php',
 		'inc/nvx-business-config.php',
+		'inc/nvx-clinic-identity-governance.php',
 		'inc/nvx-clinical-governance.php',
 		'inc/nvx-environment-flags.php',
 		'inc/nvx-meta-browser-governance.php',
