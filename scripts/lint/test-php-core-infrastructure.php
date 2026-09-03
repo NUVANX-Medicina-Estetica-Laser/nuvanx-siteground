@@ -18,6 +18,7 @@ $root = dirname( __DIR__, 2 );
 $retired = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-retired-strategy-redirects.php' );
 $hygiene = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-page-hygiene.php' );
 $request = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-theme-request.php' );
+$seo = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-seo-metadata.php' );
 $bootstrap = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php' );
 
 nvx_block9_assert( false === strpos( $retired, '$_SERVER' ), 'RETIRED_REDIRECTS_NO_LATE_SERVER_READS' );
@@ -26,6 +27,10 @@ nvx_block9_assert( false !== strpos( $request, "'query_args'" ), 'REQUEST_CONTEX
 nvx_block9_assert( false === strpos( $hygiene, '$_SERVER' ), 'PAGE_HYGIENE_NO_LATE_SERVER_READS' );
 nvx_block9_assert( false !== strpos( $hygiene, 'nvx_theme_request_context()' ), 'PAGE_HYGIENE_USES_IMMUTABLE_CONTEXT' );
 nvx_block9_assert( false !== strpos( $hygiene, "['query_args']" ), 'PAGE_HYGIENE_USES_CONTEXT_QUERY_ARGS' );
+nvx_block9_assert( false === strpos( $seo, '$_SERVER' ), 'SEO_NO_PARALLEL_SERVER_AUTHORITY' );
+nvx_block9_assert( false !== strpos( $seo, 'nvx_theme_request_context()' ), 'SEO_USES_IMMUTABLE_REQUEST_CONTEXT' );
+nvx_block9_assert( false !== strpos( $seo, "['is_production']" ), 'SEO_USES_TRUSTED_ENVIRONMENT_CLASSIFICATION' );
+nvx_block9_assert( false !== strpos( $seo, "['query_args']" ), 'SEO_ROUTE_ALIAS_USES_CONTEXT_QUERY_ARGS' );
 
 $core = array(
 	'nvx-page-registry.php',
@@ -59,4 +64,4 @@ $sorted = $positions;
 sort( $sorted, SORT_NUMERIC );
 nvx_block9_assert( $positions === $sorted, 'CORE_MANIFEST_ORDER_STABLE' );
 
-echo 'PHP_CORE_INFRASTRUCTURE=PASS modules=' . count( $core ) . ' retired_redirects=immutable page_hygiene=immutable' . PHP_EOL;
+echo 'PHP_CORE_INFRASTRUCTURE=PASS modules=' . count( $core ) . ' request_consumers=immutable' . PHP_EOL;
