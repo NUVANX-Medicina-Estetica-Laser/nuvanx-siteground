@@ -46,8 +46,8 @@ assert.match(googleAuth, /hash_equals\( \$expected, \$signature \)/,
 assert.match(googleAuth, /nvx_google_attribution_signing_credential\(\)/,
   'Signing must remain tied to a server-only credential');
 
-// Deferred lifecycle debt: visible until the final single-owner consolidation.
-assert.match(hubspot, /require_once \$dependency;/,
-  'Legacy HubSpot consent dependency loader remains recorded for consolidation');
+// Bootstrap is the sole module loader: lateral loaders are strictly forbidden.
+assert.doesNotMatch(hubspot, /require_once\s+\$dependency;|nvx_hubspot_secure_load_dependencies/,
+  'HubSpot module must not contain lateral dependency loader; bootstrap is sole module loader');
 
 console.log('PHP_INTEGRATIONS_TRANSPORT=PASS modules=8 consent=server-api-fail-closed signing=hmac ownership=ordered');
