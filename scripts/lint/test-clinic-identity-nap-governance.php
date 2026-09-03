@@ -57,6 +57,7 @@ $graph = array(
 		'subOrganization' => array(
 			array( '@id' => 'https://nuvanx.test/#chamberi' ),
 			array( '@id' => 'https://nuvanx.test/#goya' ),
+			array( '@id' => 'https://partner.test/#laboratory' ),
 		),
 		'department'      => array( '@id' => 'https://nuvanx.test/#goya' ),
 	),
@@ -77,24 +78,28 @@ $graph = array(
 $GLOBALS['nvx_test_clinic_path'] = '/unrelated-page/';
 $clean = nvx_clinic_identity_schema_graph( $graph );
 nvx_clinic_identity_test_assert( 1 === count( $clean ), 'UNRELATED_SCHEMA_REMOVES_BOTH_CLINICS' );
-nvx_clinic_identity_test_assert( ! isset( $clean[0]['subOrganization'], $clean[0]['department'] ), 'UNRELATED_SCHEMA_REMOVES_DANGLING_REFS' );
+nvx_clinic_identity_test_assert( 1 === count( $clean[0]['subOrganization'] ?? array() ), 'UNRELATED_SCHEMA_PRESERVES_NON_CLINIC_LIST_REF' );
+nvx_clinic_identity_test_assert( 'https://partner.test/#laboratory' === ( $clean[0]['subOrganization'][0]['@id'] ?? '' ), 'NON_CLINIC_LIST_REF_UNCHANGED' );
+nvx_clinic_identity_test_assert( ! isset( $clean[0]['department'] ), 'UNRELATED_SCHEMA_REMOVES_DISALLOWED_CLINIC_ASSOC_REF' );
 
 $GLOBALS['nvx_test_clinic_path'] = $chamberi_path;
 $chamberi = nvx_clinic_identity_schema_graph( $graph );
 nvx_clinic_identity_test_assert( 2 === count( $chamberi ), 'CHAMBERI_SCHEMA_SINGLE_BRANCH' );
 nvx_clinic_identity_test_assert( 'chamberi' === ( $chamberi[1]['branchCode'] ?? '' ), 'CHAMBERI_SCHEMA_CORRECT_BRANCH' );
-nvx_clinic_identity_test_assert( 1 === count( $chamberi[0]['subOrganization'] ?? array() ), 'CHAMBERI_SCHEMA_SINGLE_LIST_REF' );
+nvx_clinic_identity_test_assert( 2 === count( $chamberi[0]['subOrganization'] ?? array() ), 'CHAMBERI_SCHEMA_CLINIC_AND_NON_CLINIC_REFS' );
 nvx_clinic_identity_test_assert( ! isset( $chamberi[0]['department'] ), 'CHAMBERI_SCHEMA_REMOVES_SINGLE_GOYA_REF' );
 
 $GLOBALS['nvx_test_clinic_path'] = $goya_path;
 $goya = nvx_clinic_identity_schema_graph( $graph );
 nvx_clinic_identity_test_assert( 2 === count( $goya ), 'GOYA_SCHEMA_SINGLE_BRANCH' );
 nvx_clinic_identity_test_assert( 'goya' === ( $goya[1]['branchCode'] ?? '' ), 'GOYA_SCHEMA_CORRECT_BRANCH' );
+nvx_clinic_identity_test_assert( 2 === count( $goya[0]['subOrganization'] ?? array() ), 'GOYA_SCHEMA_CLINIC_AND_NON_CLINIC_REFS' );
 nvx_clinic_identity_test_assert( 'https://nuvanx.test/#goya' === ( $goya[0]['department']['@id'] ?? '' ), 'GOYA_SCHEMA_SINGLE_ASSOC_REF_PRESERVED' );
 
 $GLOBALS['nvx_test_clinic_path'] = rtrim( $chamberi_path, '/' ) . '/fake-child/';
 $nested = nvx_clinic_identity_schema_graph( $graph );
 nvx_clinic_identity_test_assert( 1 === count( $nested ), 'NESTED_SCHEMA_FAILS_CLOSED' );
+nvx_clinic_identity_test_assert( 1 === count( $nested[0]['subOrganization'] ?? array() ), 'NESTED_SCHEMA_PRESERVES_NON_CLINIC_REF' );
 
 $GLOBALS['nvx_test_clinic_path'] = '/clinicas-de-medicina-estetica-nuvanx/';
 $hub = nvx_clinic_identity_schema_graph( $graph );
@@ -107,17 +112,31 @@ nvx_clinic_identity_test_assert( 3 === count( $team ), 'TEAM_HUB_PRESERVES_BOTH_
 $GLOBALS['nvx_test_clinic_path'] = '/contacto/';
 $contact = nvx_clinic_identity_schema_graph( $graph );
 nvx_clinic_identity_test_assert( 3 === count( $contact ), 'CONTACTO_EXACT_PRESERVES_BOTH_BRANCHES' );
-nvx_clinic_identity_test_assert( 2 === count( $contact[0]['subOrganization'] ?? array() ), 'CONTACTO_PRESERVES_BOTH_LIST_REFS' );
+nvx_clinic_identity_test_assert( 3 === count( $contact[0]['subOrganization'] ?? array() ), 'CONTACTO_PRESERVES_ALL_ALLOWED_LIST_REFS' );
 nvx_clinic_identity_test_assert( 'https://nuvanx.test/#goya' === ( $contact[0]['department']['@id'] ?? '' ), 'CONTACTO_PRESERVES_ASSOC_REF' );
 
 $GLOBALS['nvx_test_clinic_path'] = '/foo/contacto/';
 $nested_contact = nvx_clinic_identity_schema_graph( $graph );
 nvx_clinic_identity_test_assert( 1 === count( $nested_contact ), 'CONTACTO_NESTED_FAILS_CLOSED' );
-nvx_clinic_identity_test_assert( ! isset( $nested_contact[0]['subOrganization'], $nested_contact[0]['department'] ), 'CONTACTO_NESTED_REMOVES_REFS' );
+nvx_clinic_identity_test_assert( 1 === count( $nested_contact[0]['subOrganization'] ?? array() ), 'CONTACTO_NESTED_PRESERVES_NON_CLINIC_REF' );
+nvx_clinic_identity_test_assert( ! isset( $nested_contact[0]['department'] ), 'CONTACTO_NESTED_REMOVES_CLINIC_REF' );
 
 $GLOBALS['nvx_test_clinic_path'] = '/contacto/extra/';
 $contact_child = nvx_clinic_identity_schema_graph( $graph );
 nvx_clinic_identity_test_assert( 1 === count( $contact_child ), 'CONTACTO_CHILD_FAILS_CLOSED' );
+
+$external_department_graph = array(
+	array(
+		'@type'      => 'Organization',
+		'@id'        => 'https://nuvanx.test/#organization',
+		'department' => array( '@id' => 'https://partner.test/#diagnostics' ),
+	),
+	$graph[1],
+	$graph[2],
+);
+$GLOBALS['nvx_test_clinic_path'] = '/unrelated-page/';
+$external_department = nvx_clinic_identity_schema_graph( $external_department_graph );
+nvx_clinic_identity_test_assert( 'https://partner.test/#diagnostics' === ( $external_department[0]['department']['@id'] ?? '' ), 'NON_CLINIC_ASSOC_REF_UNCHANGED' );
 
 $GLOBALS['nvx_test_clinic_path'] = '/';
 $GLOBALS['nvx_test_front']       = true;
@@ -145,4 +164,4 @@ nvx_clinic_identity_test_assert( 1 === substr_count( $routing_source, "add_filte
 nvx_clinic_identity_test_assert( false === strpos( $template_source, 'strpos( $current_slug' ), 'TEMPLATE_SLUG_INFERENCE_REMOVED' );
 nvx_clinic_identity_test_assert( false === strpos( $template_source, '$clinic_key   = \'chamberi\'' ), 'TEMPLATE_DEFAULT_CLINIC_REMOVED' );
 
-echo 'CLINIC_IDENTITY_NAP=PASS source=clinics-json exact=2 nested=blocked substring=blocked contacto=exact-only template_owner=single schema=final_fence refs=list+associative hubs=bounded' . PHP_EOL;
+echo 'CLINIC_IDENTITY_NAP=PASS source=clinics-json exact=2 nested=blocked substring=blocked contacto=exact-only template_owner=single schema=final_fence refs=clinic-only-prune+non-clinic-preserved hubs=bounded' . PHP_EOL;
