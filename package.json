@@ -17,7 +17,7 @@
     "lint:integrations-runtime": "php scripts/lint/test-integrations-runtime-contract.php && php scripts/lint/test-php-presentation-forms-navigation.php && php scripts/lint/test-php-local-people-contact.php && php scripts/lint/test-php-core-infrastructure.php",
     "lint:runtime-seeds": "node scripts/lint/test-runtime-seed-boundary.mjs && php scripts/lint/test-h1-review-preservation.php",
     "lint:bootstrap": "node scripts/lint/test-theme-bootstrap-single-owner.mjs && php scripts/lint/test-theme-request-boundary.php",
-    "lint:outbox-concurrency": "php -d display_errors=1 scripts/lint/test-relay-concurrency-v2.php && php -d display_errors=1 scripts/lint/test-relay-terminal-ownership-v3.php",
+    "lint:outbox-concurrency": "php -d display_errors=1 scripts/lint/test-relay-concurrency-v2.php && php -d display_errors=1 scripts/lint/test-relay-terminal-ownership-v3.php && php -d display_errors=1 scripts/lint/test-relay-postmerge-races-v4.php",
     "lint:complianz": "node scripts/lint/test-complianz-a11y-sanitizer.mjs && node scripts/lint/test-complianz-policy-routing.mjs && php scripts/lint/test-complianz-policy-routing.php",
     "lint:schema": "node scripts/lint/test-schema-semantic-contract.mjs && php scripts/lint/test-robots-txt-governance.php && php scripts/lint/test-treatment-faqpage-contract.php && php scripts/lint/test-php-strategy-signature-aesthetic.php && php scripts/lint/test-php-treatment-landings-catalog.php && php scripts/lint/test-php-data-seo-schema-runtime.php",
     "lint:endolaser-approval": "node scripts/lint/test-endolaser-claim-approval.mjs",
