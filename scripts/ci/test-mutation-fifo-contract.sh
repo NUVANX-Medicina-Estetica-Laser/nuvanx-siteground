@@ -7,10 +7,8 @@ WORKFLOW="$ROOT/.github/workflows/staging.yml"
 [[ -s "$SUBJECT" ]]
 [[ -s "$WORKFLOW" ]]
 
-# Centralized test configuration
 readonly TEST_REPOSITORY="${TEST_REPOSITORY:-Arisofia/nuvanx-siteground}"
 readonly TEST_RUN_ID="${TEST_RUN_ID:-42}"
-readonly TEST_RUN_ATTEMPT="${TEST_RUN_ATTEMPT:-1}"
 readonly TEST_TOKEN="${TEST_TOKEN:-test-token}"
 
 TMP="$(mktemp -d)"
@@ -46,8 +44,12 @@ if [[ "${1:-}" == --paginate ]]; then
     pass)
       exit 0
       ;;
-    blocked|zombie|jobs_api_fail)
+    blocked|aggregate_gap)
       printf '%s\t%s\t%s\t%s\t%s\n' '41' 'in_progress' 'push' '.github/workflows/staging.yml' '0123456789abcdef0123456789abcdef01234567'
+      exit 0
+      ;;
+    nonmutation)
+      printf '%s\t%s\t%s\t%s\t%s\n' '41' 'in_progress' 'pull_request' '.github/workflows/staging.yml' '0123456789abcdef0123456789abcdef01234567'
       exit 0
       ;;
     cancel_old)
@@ -60,7 +62,7 @@ if [[ "${1:-}" == --paginate ]]; then
       fail_flag="${TMP_DIR:-/tmp}/failed_once"
       if [[ ! -f "$fail_flag" ]]; then
         touch "$fail_flag"
-        echo "simulated 502 Bad Gateway" >&2
+        echo 'simulated 502 Bad Gateway' >&2
         exit 1
       fi
       exit 0
@@ -75,26 +77,18 @@ case "${1:-}" in
   */actions/runs/42)
     printf '%s\n' '{"path":".github/workflows/staging.yml","event":"push","status":"in_progress","run_attempt":1,"head_sha":"0123456789abcdef0123456789abcdef01234567","head_branch":"master"}'
     ;;
-  */actions/runs/41/jobs*)
-    case "${TEST_SCENARIO:-pass}" in
-      zombie)
-        printf '%s\n' '{"total_count":2,"jobs":[{"id":1,"status":"completed","conclusion":"success"},{"id":2,"status":"completed","conclusion":"cancelled"}]}'
-        ;;
-      jobs_api_fail)
-        echo 'simulated jobs endpoint failure' >&2
-        exit 1
-        ;;
-      *)
-        printf '%s\n' '{"total_count":1,"jobs":[{"id":1,"status":"in_progress","conclusion":null}]}'
-        ;;
-    esac
-    ;;
   */actions/runs/41)
     if [[ -f "${TMP_DIR:-/tmp}/cancelled_41" ]]; then
       printf '%s\n' '{"path":".github/workflows/staging.yml","event":"push","status":"completed","conclusion":"cancelled","run_attempt":1,"head_sha":"1111111111111111111111111111111111111111","head_branch":"master"}'
     else
       printf '%s\n' '{"path":".github/workflows/staging.yml","event":"push","status":"in_progress","run_attempt":1,"head_sha":"1111111111111111111111111111111111111111","head_branch":"master"}'
     fi
+    ;;
+  */actions/runs/*/jobs*)
+    # The FIFO must no longer use job materialization as lease authority. This
+    # fixture models the dangerous gap: all currently visible jobs are complete
+    # while the aggregate run remains in_progress and can create more jobs.
+    printf '%s\n' '{"total_count":2,"jobs":[{"id":1,"status":"completed","conclusion":"success"},{"id":2,"status":"completed","conclusion":"success"}]}'
     ;;
   */actions/workflows/staging.yml/runs*)
     branch_scenario="${TEST_BRANCH_SCENARIO:-none}"
@@ -133,19 +127,19 @@ common_env=(
 pass_log="$TMP/pass.log"
 env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 TEST_SCENARIO=pass bash "$SUBJECT" >"$pass_log" 2>&1
 grep -Fq 'MUTATION_FIFO=PASS' "$pass_log"
-grep -Fq 'attempt=1' "$pass_log"
+grep -Fq 'aggregate_status=authoritative' "$pass_log"
 
 # Case 2: Re-run rejection.
-after_rerun="$TMP/rerun.log"
+rerun_log="$TMP/rerun.log"
 set +e
-env "${common_env[@]}" GITHUB_RUN_ATTEMPT=2 TEST_SCENARIO=pass bash "$SUBJECT" >"$after_rerun" 2>&1
+env "${common_env[@]}" GITHUB_RUN_ATTEMPT=2 TEST_SCENARIO=pass bash "$SUBJECT" >"$rerun_log" 2>&1
 rerun_rc=$?
 set -e
 [[ "$rerun_rc" -eq 1 ]]
-grep -Fq 'reason=rerun_forbidden' "$after_rerun"
-grep -Fq 'action=start_new_run' "$after_rerun"
+grep -Fq 'reason=rerun_forbidden' "$rerun_log"
+grep -Fq 'action=start_new_run' "$rerun_log"
 
-# Case 3: A run with at least one active job remains a blocker.
+# Case 3: An older active canonical mutation remains a blocker.
 blocked_log="$TMP/blocked.log"
 set +e
 env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 MUTATION_WAIT_MAX_SECONDS=1 TEST_SCENARIO=blocked bash "$SUBJECT" >"$blocked_log" 2>&1
@@ -172,7 +166,8 @@ set -e
 grep -Fq 'MUTATION_FIFO=SUPERSEDED' "$superseded_log"
 grep -Fq 'mutation=forbidden' "$superseded_log"
 
-# Case 6: Latest staging push cancels only an older active staging push, then waits for completion.
+# Case 6: Latest staging push cancels only an older active staging push and then
+# waits until the aggregate no longer appears active.
 cancel_log="$TMP/cancel.log"
 rm -f "$TMP/cancelled_41"
 env "${common_env[@]}" \
@@ -186,24 +181,26 @@ env "${common_env[@]}" \
 grep -Fq 'MUTATION_FIFO=CANCEL_SUPERSEDED role=staging run_id=41' "$cancel_log"
 grep -Fq 'MUTATION_FIFO=PASS role=staging run_id=42' "$cancel_log"
 
-# Case 7: A stale run aggregate with real jobs all completed is ignored without a historical-ID allowlist.
-zombie_log="$TMP/zombie.log"
-env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 TEST_SCENARIO=zombie bash "$SUBJECT" >"$zombie_log" 2>&1
-grep -Fq 'MUTATION_FIFO=IGNORE_ZOMBIE run_id=41 status=in_progress reason=all_jobs_completed' "$zombie_log"
-grep -Fq 'MUTATION_FIFO=PASS' "$zombie_log"
-! grep -Eq '32985831917|32985520449' "$SUBJECT"
-
-# Case 8: If the jobs endpoint cannot prove a blocker is a zombie, the FIFO fails closed within its timeout.
-jobs_fail_log="$TMP/jobs-api-fail.log"
+# Case 7: Critical regression — an in_progress aggregate MUST remain a blocker
+# even if all currently materialized jobs would report completed. We no longer
+# query the jobs endpoint or infer a zombie from a temporary job graph gap.
+gap_log="$TMP/aggregate-gap.log"
 set +e
-env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 MUTATION_WAIT_MAX_SECONDS=1 TEST_SCENARIO=jobs_api_fail bash "$SUBJECT" >"$jobs_fail_log" 2>&1
-jobs_fail_rc=$?
+env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 MUTATION_WAIT_MAX_SECONDS=1 TEST_SCENARIO=aggregate_gap bash "$SUBJECT" >"$gap_log" 2>&1
+gap_rc=$?
 set -e
-[[ "$jobs_fail_rc" -eq 1 ]]
-grep -Fq 'reason=blocker_jobs_query_failed run_id=41 retrying=true' "$jobs_fail_log"
-grep -Fq 'MUTATION_FIFO=FAIL reason=api_wait_timeout' "$jobs_fail_log"
+[[ "$gap_rc" -eq 1 ]]
+grep -Fq 'MUTATION_FIFO_BLOCKER run_id=41' "$gap_log"
+! grep -Fq 'MUTATION_FIFO=IGNORE_ZOMBIE' "$SUBJECT"
+! grep -Fq 'run_jobs_activity' "$SUBJECT"
 
-echo 'MUTATION_FIFO_CONTRACT_TEST=PASS cases=8 zombie=jobs_proven cancel=fail_closed'
+# Case 8: A non-mutating pull_request run never occupies the mutation FIFO.
+nonmutation_log="$TMP/nonmutation.log"
+env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 TEST_SCENARIO=nonmutation bash "$SUBJECT" >"$nonmutation_log" 2>&1
+grep -Fq 'MUTATION_FIFO=PASS' "$nonmutation_log"
+! grep -Fq 'MUTATION_FIFO_BLOCKER run_id=41' "$nonmutation_log"
+
+echo 'MUTATION_FIFO_CONTRACT_TEST=PASS cases=8 aggregate_status=authoritative job_materialization_gap=blocked api=fail_closed'
 
 # A cancellation after a rollback snapshot and mutation arm must restore Staging
 # for both master deployments and labeled PR previews. `failure()` alone does

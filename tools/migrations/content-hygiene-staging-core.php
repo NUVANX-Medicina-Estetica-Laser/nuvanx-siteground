@@ -90,6 +90,8 @@ foreach ( $seed_pages as $page ) {
     $pid = (int) $page['ID'];
 
     // 1. Resolve treatment key: postmeta first, data-attribute fallback.
+    // This legacy core may read H1 provenance but never writes it; the outer
+    // h1-content-seed reconciler is the sole metadata owner.
     $key = (string) get_post_meta( $pid, '_nvx_aesthetic_treatment_key', true );
 
     if ( '' === $key ) {
@@ -130,7 +132,10 @@ foreach ( $seed_pages as $page ) {
         continue;
     }
 
-    // 3. Key is valid → normalize seed marker, excerpt, meta, review status.
+    // 3. Key is valid → normalize only the legacy seed marker and excerpt.
+    // `_nvx_aesthetic_treatment_key` and `_nvx_medical_review_status` are
+    // intentionally not written here. Their single owner is the outer H1
+    // reconciliation transaction, avoiding cross-process meta races.
     printf(
         "[NORMALIZE%s] ID %d /%s/ — key \"%s\"\n",
         $dry_run ? '-DRY' : '   ',
@@ -166,9 +171,6 @@ foreach ( $seed_pages as $page ) {
             $blocks_fail++;
             continue;
         }
-
-        update_post_meta( $pid, '_nvx_aesthetic_treatment_key', $key );
-        update_post_meta( $pid, '_nvx_medical_review_status', 'pending' );
     }
 
     $blocks_ok++;
