@@ -66,10 +66,13 @@ for (const file of forbiddenOneShotNames) {
 // evidence files and remote deployment stamps are intentionally outside this gate.
 const executableRefPattern = /(?:^|[\s"'=(:])((?:scripts|tools|lib|wp-content)\/[A-Za-z0-9_./@-]+\.(?:mjs|js|cjs|php|sh|py))(?:$|[\s"'):,])/g;
 
-function assertExecutableRefs(owner, source) {
+function executableRefs(source) {
   executableRefPattern.lastIndex = 0;
-  for (const match of source.matchAll(executableRefPattern)) {
-    const ref = match[1].replace(/^\.\//, '');
+  return [...source.matchAll(executableRefPattern)].map((match) => match[1].replace(/^\.\//, ''));
+}
+
+function assertExecutableRefs(owner, source) {
+  for (const ref of executableRefs(source)) {
     if (!trackedSet.has(ref) && !fs.existsSync(path.join(repoRoot, ref))) {
       fail('BROKEN_EXECUTABLE_REFERENCE', `${owner} -> ${ref}`);
     }
@@ -89,8 +92,10 @@ for (const workflow of workflowFiles) {
 const bootstrapPath = `${themeRoot}inc/nvx-theme-bootstrap.php`;
 assert.ok(trackedSet.has(bootstrapPath), 'Canonical theme bootstrap must be tracked');
 const bootstrapSource = fs.readFileSync(path.join(repoRoot, bootstrapPath), 'utf8');
+const bootstrapModules = new Set();
 for (const match of bootstrapSource.matchAll(/['"](inc\/[A-Za-z0-9_./-]+\.php)['"]/g)) {
   const modulePath = `${themeRoot}${match[1]}`;
+  bootstrapModules.add(modulePath);
   if (!trackedSet.has(modulePath)) {
     fail('BOOTSTRAP_MODULE_MISSING', modulePath);
   }
@@ -98,11 +103,15 @@ for (const match of bootstrapSource.matchAll(/['"](inc\/[A-Za-z0-9_./-]+\.php)['
 
 const externalRuntimeIncludes = new Set(['wp-load.php']);
 const externalRuntimeOwners = [];
+const literalPhpEdges = [];
 
 function assertPhpInclude(file, baseDirectory, target) {
   const relativeTarget = target.replace(/^\/+/, '');
   const resolved = path.posix.normalize(path.posix.join(baseDirectory, relativeTarget));
-  if (trackedSet.has(resolved)) return;
+  if (trackedSet.has(resolved)) {
+    literalPhpEdges.push({ owner: file, target: resolved });
+    return;
+  }
 
   if (externalRuntimeIncludes.has(resolved) && file.startsWith('tools/migrations/')) {
     externalRuntimeOwners.push(`${file}->${resolved}`);
@@ -113,9 +122,7 @@ function assertPhpInclude(file, baseDirectory, target) {
 }
 
 const phpFiles = tracked.filter((file) => file.endsWith('.php'));
-const includeCheckedPhpFiles = phpFiles.filter((file) =>
-  file.startsWith(themeRoot) || file.startsWith('tools/migrations/'),
-);
+const includeCheckedPhpFiles = phpFiles;
 
 // token_get_all() is the syntax boundary for PHP includes. Starting only from
 // T_REQUIRE/T_REQUIRE_ONCE/T_INCLUDE/T_INCLUDE_ONCE means quoted assertions,
@@ -177,6 +184,7 @@ try {
 
 const dirnameIncludePattern = /dirname\s*\(\s*__DIR__(?:\s*,\s*(\d+))?\s*\)\s*\.\s*(['"])([^'"]+\.php)\2/;
 const directIncludePattern = /__DIR__\s*\.\s*(['"])([^'"]+\.php)\1/;
+const plainLiteralIncludePattern = /^\s*(['"])([^'"]+\.php)\1\s*$/;
 
 for (const file of includeCheckedPhpFiles) {
   const fileDirectory = path.posix.dirname(file);
@@ -195,6 +203,12 @@ for (const file of includeCheckedPhpFiles) {
     const directMatch = expression.match(directIncludePattern);
     if (directMatch) {
       assertPhpInclude(file, fileDirectory, directMatch[2]);
+      continue;
+    }
+
+    const plainLiteralMatch = expression.match(plainLiteralIncludePattern);
+    if (plainLiteralMatch) {
+      assertPhpInclude(file, fileDirectory, plainLiteralMatch[2]);
       continue;
     }
 
@@ -222,21 +236,27 @@ for (const file of textFiles) {
   }
 }
 
-// Every immediate theme/inc PHP module must be owned by another runtime PHP
-// file. Test-only references do not count as production ownership.
-const themeRuntimePhpFiles = phpFiles.filter((file) => file.startsWith(themeRoot));
-const themeRuntimeSources = new Map(
-  themeRuntimePhpFiles.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]),
+// Every immediate theme/inc PHP module must have an executable WordPress load
+// edge: canonical bootstrap manifest or a literal include from runtime PHP.
+// Tests, phpstan bootstrap, compiler tools, comments and inert strings do not
+// count as production ownership.
+const themeRuntimePhpFiles = phpFiles.filter((file) =>
+  file.startsWith(themeRoot)
+  && !file.startsWith(`${themeRoot}tests/`)
+  && !file.startsWith(`${themeRoot}tools/`),
 );
+const themeRuntimeOwnerSet = new Set(themeRuntimePhpFiles);
 const immediateThemeModules = themeRuntimePhpFiles.filter((file) =>
   new RegExp(`^${themeRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}inc/[^/]+\\.php$`).test(file),
 );
+const executableThemeModuleOwners = new Set(bootstrapModules);
+for (const edge of literalPhpEdges) {
+  if (themeRuntimeOwnerSet.has(edge.owner) && immediateThemeModules.includes(edge.target)) {
+    executableThemeModuleOwners.add(edge.target);
+  }
+}
 for (const modulePath of immediateThemeModules) {
-  const basename = path.posix.basename(modulePath);
-  const owned = [...themeRuntimeSources].some(
-    ([owner, source]) => owner !== modulePath && source.includes(basename),
-  );
-  if (!owned) {
+  if (!executableThemeModuleOwners.has(modulePath)) {
     fail('UNREFERENCED_THEME_MODULE', modulePath);
   }
 }
@@ -255,10 +275,12 @@ const retainedMigrationGuards = new Map([
 const migrations = tracked.filter((file) => /^tools\/migrations\/.*\.php$/i.test(file));
 const orphanMigrations = [];
 const retainedLegacyMigrations = [];
+const executableTextFiles = [...textCorpus].filter(([owner]) =>
+  owner !== hygieneOwner && !/\.(?:md|txt)$/i.test(owner),
+);
 for (const migration of migrations) {
-  // Retained legacy migrations have an explicit runtime compatibility contract.
-  // Validate that contract before generic textual ownership so this registry
-  // cannot accidentally count as the migration's own external owner.
+  // Retained one-time migrations must have an explicit live compatibility
+  // owner. The hygiene registry itself never counts as ownership.
   const retained = retainedMigrationGuards.get(migration);
   if (retained) {
     const ownerSource = textCorpus.get(retained.owner) || '';
@@ -271,15 +293,15 @@ for (const migration of migrations) {
   }
 
   const basename = path.posix.basename(migration);
-  const referencedElsewhere = [...textCorpus].some(
-    ([owner, source]) => owner !== migration && owner !== hygieneOwner && source.includes(basename),
+  const referencedByExecutableContract = executableTextFiles.some(
+    ([owner, source]) => owner !== migration && source.includes(basename),
   );
-  if (referencedElsewhere) continue;
-
-  orphanMigrations.push(migration);
+  if (!referencedByExecutableContract) {
+    orphanMigrations.push(migration);
+  }
 }
 if (orphanMigrations.length > 0) {
-  report.push(`MIGRATION_ORPHAN_CANDIDATES=${orphanMigrations.join(',')}`);
+  for (const migration of orphanMigrations) fail('ORPHAN_MIGRATION', migration);
 }
 if (retainedLegacyMigrations.length > 0) {
   report.push(`RETAINED_LEGACY_MIGRATIONS=${retainedLegacyMigrations.join(',')}`);
@@ -301,7 +323,7 @@ for (const file of tracked) {
   if (!pairIsExplicitlyOwned) variantCandidates.push(`${file}<=>${sibling}`);
 }
 if (variantCandidates.length > 0) {
-  report.push(`VARIANT_DUPLICATION_CANDIDATES=${variantCandidates.join(',')}`);
+  for (const pair of variantCandidates) fail('UNOWNED_VARIANT_DUPLICATION', pair);
 }
 
 for (const line of report) console.log(`${line}=REPORT`);
@@ -316,9 +338,10 @@ console.log(
   `REPOSITORY_HYGIENE=PASS tracked=${tracked.length}`
   + ` workflows=${workflowFiles.length}`
   + ` php=${phpFiles.length}`
+  + ` php_include_edges=${literalPhpEdges.length}`
   + ` theme_modules=${immediateThemeModules.length}`
   + ` migrations=${migrations.length}`
   + ` retained_legacy_migrations=${retainedLegacyMigrations.length}`
   + ` external_runtime_dependencies=${new Set(externalRuntimeOwners).size}`
-  + ` zero_byte=0 root_code=0 residue=0 broken_exec_refs=0 orphan_theme_modules=0`,
+  + ` zero_byte=0 root_code=0 residue=0 broken_exec_refs=0 orphan_theme_modules=0 orphan_migrations=0 unowned_variants=0`,
 );
