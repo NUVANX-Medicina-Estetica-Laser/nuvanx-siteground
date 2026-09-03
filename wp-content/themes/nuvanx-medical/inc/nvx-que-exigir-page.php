@@ -29,7 +29,11 @@ function nvx_content_is_que_exigir_page( string $content ): bool {
 		? nvx_schema_current_path( (int) get_queried_object_id() )
 		: '';
 
-	if ( false !== strpos( $path, '/que-exigir-antes-de-operarte/' ) ) {
+	if (
+		is_string( $path )
+		&& function_exists( 'nvx_schema_normalize_path' )
+		&& nvx_schema_normalize_path( $path ) === '/que-exigir-antes-de-operarte/'
+	) {
 		return true;
 	}
 
