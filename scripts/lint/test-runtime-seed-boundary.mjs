@@ -43,8 +43,8 @@ assert.match(orchestrator, /Ad-hoc\/manual executions default to dry-run/);
 // The outer orchestrator is the sole owner of the public `Status:` contract.
 // The child hygiene core historically prints `Status: MIGRATION_OK`; allowing
 // that line through made a later wrapper failure look successful to a grep gate.
-assert.doesNotMatch(orchestrator, /passthru\s*\(\s*\$core_command/,
-  'Nested core output must not bypass the wrapper status boundary');
+assert.doesNotMatch(orchestrator, /\b(?:passthru|system)\s*\(/,
+  'Nested core output must never use a direct-output command executor');
 assert.match(orchestrator, /exec\s*\(\s*\$core_command\s*\.\s*' 2>&1'\s*,\s*\$core_output\s*,\s*\$core_status\s*\)/,
   'Wrapper must capture child output and the real child exit status');
 assert.match(orchestrator, /str_starts_with\(\s*\$core_line,\s*'Status: '\s*\)/,
@@ -80,4 +80,4 @@ assert.match(helper, /get_post_meta\s*\(/);
 assert.match(helper, /wp_insert_post\s*\(/);
 assert.match(helper, /wp_update_post\s*\(/);
 
-console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced prevalidate_all=1 bridal_partial_provenance=bounded_fail_closed approvals=preserved');
+console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced direct_output=forbidden prevalidate_all=1 bridal_partial_provenance=bounded_fail_closed approvals=preserved');
