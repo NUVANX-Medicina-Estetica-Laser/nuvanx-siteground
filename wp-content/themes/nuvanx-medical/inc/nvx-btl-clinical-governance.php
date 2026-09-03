@@ -147,6 +147,10 @@ function nvx_btl_govern_rendered_content( string $content ): string {
 				1
 			) ?? $governed;
 		}
+
+		if ( false === strpos( $governed, 'data-nvx-btl-clinical-note="1"' ) ) {
+			$governed .= $notice_shell;
+		}
 	}
 
 	return $governed;
