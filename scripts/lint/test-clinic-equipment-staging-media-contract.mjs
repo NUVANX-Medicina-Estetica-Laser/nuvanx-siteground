@@ -27,6 +27,10 @@ const requireSource = (source, needle, reason) => {
 const forbidSource = (source, needle, reason) => {
   if (source.includes(needle)) failures.push(reason);
 };
+const requireCount = (source, needle, expected, reason) => {
+  const count = source.split(needle).length - 1;
+  if (count !== expected) failures.push(`${reason}_count_${count}_expected_${expected}`);
+};
 const requireOrder = (source, firstNeedle, secondNeedle, reason) => {
   const first = source.indexOf(firstNeedle);
   const second = source.indexOf(secondNeedle);
@@ -109,8 +113,6 @@ requireSource(migrationSource, 'copied equipment media failed image verification
 requireSource(migrationSource, '$media_copy_failures++;', 'staging_media_copy_failure_accounting');
 requireSource(migrationSource, 'if ( $media_copy_failures > 0 )', 'staging_media_parity_fail_closed');
 requireSource(migrationSource, 'Status: MIGRATION_FAIL', 'staging_media_migration_failure_exit');
-
-// P0.6 — hash parity gate: migration must use md5_file() not just filesize()
 requireSource(migrationSource, 'is_string( $source_hash ) && is_string( $dest_hash )', 'staging_media_required_destination_hash_guard');
 const postCopyVerification = segment(
   migrationSource,
@@ -120,15 +122,58 @@ const postCopyVerification = segment(
 );
 requireSource(postCopyVerification, '$copied_source_hash !== $copied_dest_hash', 'staging_media_post_copy_hash_guard');
 
-// P0.7 — regression gate: clinic-media-runtime must not contain the double-backslash
-// regex form !/^image\\//i which parses as (!/^image\\/) / i — ReferenceError: i is not defined.
-// The correct form is !/^image\//i (single escaped forward-slash, flag i on the literal).
 forbidSource(clinicMediaRuntimeSource, '!/^image\\\\//i', 'clinic_media_runtime_invalid_image_regex_double_backslash');
 requireSource(clinicMediaRuntimeSource, '!/^image\\//i', 'clinic_media_runtime_valid_image_regex_present');
+
+// Lazy-load acceptance must activate every image and distinguish candidate
+// failures from recognized infrastructure evidence for both timeout and error.
+requireSource(clinicMediaRuntimeSource, 'async function primeLazyImages(page, images)', 'clinic_media_runtime_lazy_activation_owner_missing');
+requireSource(clinicMediaRuntimeSource, 'await images.nth(index).scrollIntoViewIfNeeded();', 'clinic_media_runtime_per_image_scroll_missing');
+requireSource(clinicMediaRuntimeSource, 'async function readLoadedImage(image, includeResourceMetrics = false)', 'clinic_media_runtime_bounded_image_reader_missing');
+requireSource(clinicMediaRuntimeSource, "timer = setTimeout(() => settle('timeout'), options.timeoutMs);", 'clinic_media_runtime_explicit_timeout_outcome_missing');
+requireSource(clinicMediaRuntimeSource, "const onLoad = () => settle('load');", 'clinic_media_runtime_explicit_load_outcome_missing');
+requireSource(clinicMediaRuntimeSource, "const onError = () => settle('error');", 'clinic_media_runtime_explicit_error_outcome_missing');
+requireSource(clinicMediaRuntimeSource, 'await primeLazyImages(page, equipmentImages);', 'clinic_media_runtime_equipment_per_image_activation_missing');
+requireSource(clinicMediaRuntimeSource, 'await primeLazyImages(page, galleryImages);', 'clinic_media_runtime_gallery_per_image_activation_missing');
+requireSource(clinicMediaRuntimeSource, 'async function imageLoadFailureHasTransientEvidence', 'clinic_media_runtime_failure_evidence_owner_missing');
+forbidSource(clinicMediaRuntimeSource, 'async function imageTimeoutHasTransientEvidence', 'clinic_media_runtime_timeout_only_evidence_owner_present');
+requireSource(clinicMediaRuntimeSource, "const probeUrl = image.currentSrc || image.src || '';", 'clinic_media_runtime_failure_probe_url_missing');
+requireSource(clinicMediaRuntimeSource, 'if (parsed.hostname !== expectedHost) return false;', 'clinic_media_runtime_failure_probe_host_guard_missing');
+requireSource(clinicMediaRuntimeSource, 'syntheticError: \'\'', 'clinic_media_runtime_success_probe_error_marker_missing');
+requireSource(clinicMediaRuntimeSource, 'status: 0,', 'clinic_media_runtime_probe_exception_not_separated');
+requireSource(clinicMediaRuntimeSource, "if (body.syntheticError !== 'AbortError') return false;", 'clinic_media_runtime_non_timeout_exception_not_fail_real');
+requireSource(clinicMediaRuntimeSource, 'reason=image_probe_timeout trigger=${outcome}', 'clinic_media_runtime_abort_timeout_not_evidence_bound');
+requireSource(clinicMediaRuntimeSource, 'reason=image_${outcome}_transport_evidence', 'clinic_media_runtime_http_transport_evidence_missing');
+requireCount(clinicMediaRuntimeSource, "if (image.outcome === 'timeout' || image.outcome === 'error')", 2, 'clinic_media_runtime_timeout_error_evidence_branches');
+requireSource(
+  clinicMediaRuntimeSource,
+  "imageLoadFailureHasTransientEvidence(page, image, route.path, viewport.key, 'equipment', index, image.outcome)",
+  'clinic_media_runtime_equipment_error_timeout_probe_missing'
+);
+requireSource(
+  clinicMediaRuntimeSource,
+  "imageLoadFailureHasTransientEvidence(page, image, clinic.path, viewport.key, 'gallery', index, image.outcome)",
+  'clinic_media_runtime_gallery_error_timeout_probe_missing'
+);
+requireSource(clinicMediaRuntimeSource, 'equipment_image_load_timeout:', 'clinic_media_runtime_unproven_equipment_timeout_fails_real');
+requireSource(clinicMediaRuntimeSource, 'gallery_image_load_timeout:', 'clinic_media_runtime_unproven_gallery_timeout_fails_real');
+requireSource(clinicMediaRuntimeSource, 'equipment_image_not_loaded:', 'clinic_media_runtime_unproven_equipment_error_fails_real');
+requireSource(clinicMediaRuntimeSource, 'gallery_image_not_loaded:', 'clinic_media_runtime_unproven_gallery_error_fails_real');
+forbidSource(clinicMediaRuntimeSource, "status: 503,\n        url: selectedUrl", 'clinic_media_runtime_synthetic_503_for_fetch_exception_present');
+forbidSource(
+  clinicMediaRuntimeSource,
+  "await section.scrollIntoViewIfNeeded();\n  await page.waitForTimeout(1200);",
+  'clinic_media_runtime_equipment_parent_sleep_present'
+);
+forbidSource(
+  clinicMediaRuntimeSource,
+  "const gallery = page.locator('.nvx-clinic-gallery');\n    await gallery.scrollIntoViewIfNeeded();\n    await page.waitForTimeout(1200);",
+  'clinic_media_runtime_gallery_parent_sleep_present'
+);
 
 if (failures.length > 0) {
   console.error(`CLINIC_EQUIPMENT_STAGING_MEDIA_CONTRACT=FAIL reasons=${failures.join(',')}`);
   process.exit(1);
 }
 
-console.log(`CLINIC_EQUIPMENT_STAGING_MEDIA_CONTRACT=PASS equipment=${equipmentPaths.length} sync=required_dynamic source=production_first destination=hash_and_size_checked image=verified fail_closed=1 renderer=local_readable_only regression_gate=clinic_media_regex`);
+console.log(`CLINIC_EQUIPMENT_STAGING_MEDIA_CONTRACT=PASS equipment=${equipmentPaths.length} sync=required_dynamic source=production_first destination=hash_and_size_checked image=verified fail_closed=1 renderer=local_readable_only regression_gate=clinic_media_regex+per_image_lazy_activation+evidence_classification`);
