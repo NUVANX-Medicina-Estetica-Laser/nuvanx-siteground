@@ -59,13 +59,26 @@ for (const file of forbiddenOneShotNames) {
   fail('UNOWNED_ONE_SHOT_SURFACE', file);
 }
 
+function isIgnoredGeneratedPath(ref) {
+  try {
+    execFileSync('git', ['check-ignore', '-q', '--', ref], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const executableRefPattern = /(?:^|[\s"'=(:])((?:scripts|tools|lib|wp-content)\/[A-Za-z0-9_./@-]+\.(?:mjs|js|cjs|php|sh|py|json|css))(?:$|[\s"'):,])/g;
 
 function assertLiteralRefs(owner, source) {
   executableRefPattern.lastIndex = 0;
   for (const match of source.matchAll(executableRefPattern)) {
     const ref = match[1].replace(/^\.\//, '');
-    if (!trackedSet.has(ref) && !fs.existsSync(path.join(repoRoot, ref))) {
+    if (
+      !trackedSet.has(ref)
+      && !fs.existsSync(path.join(repoRoot, ref))
+      && !isIgnoredGeneratedPath(ref)
+    ) {
       fail('BROKEN_LOCAL_REFERENCE', `${owner} -> ${ref}`);
     }
   }
@@ -91,15 +104,32 @@ for (const match of bootstrapSource.matchAll(/['"](inc\/[A-Za-z0-9_./-]+\.php)['
   }
 }
 
+function assertPhpInclude(file, baseDirectory, target) {
+  const relativeTarget = target.replace(/^\/+/, '');
+  const resolved = path.posix.normalize(path.posix.join(baseDirectory, relativeTarget));
+  if (!trackedSet.has(resolved)) {
+    fail('BROKEN_LITERAL_PHP_INCLUDE', `${file} -> ${resolved}`);
+  }
+}
+
 const phpFiles = tracked.filter((file) => file.endsWith('.php'));
 for (const file of phpFiles) {
   const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
-  const literalDirIncludes = source.matchAll(/\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?__DIR__\s*\.\s*['"]([^'"]+\.php)['"]/g);
-  for (const match of literalDirIncludes) {
-    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), match[1]));
-    if (!trackedSet.has(resolved)) {
-      fail('BROKEN_LITERAL_PHP_INCLUDE', `${file} -> ${resolved}`);
+  const fileDirectory = path.posix.dirname(file);
+
+  for (const match of source.matchAll(/\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?__DIR__\s*\.\s*['"]([^'"]+\.php)['"]/g)) {
+    const before = source.slice(Math.max(0, match.index - 16), match.index);
+    if (/dirname\s*\(\s*$/i.test(before)) continue;
+    assertPhpInclude(file, fileDirectory, match[1]);
+  }
+
+  for (const match of source.matchAll(/\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?dirname\s*\(\s*__DIR__\s*,\s*(\d+)\s*\)\s*\.\s*['"]([^'"]+\.php)['"]/g)) {
+    let baseDirectory = fileDirectory;
+    const levels = Number.parseInt(match[1], 10);
+    for (let level = 0; level < levels; level += 1) {
+      baseDirectory = path.posix.dirname(baseDirectory);
     }
+    assertPhpInclude(file, baseDirectory, match[2]);
   }
 }
 
@@ -114,15 +144,43 @@ for (const file of textFiles) {
   }
 }
 
+const retainedMigrationGuards = new Map([
+  [
+    'tools/migrations/migrate-contacto-template.php',
+    {
+      owner: 'wp-content/themes/nuvanx-medical/inc/nvx-contacto-valoracion-page.php',
+      marker: 'templates/template-contact.php',
+      reason: 'legacy_contact_template_runtime_compatibility',
+    },
+  ],
+]);
+
 const migrations = tracked.filter((file) => /^tools\/migrations\/.*\.php$/i.test(file));
 const orphanMigrations = [];
+const retainedLegacyMigrations = [];
 for (const migration of migrations) {
   const basename = path.posix.basename(migration);
   const referencedElsewhere = [...textCorpus].some(([owner, source]) => owner !== migration && source.includes(basename));
-  if (!referencedElsewhere) orphanMigrations.push(migration);
+  if (referencedElsewhere) continue;
+
+  const retained = retainedMigrationGuards.get(migration);
+  if (retained) {
+    const ownerSource = textCorpus.get(retained.owner) || '';
+    if (!trackedSet.has(retained.owner) || !ownerSource.includes(retained.marker)) {
+      fail('RETAINED_MIGRATION_GUARD_BROKEN', `${migration} -> ${retained.owner}#${retained.marker}`);
+    } else {
+      retainedLegacyMigrations.push(`${migration}->${retained.owner}:${retained.reason}`);
+    }
+    continue;
+  }
+
+  orphanMigrations.push(migration);
 }
 if (orphanMigrations.length > 0) {
   report.push(`MIGRATION_ORPHAN_CANDIDATES=${orphanMigrations.join(',')}`);
+}
+if (retainedLegacyMigrations.length > 0) {
+  report.push(`RETAINED_LEGACY_MIGRATIONS=${retainedLegacyMigrations.join(',')}`);
 }
 
 const variantPattern = /^(.*?)-(safe|resilient|legacy|old|backup|copy|v\d+)\.(mjs|js|cjs|php|sh|py)$/i;
@@ -132,7 +190,13 @@ for (const file of tracked) {
   const match = base.match(variantPattern);
   if (!match) continue;
   const sibling = path.posix.join(path.posix.dirname(file), `${match[1]}.${match[3]}`);
-  if (trackedSet.has(sibling)) variantCandidates.push(`${file}<=>${sibling}`);
+  if (!trackedSet.has(sibling)) continue;
+
+  const fileSource = textCorpus.get(file) || '';
+  const siblingSource = textCorpus.get(sibling) || '';
+  const pairIsExplicitlyOwned = fileSource.includes(path.posix.basename(sibling))
+    || siblingSource.includes(path.posix.basename(file));
+  if (!pairIsExplicitlyOwned) variantCandidates.push(`${file}<=>${sibling}`);
 }
 if (variantCandidates.length > 0) {
   report.push(`VARIANT_DUPLICATION_CANDIDATES=${variantCandidates.join(',')}`);
@@ -151,5 +215,6 @@ console.log(
   + ` workflows=${workflowFiles.length}`
   + ` php=${phpFiles.length}`
   + ` migrations=${migrations.length}`
+  + ` retained_legacy_migrations=${retainedLegacyMigrations.length}`
   + ` zero_byte=0 root_code=0 residue=0 broken_refs=0`,
 );
