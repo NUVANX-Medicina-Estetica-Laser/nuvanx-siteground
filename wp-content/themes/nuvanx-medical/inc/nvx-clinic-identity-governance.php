@@ -83,19 +83,22 @@ function nvx_clinic_identity_is_clinic_node( array $node ): bool {
  * @return mixed
  */
 function nvx_clinic_identity_filter_refs( $refs, array $allowed_ids, array $all_clinic_ids ) {
-	if ( ! is_array( $refs ) || empty( $refs ) ) {
+	if ( ! is_array( $refs ) ) {
 		return $refs;
 	}
 
-	$is_assoc = function_exists( 'array_is_list' )
-		? ! array_is_list( $refs )
-		: array_keys( $refs ) !== range( 0, count( $refs ) - 1 );
-
-	if ( $is_assoc ) {
-		$id = (string) ( $refs['@id'] ?? '' );
+	if ( array_key_exists( '@id', $refs ) ) {
+		$id = (string) $refs['@id'];
 		return '' !== $id && isset( $all_clinic_ids[ $id ] ) && ! isset( $allowed_ids[ $id ] )
 			? array()
 			: $refs;
+	}
+
+	$is_list = empty( $refs ) || array_keys( $refs ) === range( 0, count( $refs ) - 1 );
+	if ( ! $is_list ) {
+		// Inline Schema objects without @id are associative values, not lists.
+		// They do not identify a known clinic node and remain under their owner.
+		return $refs;
 	}
 
 	$filtered = array();
