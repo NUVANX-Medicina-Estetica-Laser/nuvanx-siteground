@@ -79,10 +79,25 @@ function nvx_clinic_identity_is_clinic_node( array $node ): bool {
 	return in_array( 'MedicalClinic', $types, true );
 }
 
-/** Keep only organization references to clinic nodes that survived the fence. */
+/**
+ * Keep only organization references to clinic nodes that survived the fence.
+ *
+ * Yoast/schema producers may expose one reference as an associative object or
+ * many references as a list. Preserve the original shape for a valid single
+ * reference and fail closed when its @id does not belong to a surviving clinic.
+ *
+ * @param mixed              $refs        Schema reference value.
+ * @param array<string,bool> $allowed_ids Surviving clinic IDs.
+ * @return mixed|null
+ */
 function nvx_clinic_identity_filter_refs( $refs, array $allowed_ids ) {
 	if ( ! is_array( $refs ) ) {
-		return $refs;
+		return null;
+	}
+
+	if ( array_key_exists( '@id', $refs ) ) {
+		$id = (string) $refs['@id'];
+		return '' !== $id && isset( $allowed_ids[ $id ] ) ? $refs : null;
 	}
 
 	$filtered = array();
@@ -93,7 +108,7 @@ function nvx_clinic_identity_filter_refs( $refs, array $allowed_ids ) {
 		}
 	}
 
-	return $filtered;
+	return empty( $filtered ) ? null : $filtered;
 }
 
 /**
@@ -139,7 +154,7 @@ function nvx_clinic_identity_schema_graph( $graph ) {
 			}
 
 			$refs = nvx_clinic_identity_filter_refs( $node[ $property ], $allowed_ids );
-			if ( is_array( $refs ) && empty( $refs ) ) {
+			if ( null === $refs ) {
 				unset( $result[ $index ][ $property ] );
 			} else {
 				$result[ $index ][ $property ] = $refs;
