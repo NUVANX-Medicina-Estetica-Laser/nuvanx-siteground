@@ -152,6 +152,7 @@ jobs:
           php scripts/lint/test-priority-landing-contract.php
           php scripts/lint/test-valoracion-direct-form-contract.php
           php scripts/lint/test-goya-gallery-fallback.php
+          php scripts/lint/test-php-blog-authority-governance.php
           node scripts/lint/test-single-hubspot-mount.mjs
           node scripts/lint/test-clinic-equipment-staging-media-contract.mjs
           node scripts/lint/test-btl-clinical-note-presence.mjs

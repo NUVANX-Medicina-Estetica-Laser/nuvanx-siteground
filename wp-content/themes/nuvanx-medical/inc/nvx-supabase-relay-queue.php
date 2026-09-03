@@ -41,6 +41,14 @@ if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL' ) ) {
 	define( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL', 180 );
 }
 
+if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_CAS_MAX_ATTEMPTS' ) ) {
+	define( 'NVX_SUPABASE_RELAY_QUEUE_CAS_MAX_ATTEMPTS', 20 );
+}
+
+if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS' ) ) {
+	define( 'NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS', 60 );
+}
+
 /**
  * Safely derive lock lease duration based on batch size and worst-case transport timeouts.
  *
@@ -620,12 +628,389 @@ if ( ! function_exists( 'nvx_supabase_relay_google_click_post_signed' ) ) {
 }
 
 /**
- * Enqueue a retryable payload.
+ * Force a fresh non-autoloaded option read.
  *
- * $attempts represents attempts already performed, including the failed
- * synchronous attempt that caused this enqueue.
+ * Used by the drain-lock primitives. Kept because nvx_supabase_relay_queue_lock_owned
+ * depends on it for the post-I/O fence.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_fresh_option' ) ) {
+	function nvx_supabase_relay_queue_fresh_option( string $key ): string {
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( $key, 'options' );
+		}
+
+		return (string) get_option( $key, '' );
+	}
+}
+
+/**
+ * Canonical option-key for a dedupe identity claim.
  *
+ * The option_name column in wp_options carries a UNIQUE index enforced by the
+ * database engine, so add_option() on this key is an atomic compare-and-insert:
+ * exactly one caller wins; all others get false without any application-level CAS.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_claim_key' ) ) {
+	function nvx_supabase_relay_queue_claim_key( string $dedupe_key ): string {
+		return 'nvx_relay_claim_' . $dedupe_key;
+	}
+}
+
+/**
+ * Atomically replace an option value only if it matches expected value.
+ *
+ * Prevents concurrent contenders from overwriting or deleting newly acquired claims or locks.
+ *
+ * @param string $key Option name.
+ * @param string $expected Expected current option value.
+ * @param string $new_value New option value to set.
+ * @return bool True if updated, false if value differed (lost CAS).
+ */
+if ( ! function_exists( 'nvx_supabase_relay_compare_and_swap_option' ) ) {
+	function nvx_supabase_relay_compare_and_swap_option(
+		string $key,
+		string $expected,
+		string $new_value
+	): bool {
+		global $wpdb;
+
+		if ( isset( $wpdb ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
+			$table = isset( $wpdb->options ) ? $wpdb->options : 'wp_options';
+
+			$updated = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET option_value = %s WHERE option_name = %s AND option_value = %s",
+					$new_value,
+					$key,
+					$expected
+				)
+			);
+
+			if ( $updated > 0 ) {
+				if ( function_exists( 'wp_cache_set' ) ) {
+					wp_cache_set( $key, $new_value, 'options' );
+				}
+				return true;
+			}
+
+			return false;
+		}
+
+		if ( isset( $GLOBALS['nvx_mock_options'] ) && is_array( $GLOBALS['nvx_mock_options'] ) ) {
+			if ( isset( $GLOBALS['nvx_mock_option_cas_conflict_values'][ $key ] ) ) {
+				$GLOBALS['nvx_mock_options'][ $key ] = (string) $GLOBALS['nvx_mock_option_cas_conflict_values'][ $key ];
+				unset( $GLOBALS['nvx_mock_option_cas_conflict_values'][ $key ] );
+				return false;
+			}
+			if ( ( $GLOBALS['nvx_mock_options'][ $key ] ?? '' ) === $expected ) {
+				$GLOBALS['nvx_mock_options'][ $key ] = $new_value;
+				return true;
+			}
+			return false;
+		}
+
+		$current = (string) get_option( $key, '' );
+		if ( $current === $expected ) {
+			return update_option( $key, $new_value );
+		}
+
+		return false;
+	}
+}
+
+/**
+ * Release a claim option conditionally only if its current value matches $expected_value.
+ *
+ * Prevents a completing or dying task from deleting a successor's claim or active lock.
+ *
+ * @param string $dedupe_key Canonical dedupe hash.
+ * @param string $expected_value Expected option value (post_id string or in-flight token).
+ * @return bool True if released, false if value differed.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_release_claim' ) ) {
+	function nvx_supabase_relay_queue_release_claim(
+		string $dedupe_key,
+		string $expected_value
+	): bool {
+		if ( '' === $dedupe_key || '' === $expected_value ) {
+			return false;
+		}
+
+		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
+
+		global $wpdb;
+		if ( isset( $wpdb ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
+			$table   = isset( $wpdb->options ) ? $wpdb->options : 'wp_options';
+			$deleted = $wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$table} WHERE option_name = %s AND option_value = %s",
+					$claim_key,
+					$expected_value
+				)
+			);
+			if ( $deleted > 0 && function_exists( 'wp_cache_delete' ) ) {
+				wp_cache_delete( $claim_key, 'options' );
+			}
+			return $deleted > 0;
+		}
+
+		if ( isset( $GLOBALS['nvx_mock_options'] ) && is_array( $GLOBALS['nvx_mock_options'] ) ) {
+			if ( ( $GLOBALS['nvx_mock_options'][ $claim_key ] ?? '' ) === $expected_value ) {
+				unset( $GLOBALS['nvx_mock_options'][ $claim_key ] );
+				if ( isset( $GLOBALS['nvx_mock_deleted_options'] ) && is_array( $GLOBALS['nvx_mock_deleted_options'] ) ) {
+					$GLOBALS['nvx_mock_deleted_options'][] = $claim_key;
+				}
+				return true;
+			}
+			return false;
+		}
+
+		$current = (string) get_option( $claim_key, '' );
+		if ( $current === $expected_value ) {
+			return delete_option( $claim_key );
+		}
+
+		return false;
+	}
+}
+
+/**
+ * Verify whether a post exists, has pending status, and matches the dedupe key.
+ *
+ * @param int    $post_id Post ID to inspect.
+ * @param string $dedupe_key Expected dedupe hash.
+ * @return bool True if valid and pending.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_is_valid_pending_item' ) ) {
+	function nvx_supabase_relay_queue_is_valid_pending_item(
+		int $post_id,
+		string $dedupe_key
+	): bool {
+		if ( $post_id <= 0 ) {
+			return false;
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post || 'pending' !== ( $post->post_status ?? '' ) ) {
+			return false;
+		}
+
+		$stored_dedupe = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		if ( '' === $stored_dedupe ) {
+			return false;
+		}
+
+		return hash_equals( $dedupe_key, $stored_dedupe );
+	}
+}
+
+/**
+ * Atomic attempt accumulation primitive.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_atomic_add_attempts' ) ) {
+	function nvx_supabase_relay_queue_atomic_add_attempts(
+		int $post_id,
+		int $add_attempts
+	): ?int {
+		$post_id      = absint( $post_id );
+		$max_tries    = (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES;
+		$max_attempts = max( 1, (int) NVX_SUPABASE_RELAY_QUEUE_CAS_MAX_ATTEMPTS );
+
+		for ( $attempt = 1; $attempt <= $max_attempts; $attempt++ ) {
+			$current = absint( get_post_meta( $post_id, '_nvx_relay_attempts', true ) );
+			$new_val = min( $max_tries, $current + $add_attempts );
+
+			if ( $current === $new_val ) {
+				return $new_val;
+			}
+
+			if ( update_post_meta( $post_id, '_nvx_relay_attempts', (string) $new_val, (string) $current ) ) {
+				return $new_val;
+			}
+
+			if ( function_exists( 'wp_cache_delete' ) ) {
+				wp_cache_delete( $post_id, 'post_meta' );
+			}
+		}
+
+		return null;
+	}
+}
+
+/**
+ * Monotonic next attempt primitive.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_set_next_attempt_monotonic' ) ) {
+	function nvx_supabase_relay_queue_set_next_attempt_monotonic(
+		int $post_id,
+		int $proposed_next_attempt
+	): bool {
+		$post_id      = absint( $post_id );
+		$max_attempts = max( 1, (int) NVX_SUPABASE_RELAY_QUEUE_CAS_MAX_ATTEMPTS );
+
+		for ( $attempt = 1; $attempt <= $max_attempts; $attempt++ ) {
+			$current = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
+			if ( $proposed_next_attempt <= $current ) {
+				return true;
+			}
+			if ( update_post_meta( $post_id, '_nvx_relay_next_attempt', (string) $proposed_next_attempt, (string) $current ) ) {
+				return true;
+			}
+
+			if ( function_exists( 'wp_cache_delete' ) ) {
+				wp_cache_delete( $post_id, 'post_meta' );
+			}
+		}
+
+		return false;
+	}
+}
+
+/**
+ * Re-validate item is due right before I/O.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
+	function nvx_supabase_relay_queue_item_due(
+		int $post_id,
+		string $lock,
+		int $lease_ttl
+	): bool {
+		// Force a fresh read: the batch query that produced this post_id cached the
+		// post object and its meta. Without shared object caching those cached values
+		// hide a concurrent cancellation, death, or reschedule, so evict them before
+		// revalidating the item's due state.
+		if ( function_exists( 'clean_post_cache' ) ) {
+			clean_post_cache( $post_id );
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( $post_id, 'posts' );
+			wp_cache_delete( $post_id, 'post_meta' );
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post || 'pending' !== $post->post_status ) {
+			return false;
+		}
+
+		$next_attempt = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
+		if ( $next_attempt > nvx_supabase_relay_time() ) {
+			return false;
+		}
+
+		if ( ! nvx_supabase_relay_queue_renew_lock( $lock, $lease_ttl ) ) {
+			return false;
+		}
+
+		return true;
+	}
+}
+
+/**
+ * Post-I/O fencing primitive.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_lock_owned' ) ) {
+	function nvx_supabase_relay_queue_lock_owned(
+		string $token
+	): bool {
+		$key     = 'nvx_supabase_relay_drain_lock_v1';
+		$current = nvx_supabase_relay_queue_fresh_option( $key );
+		$parts   = explode( '|', $current, 2 );
+
+		$current_expiry = isset( $parts[0] ) ? absint( $parts[0] ) : 0;
+		$current_token  = isset( $parts[1] ) ? $parts[1] : '';
+
+		if ( $current_token !== $token ) {
+			return false;
+		}
+
+		if ( $current_expiry <= nvx_supabase_relay_time() ) {
+			return false;
+		}
+
+		return true;
+	}
+}
+
+/**
+ * Record additional attempts and schedule retry for an existing pending queue item.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_record_existing_attempt' ) ) {
+	function nvx_supabase_relay_queue_record_existing_attempt(
+		int $existing,
+		string $endpoint,
+		int $attempts
+	): int {
+		$new_attempts = nvx_supabase_relay_queue_atomic_add_attempts(
+			$existing,
+			$attempts
+		);
+
+		if ( null === $new_attempts ) {
+			nvx_supabase_relay_log(
+				$endpoint,
+				'QUEUED',
+				0,
+				'attempt_state_write_failed'
+			);
+
+			return $existing;
+		}
+
+		if ( $new_attempts >= (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES ) {
+			nvx_supabase_relay_queue_mark_dead(
+				$existing,
+				$endpoint,
+				0,
+				'max_retries_exceeded'
+			);
+		} else {
+			$next_attempt = time()
+				+ nvx_supabase_relay_queue_backoff_seconds(
+					$new_attempts
+				);
+			if ( ! nvx_supabase_relay_queue_set_next_attempt_monotonic( $existing, $next_attempt ) ) {
+				nvx_supabase_relay_log(
+					$endpoint,
+					'QUEUED',
+					0,
+					'next_attempt_write_failed'
+				);
+
+				return $existing;
+			}
+		}
+
+		return $existing;
+	}
+}
+
+/**
+ * Persist an outbound payload into the CPT outbox queue.
+ *
+ * Concurrency model:
+ * 1. Initial claim uses add_option() with an in-flight value containing lease expiry
+ *    and owner token ($expiry|$token). The UNIQUE constraint on option_name in
+ *    wp_options guarantees that exactly one concurrent process acquires the initial claim.
+ * 2. If add_option() fails, contenders inspect the claim:
+ *    - If bound to a post ID (numeric), it validates that the post is still pending.
+ *      If valid, it merges attempts into that item via record_existing_attempt().
+ *      If stale (post drained, dead, or deleted), it atomically takes over via CAS.
+ *    - If in-flight ($expiry|$token) and unexpired, the active owner is publishing.
+ *      Contenders pause and wait; active claims are NEVER stolen or unconditionally deleted.
+ *    - If expired/abandoned, contenders compete to take over via atomic CAS.
+ * 3. Adoption path for rollout:
+ *    Once exclusive claim ownership is secured, it checks whether a matching pending
+ *    queue item already exists (legacy un-claimed post). If so, it binds the claim
+ *    to that item and merges attempts, preventing duplicate deliveries.
+ * 4. Publication publishes directly to 'pending' (single-phase).
+ *    On success, the claim is atomically bound to the post ID via CAS.
+ *    On failure, the claim is conditionally released only if still owned by this token.
+ *
+ * @param string               $endpoint Registered outbox endpoint key.
+ * @param string               $body JSON payload string.
  * @param array<string,string> $headers Persistable transport context.
+ * @param int                  $attempts Attempts already performed.
+ * @return int Post ID if queued/merged, 0 on failure.
  */
 if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 	function nvx_supabase_relay_queue_enqueue(
@@ -639,8 +1024,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 
 		if (
 			! isset( $endpoints[ $endpoint ] )
-			|| ''
-			=== $endpoints[ $endpoint ]
+			|| '' === $endpoints[ $endpoint ]
 			|| ! nvx_supabase_relay_valid_body( $body )
 		) {
 			nvx_supabase_relay_log(
@@ -660,10 +1044,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			: '';
 
 		if (
-			'google_click'
-			=== $endpoint
-			&& ''
-			=== $origin
+			'google_click' === $endpoint
+			&& '' === $origin
 		) {
 			nvx_supabase_relay_log(
 				$endpoint,
@@ -681,48 +1063,126 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			$origin
 		);
 
-		$existing = nvx_supabase_relay_existing_item(
-			$dedupe_key
-		);
+		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
 
-		if ( $existing > 0 ) {
-			$current_attempts = absint(
-				get_post_meta(
-					$existing,
-					'_nvx_relay_attempts',
-					true
-				)
-			);
-			$new_attempts = $current_attempts + $attempts;
+		$token = function_exists( 'wp_generate_uuid4' )
+			? wp_generate_uuid4()
+			: bin2hex( random_bytes( 16 ) );
 
-			update_post_meta(
-				$existing,
-				'_nvx_relay_attempts',
-				(string) $new_attempts
-			);
+		$now             = nvx_supabase_relay_time();
+		$lease_seconds   = (int) NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS;
+		$expiry          = $now + $lease_seconds;
+		$in_flight_value = $expiry . '|' . $token;
 
-			if ( $new_attempts >= (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES ) {
-				nvx_supabase_relay_queue_mark_dead(
-					$existing,
-					$endpoint,
-					0,
-					'max_retries_exceeded'
-				);
-			} else {
-				$next_attempt = time()
-					+ nvx_supabase_relay_queue_backoff_seconds(
-						$new_attempts
-					);
-				update_post_meta(
-					$existing,
-					'_nvx_relay_next_attempt',
-					(string) $next_attempt
-				);
+		$we_own_claim = false;
+
+		// ── Atomic ownership acquisition ─────────────────────────────────────────
+		// add_option() provides atomic compare-and-insert via the DB UNIQUE index.
+		if ( add_option( $claim_key, $in_flight_value, '', false ) ) {
+			$we_own_claim = true;
+		} else {
+			// Another process holds (or held) this claim.
+			$max_contention_loops = 3;
+			for ( $i = 0; $i < $max_contention_loops; $i++ ) {
+				$current = (string) get_option( $claim_key, '' );
+
+				// Subcase A: Claim is bound to a post ID.
+				if ( '' !== $current && ctype_digit( $current ) ) {
+					$existing_post_id = absint( $current );
+					if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) ) {
+						// Referenced item is genuinely pending — merge attempts.
+						return nvx_supabase_relay_queue_record_existing_attempt(
+							$existing_post_id,
+							$endpoint,
+							$attempts
+						);
+					}
+
+					// Referenced item is not pending (drained, dead, or deleted).
+					// Atomically take over the stale claim via CAS.
+					if ( nvx_supabase_relay_compare_and_swap_option( $claim_key, $current, $in_flight_value ) ) {
+						$we_own_claim = true;
+						break;
+					}
+
+					// Lost CAS to another concurrent contender; retry loop.
+					continue;
+				}
+
+				// Subcase B: Claim is in-flight ($expiry|$token).
+				$parts        = explode( '|', $current, 2 );
+				$claim_expiry = isset( $parts[0] ) && is_numeric( $parts[0] ) ? (int) $parts[0] : 0;
+
+				if ( $claim_expiry > nvx_supabase_relay_time() ) {
+					// Live claim! The active owner is in the process of publishing.
+					// Never steal or unconditionally delete an active owner's claim.
+					usleep( 30000 );
+					continue;
+				}
+
+				// Claim has expired / owner abandoned or crashed. Take over via CAS.
+				if ( nvx_supabase_relay_compare_and_swap_option( $claim_key, $current, $in_flight_value ) ) {
+					$we_own_claim = true;
+					break;
+				}
 			}
 
-			return $existing;
+			if ( ! $we_own_claim ) {
+				// Contention loops exhausted without winning takeover.
+				// Final check: did the winner finish publishing a valid pending item?
+				$final_claim = (string) get_option( $claim_key, '' );
+				if ( '' !== $final_claim && ctype_digit( $final_claim ) ) {
+					$existing_post_id = absint( $final_claim );
+					if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) ) {
+						return nvx_supabase_relay_queue_record_existing_attempt(
+							$existing_post_id,
+							$endpoint,
+							$attempts
+						);
+					}
+				}
+
+				// Fallback: check queue directly for any matching pending post.
+				$fallback = nvx_supabase_relay_existing_item( $dedupe_key );
+				if ( $fallback > 0 ) {
+					return nvx_supabase_relay_queue_record_existing_attempt(
+						$fallback,
+						$endpoint,
+						$attempts
+					);
+				}
+
+				nvx_supabase_relay_log(
+					$endpoint,
+					'TRANSPORT',
+					0,
+					'claim_contention_unresolved'
+				);
+
+				return 0;
+			}
 		}
 
+		// ── Rollout adoption path ────────────────────────────────────────────────
+		// Check whether a matching pending item already exists in the queue
+		// (e.g. legacy pending post from before rollout or concurrent creation).
+		$existing_pending = nvx_supabase_relay_existing_item( $dedupe_key );
+		if ( $existing_pending > 0 ) {
+			// Bind our claim permanently to the existing item via CAS.
+			nvx_supabase_relay_compare_and_swap_option(
+				$claim_key,
+				$in_flight_value,
+				(string) $existing_pending
+			);
+
+			return nvx_supabase_relay_queue_record_existing_attempt(
+				$existing_pending,
+				$endpoint,
+				$attempts
+			);
+		}
+
+		// ── Publish directly to pending ──────────────────────────────────────────
 		$attempts = max(
 			1,
 			min(
@@ -758,6 +1218,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			is_wp_error( $post_id )
 			|| absint( $post_id ) < 1
 		) {
+			// Insert failed — release the claim only if our in-flight value is still present.
+			nvx_supabase_relay_queue_release_claim( $dedupe_key, $in_flight_value );
+
 			nvx_supabase_relay_log(
 				$endpoint,
 				'DEAD',
@@ -811,12 +1274,59 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 
 		if ( ! $meta_ok ) {
 			wp_delete_post( $post_id, true );
+			nvx_supabase_relay_queue_release_claim( $dedupe_key, $in_flight_value );
 
 			nvx_supabase_relay_log(
 				$endpoint,
 				'DEAD',
 				0,
 				'enqueue_metadata_failed'
+			);
+
+			return 0;
+		}
+
+		// Bind claim to published post_id atomically via CAS.
+		$claim_bound = nvx_supabase_relay_compare_and_swap_option(
+			$claim_key,
+			$in_flight_value,
+			(string) $post_id
+		);
+
+		if ( ! $claim_bound ) {
+			// Publication took too long or in-flight lease expired, and a contender
+			// seized the claim. Delete this redundant pending post so it cannot
+			// deliver duplicate events later.
+			wp_delete_post( $post_id, true );
+
+			// Check whether the winning contender published a valid pending item.
+			$current_claim = (string) get_option( $claim_key, '' );
+			if ( '' !== $current_claim && ctype_digit( $current_claim ) ) {
+				$existing_post_id = absint( $current_claim );
+				if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) ) {
+					return nvx_supabase_relay_queue_record_existing_attempt(
+						$existing_post_id,
+						$endpoint,
+						$attempts
+					);
+				}
+			}
+
+			// Fallback: check queue directly for any matching pending post.
+			$fallback = nvx_supabase_relay_existing_item( $dedupe_key );
+			if ( $fallback > 0 ) {
+				return nvx_supabase_relay_queue_record_existing_attempt(
+					$fallback,
+					$endpoint,
+					$attempts
+				);
+			}
+
+			nvx_supabase_relay_log(
+				$endpoint,
+				'TRANSPORT',
+				0,
+				'claim_lost_during_publish'
 			);
 
 			return 0;
@@ -832,6 +1342,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		return $post_id;
 	}
 }
+
+
 
 /**
  * Send one persisted payload.
@@ -1017,62 +1529,6 @@ if ( ! function_exists( 'nvx_supabase_relay_dispatch' ) ) {
 	}
 }
 
-/**
- * Atomically replace an option value only if it matches expected value.
- *
- * Prevents concurrent contenders from overwriting or deleting newly acquired locks.
- *
- * @param string $key Option name.
- * @param string $expected Expected current option value.
- * @param string $new_value New option value to set.
- * @return bool True if updated, false if value differed (lost CAS).
- */
-if ( ! function_exists( 'nvx_supabase_relay_compare_and_swap_option' ) ) {
-	function nvx_supabase_relay_compare_and_swap_option(
-		string $key,
-		string $expected,
-		string $new_value
-	): bool {
-		global $wpdb;
-
-		if ( isset( $wpdb ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
-			$table = isset( $wpdb->options ) ? $wpdb->options : 'wp_options';
-
-			$updated = $wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$table} SET option_value = %s WHERE option_name = %s AND option_value = %s",
-					$new_value,
-					$key,
-					$expected
-				)
-			);
-
-			if ( $updated > 0 ) {
-				if ( function_exists( 'wp_cache_set' ) ) {
-					wp_cache_set( $key, $new_value, 'options' );
-				}
-				return true;
-			}
-
-			return false;
-		}
-
-		if ( isset( $GLOBALS['nvx_mock_options'] ) && is_array( $GLOBALS['nvx_mock_options'] ) ) {
-			if ( ( $GLOBALS['nvx_mock_options'][ $key ] ?? '' ) === $expected ) {
-				$GLOBALS['nvx_mock_options'][ $key ] = $new_value;
-				return true;
-			}
-			return false;
-		}
-
-		$current = (string) get_option( $key, '' );
-		if ( $current === $expected ) {
-			return update_option( $key, $new_value );
-		}
-
-		return false;
-	}
-}
 
 /**
  * Acquire global drain lock.
@@ -1130,7 +1586,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock' ) ) {
 
 		if (
 			$current_expiry > 0
-			&& $current_expiry < nvx_supabase_relay_time()
+			&& $current_expiry <= nvx_supabase_relay_time()
 		) {
 			if (
 				nvx_supabase_relay_compare_and_swap_option(
@@ -1170,12 +1626,25 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_renew_lock' ) ) {
 			''
 		);
 
-		if (
-			! str_ends_with(
-				$current,
-				'|' . $token
-			)
-		) {
+		$parts = explode(
+			'|',
+			$current,
+			2
+		);
+
+		$current_expiry = isset( $parts[0] )
+			? absint( $parts[0] )
+			: 0;
+
+		$current_token = isset( $parts[1] )
+			? $parts[1]
+			: '';
+
+		if ( $current_token !== $token ) {
+			return false;
+		}
+
+		if ( $current_expiry <= nvx_supabase_relay_time() ) {
 			return false;
 		}
 
@@ -1250,12 +1719,19 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_mark_dead' ) ) {
 		int $status,
 		string $reason
 	): void {
+		$post_id = absint( $post_id );
+
 		wp_update_post(
 			array(
-				'ID'          => absint( $post_id ),
+				'ID'          => $post_id,
 				'post_status' => 'draft',
 			)
 		);
+
+		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		if ( '' !== $dedupe_key && function_exists( 'nvx_supabase_relay_queue_release_claim' ) ) {
+			nvx_supabase_relay_queue_release_claim( $dedupe_key, (string) $post_id );
+		}
 
 		nvx_supabase_relay_log(
 			$endpoint,
@@ -1316,15 +1792,15 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 			);
 
 			foreach ( $query->posts as $post ) {
-				if ( ! nvx_supabase_relay_queue_renew_lock( $lock, $lease_ttl ) ) {
-					break;
-				}
-
 				if ( ! $post instanceof WP_Post ) {
 					continue;
 				}
 
 				$post_id = absint( $post->ID );
+
+				if ( ! nvx_supabase_relay_queue_item_due( $post_id, $lock, $lease_ttl ) ) {
+					continue;
+				}
 
 				$endpoint = sanitize_key(
 					(string) get_post_meta(
@@ -1412,11 +1888,21 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 						: 2;
 				}
 
+				if ( ! nvx_supabase_relay_queue_lock_owned( $lock ) ) {
+					break;
+				}
+
 				if ( 'SUCCESS' === $class['outcome'] ) {
+					$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+
 					wp_delete_post(
 						$post_id,
 						true
 					);
+
+					if ( '' !== $dedupe_key && function_exists( 'nvx_supabase_relay_queue_release_claim' ) ) {
+						nvx_supabase_relay_queue_release_claim( $dedupe_key, (string) $post_id );
+					}
 
 					nvx_supabase_relay_log(
 						$endpoint,
@@ -1427,19 +1913,26 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 					continue;
 				}
 
-				$attempts += $delivery_attempts;
+				$new_attempts = nvx_supabase_relay_queue_atomic_add_attempts(
+					$post_id,
+					$delivery_attempts
+				);
+
+				if ( null === $new_attempts ) {
+					nvx_supabase_relay_log(
+						$endpoint,
+						$class['outcome'],
+						$class['status'],
+						'retry_state_write_failed'
+					);
+					break;
+				}
 
 				if (
 					! $class['retryable']
-					|| $attempts
+					|| $new_attempts
 					>= (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES
 				) {
-					update_post_meta(
-						$post_id,
-						'_nvx_relay_attempts',
-						(string) $attempts
-					);
-
 					nvx_supabase_relay_queue_mark_dead(
 						$post_id,
 						$endpoint,
@@ -1452,20 +1945,18 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 
 				$next_attempt = time()
 					+ nvx_supabase_relay_queue_backoff_seconds(
-						$attempts
+						$new_attempts
 					);
 
-				update_post_meta(
-					$post_id,
-					'_nvx_relay_attempts',
-					(string) $attempts
-				);
-
-				update_post_meta(
-					$post_id,
-					'_nvx_relay_next_attempt',
-					(string) $next_attempt
-				);
+				if ( ! nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, $next_attempt ) ) {
+					nvx_supabase_relay_log(
+						$endpoint,
+						$class['outcome'],
+						$class['status'],
+						'next_attempt_write_failed'
+					);
+					break;
+				}
 
 				nvx_supabase_relay_log(
 					$endpoint,

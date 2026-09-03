@@ -12,8 +12,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/nvx-page-render-helpers.php';
-
 /**
  * Singular context for Profhilo rewrite.
  */
@@ -74,6 +72,10 @@ function nvx_profhilo_process_icon( string $name ): string {
 /**
  * Builds the Profhilo hero copy markup.
  *
+ * Medical review provenance is deliberately not emitted here. The single
+ * approval-gated owner is nvx-medical-review.php, which injects a byline only
+ * when the page has a complete approved reviewer record.
+ *
  * @return string The escaped hero copy HTML.
  */
 function nvx_profhilo_hero_copy_markup(): string {
@@ -86,12 +88,17 @@ function nvx_profhilo_hero_copy_markup(): string {
 	$html .= '<p class="nvx-brand-kicker">' . esc_html( $data['kicker'] ?? '' ) . '</p>';
 	$html .= '<h1 class="nvx-brand-hero__title" id="nvx-profhilo-h1">' . esc_html( $data['h1'] ?? '' ) . '</h1>';
 
-	// E-E-A-T Medical Authority Byline
-	$html .= '<div class="nvx-medical-byline">';
-	$html .= '<div class="nvx-medical-byline__text">';
-	$html .= '<strong>' . esc_html( $data['byline_author'] ?? '' ) . '</strong><br>';
-	$html .= '<span class="nvx-medical-byline__title">' . esc_html( $data['byline_title'] ?? '' ) . '</span>';
-	$html .= '</div></div>';
+	$post_id       = (int) get_queried_object_id();
+	$review_status = ( $post_id > 0 && function_exists( 'get_post_meta' ) )
+		? (string) get_post_meta( $post_id, '_nvx_medical_review_status', true )
+		: '';
+	if ( 'approved' === $review_status ) {
+		$html .= '<div class="nvx-medical-byline" data-nvx-medical-review="approved">';
+		$html .= '<div class="nvx-medical-byline__text">';
+		$html .= '<strong>' . esc_html__( 'Dr. José Javier Rivera Tejeda', 'nuvanx-medical' ) . '</strong><br>';
+		$html .= '<span class="nvx-medical-byline__title">' . esc_html__( 'Director Médico · Colegiado ICOMEM Nº ', 'nuvanx-medical' ) . esc_html( $colegiado ) . '</span>';
+		$html .= '</div></div>';
+	}
 	$html .= '<p class="nvx-brand-hero__lead">' . esc_html( $data['lead'] ?? '' ) . '</p>';
 	$html .= '<p class="nvx-brand-hero__description">' . esc_html(
 		sprintf(
@@ -116,31 +123,16 @@ function nvx_profhilo_hero_copy_markup(): string {
 /**
  * Builds the Profhilo editorial body markup.
  *
+ * Review dates/bylines are not rendered from editorial JSON. Provenance is
+ * owned exclusively by the approval-gated medical-review module.
+ *
  * @return string The generated editorial HTML.
  */
 function nvx_profhilo_editorial_body_markup(): string {
 	require_once __DIR__ . '/nvx-catalog-json.php';
 	$data = nvx_catalog_json_resolved( 'profhilo-page.json' );
 
-	$colegiado    = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
-	$review_label = defined( 'NVX_PROFIHILO_REVIEW_LABEL' ) ? NVX_PROFIHILO_REVIEW_LABEL : 'julio 2026';
-	$equipo_url   = home_url( '/equipo-medico/' );
-
-	$html = '<div class="nvx-profhilo-editorial">';
-
-	// Clinical review byline — E-E-A-T
-	$html .= '<p class="nvx-profhilo-reviewed">';
-	$html .= esc_html(
-		sprintf(
-			/* translators: 1: medical license number, 2: review month label */
-			$data['review']['text'] ?? '',
-			$colegiado,
-			$review_label
-		)
-	);
-	$html .= ' <a class="nvx-brand-inline-link" href="' . esc_url( $equipo_url ) . '">' . esc_html( $data['review']['link'] ?? '' ) . '</a>';
-	$html .= '</p>';
-
+	$html  = '<div class="nvx-profhilo-editorial">';
 	$html .= nvx_render_generic_brand_treatment_page_body( $data, 'nvx-profhilo', 'nvx_profhilo_process_icon' );
 	$html .= '</div>';
 

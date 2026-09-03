@@ -20,8 +20,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/nvx-page-render-helpers.php';
-
 /**
  * Singular page context.
  */
@@ -508,6 +506,7 @@ function nvx_btl_detail_page_markup( string $key ): string {
 	$body .= nvx_btl_detail_clinical_data_markup( $c );
 	$body .= nvx_btl_detail_compare_markup( $c );
 	$body .= nvx_btl_detail_process_markup( $c );
+	$body .= '<!-- nvx:clinical-note-anchor -->';
 	$body .= nvx_btl_detail_reservation_markup( $c );
 	$body .= nvx_btl_detail_faq_markup( $c );
 	$body .= '</div>';
