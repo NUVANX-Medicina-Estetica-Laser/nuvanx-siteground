@@ -28,7 +28,7 @@ $queue_source = file_get_contents(
 );
 $queue_source = is_string( $queue_source ) ? $queue_source : '';
 
-// ── Contract 1: identity and readiness are separate durable concepts. ───────
+// ── Contract 1: identity, readiness and batch visibility are separate. ───────
 $require_v3(
 	str_contains( $queue_source, "'_nvx_relay_publish_claim'" ),
 	'PUBLISH_GENERATION_META_EXISTS'
@@ -46,18 +46,18 @@ $enqueue_body  = false !== $enqueue_start && false !== $enqueue_end
 	? substr( $queue_source, $enqueue_start, $enqueue_end - $enqueue_start )
 	: '';
 $dedupe_offset = strpos( $enqueue_body, "'_nvx_relay_dedupe_key'" );
-$next_offset   = strpos( $enqueue_body, "'_nvx_relay_next_attempt'", $dedupe_offset === false ? 0 : $dedupe_offset );
-$ready_offset  = strpos( $enqueue_body, "'_nvx_relay_ready'", $next_offset === false ? 0 : $next_offset );
+$ready_offset  = strpos( $enqueue_body, "'_nvx_relay_ready'", $dedupe_offset === false ? 0 : $dedupe_offset );
+$next_offset   = strpos( $enqueue_body, "'_nvx_relay_next_attempt'", $ready_offset === false ? 0 : $ready_offset );
 $bind_comment  = strpos( $enqueue_body, '// Bind claim to published post_id atomically via CAS.' );
 $require_v3(
 	false !== $dedupe_offset
-	&& false !== $next_offset
 	&& false !== $ready_offset
+	&& false !== $next_offset
 	&& false !== $bind_comment
-	&& $dedupe_offset < $next_offset
-	&& $next_offset < $ready_offset
-	&& $ready_offset < $bind_comment,
-	'IDENTITY_PRECEDES_DUE_AND_READINESS_IS_LAST_BEFORE_BIND'
+	&& $dedupe_offset < $ready_offset
+	&& $ready_offset < $next_offset
+	&& $next_offset < $bind_comment,
+	'IDENTITY_READY_THEN_DUE_VISIBILITY_BEFORE_BIND'
 );
 
 $require_v3(
@@ -70,11 +70,14 @@ $require_v3(
 );
 
 // ── Contract 2: active prepared row is not quarantined before readiness. ─────
-$body_active       = '{"submission_id":"v3-active-prepared"}';
-$dedupe_active     = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_active, '' );
-$claim_key_active  = nvx_supabase_relay_queue_claim_key( $dedupe_active );
-$publish_claim     = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|v3_active_publisher';
-$active_post_id    = wp_insert_post(
+// This fixture models legacy/corrupt ordering where next_attempt became visible
+// before readiness. New publications must prevent this state by writing
+// next_attempt last, but runtime still fails closed if it encounters one.
+$body_active      = '{"submission_id":"v3-active-prepared"}';
+$dedupe_active    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_active, '' );
+$claim_key_active = nvx_supabase_relay_queue_claim_key( $dedupe_active );
+$publish_claim    = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|v3_active_publisher';
+$active_post_id   = wp_insert_post(
 	array(
 		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
 		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
@@ -104,10 +107,10 @@ $require_v3(
 );
 
 // ── Contract 3: a completed generation cannot be adopted after release. ─────
-$body_stale        = '{"submission_id":"v3-stale-generation"}';
-$dedupe_stale      = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_stale, '' );
-$claim_key_stale   = nvx_supabase_relay_queue_claim_key( $dedupe_stale );
-$stale_post_id     = wp_insert_post(
+$body_stale       = '{"submission_id":"v3-stale-generation"}';
+$dedupe_stale     = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_stale, '' );
+$claim_key_stale  = nvx_supabase_relay_queue_claim_key( $dedupe_stale );
+$stale_post_id    = wp_insert_post(
 	array(
 		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
 		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
@@ -120,8 +123,8 @@ add_post_meta( $stale_post_id, '_nvx_relay_dedupe_key', $dedupe_stale, true );
 add_post_meta( $stale_post_id, '_nvx_relay_publish_claim', ( $GLOBALS['nvx_mock_time'] - 10 ) . '|completed_generation', true );
 add_post_meta( $stale_post_id, '_nvx_relay_endpoint', 'lead_captured', true );
 add_post_meta( $stale_post_id, '_nvx_relay_attempts', '1', true );
-add_post_meta( $stale_post_id, '_nvx_relay_next_attempt', (string) ( $GLOBALS['nvx_mock_time'] - 1 ), true );
 add_post_meta( $stale_post_id, '_nvx_relay_ready', '1', true );
+add_post_meta( $stale_post_id, '_nvx_relay_next_attempt', (string) ( $GLOBALS['nvx_mock_time'] - 1 ), true );
 unset( $GLOBALS['nvx_mock_options'][ $claim_key_stale ] );
 
 $new_generation_id = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body_stale, array(), 1 );
@@ -137,10 +140,10 @@ $require_v3(
 );
 
 // ── Contract 4: stale finalizer cannot delete a replacement publisher. ──────
-$body_owner          = '{"submission_id":"v3-stale-finalizer"}';
-$dedupe_owner        = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_owner, '' );
-$claim_key_owner     = nvx_supabase_relay_queue_claim_key( $dedupe_owner );
-$canonical_owner_id  = wp_insert_post(
+$body_owner         = '{"submission_id":"v3-stale-finalizer"}';
+$dedupe_owner       = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_owner, '' );
+$claim_key_owner    = nvx_supabase_relay_queue_claim_key( $dedupe_owner );
+$canonical_owner_id = wp_insert_post(
 	array(
 		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
 		'post_status'  => 'pending',
@@ -198,4 +201,4 @@ if ( ! empty( $failures_v3 ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_TERMINAL_OWNERSHIP_V3=PASS generation_fenced=1 readiness_explicit=1 active_prepare_safe=1 stale_generation_rejected=1 stale_finalizer_safe=1\n";
+echo "OUTBOX_TERMINAL_OWNERSHIP_V3=PASS generation_fenced=1 readiness_explicit=1 due_visibility_last=1 active_prepare_safe=1 stale_generation_rejected=1 stale_finalizer_safe=1\n";
