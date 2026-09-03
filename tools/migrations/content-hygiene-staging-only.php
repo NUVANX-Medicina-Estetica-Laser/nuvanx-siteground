@@ -228,13 +228,22 @@ $core_command = sprintf(
 	escapeshellarg( $core_path )
 );
 
-// The wrapper is the sole owner of the public "Status:" contract. Capture the
-// child process output so its historical Status line cannot be mistaken for the
-// final wrapper result by the deployment gate.
-$core_output = array();
-exec( $core_command . ' 2>&1', $core_output, $core_status );
-foreach ( $core_output as $core_line ) {
-	$core_line = (string) $core_line;
+// The wrapper is the sole owner of the public "Status:" contract. Stream the
+// child output through this process so its historical Status line is fenced but
+// diagnostics remain visible even if the child hangs or the wrapper is killed.
+$core_handle = popen( $core_command . ' 2>&1', 'r' );
+if ( false === $core_handle ) {
+	fwrite( STDERR, "[FATAL] canonical Staging hygiene core could not start.\n" );
+	echo "H1_SEED_RECONCILIATION=FAIL reason=hygiene_core_start\n";
+	echo "Status: MIGRATION_FAIL\n";
+	exit( 1 );
+}
+while ( ! feof( $core_handle ) ) {
+	$core_line = fgets( $core_handle );
+	if ( false === $core_line ) {
+		continue;
+	}
+	$core_line = rtrim( (string) $core_line, "\r\n" );
 	if ( str_starts_with( $core_line, 'Status: ' ) ) {
 		$core_token = preg_replace( '/[^A-Z0-9_:-]/', '', substr( $core_line, 8 ) );
 		printf( "H1_HYGIENE_CORE_STATUS=%s\n", is_string( $core_token ) ? $core_token : 'INVALID' );
@@ -242,6 +251,7 @@ foreach ( $core_output as $core_line ) {
 	}
 	echo $core_line . "\n";
 }
+$core_status = pclose( $core_handle );
 if ( 0 !== $core_status ) {
 	fwrite( STDERR, "[FATAL] canonical Staging hygiene core failed.\n" );
 	echo "H1_SEED_RECONCILIATION=FAIL reason=hygiene_core\n";
