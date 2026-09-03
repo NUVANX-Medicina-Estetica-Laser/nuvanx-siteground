@@ -977,6 +977,15 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_acquire_publication_fence' ) )
 		// Legacy pending rows had no claim. The UNIQUE option key makes adoption
 		// atomic against a concurrent publisher or drainer.
 		if ( '' === $current ) {
+			if ( $is_prepared ) {
+				// Prepared rows are not legacy rows; they require a durable claim
+				// bound during publication. An empty claim indicates this row was
+				// superseded or abandoned. Retire it so it cannot be adopted later.
+				wp_delete_post( $post_id, true );
+
+				return false;
+			}
+
 			if ( add_option( $claim_key, $expected, '', false ) ) {
 				return nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
 			}

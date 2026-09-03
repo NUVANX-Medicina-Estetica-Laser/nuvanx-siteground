@@ -510,6 +510,23 @@ $require( $prepared17 === $failed_finalize17, 'FAILED_FINALIZATION_RETURNS_CANON
 $require( '3' === (string) get_post_meta( $prepared17, '_nvx_relay_attempts', true ), 'FAILED_FINALIZATION_PRESERVES_ATTEMPTS' );
 $require( NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS === get_post( $prepared17 )->post_status, 'FAILED_FINALIZATION_REMAINS_RECOVERABLE' );
 
+// An abandoned prepared row whose claim was released (claim option is empty)
+// must be retired by the fence and never adopted as a legacy row.
+$body18         = '{"submission_id":"inv18-empty-claim-retired"}';
+$dedupe_key18   = nvx_supabase_relay_dedupe_key( 'lead_captured', $body18, '' );
+$claim_key18    = nvx_supabase_relay_queue_claim_key( $dedupe_key18 );
+$abandoned_post = wp_insert_post(
+	array(
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+		'post_content' => $body18,
+	)
+);
+add_post_meta( $abandoned_post, '_nvx_relay_dedupe_key', $dedupe_key18, true );
+unset( $GLOBALS['nvx_mock_options'][ $claim_key18 ] );
+
+$require( ! nvx_supabase_relay_queue_acquire_publication_fence( $abandoned_post, $dedupe_key18 ), 'ABANDONED_PREPARED_NOT_ADOPTED_WHEN_CLAIM_EMPTY' );
+$require( ! isset( $GLOBALS['nvx_mock_posts'][ $abandoned_post ] ), 'ABANDONED_PREPARED_DELETED_ON_EMPTY_CLAIM' );
+
 // ── Invariant 11: SOURCE_INTEGRITY ───────────────────────────────────────────
 $src = (string) file_get_contents( $queue_path );
 $require( false !== strpos( $src, 'nvx_relay_claim_' ), 'CLAIM_KEY_PREFIX_IN_SOURCE' );
