@@ -260,10 +260,54 @@ function nvx_h1_set_meta_verified( int $post_id, string $meta_key, string $value
 	}
 }
 
+/**
+ * Verify one metadata value after COMMIT against both durable storage and the
+ * WordPress runtime view.
+ *
+ * Targeted invalidation happens only after the transaction is committed. The
+ * previous pre-COMMIT targeted read could not prove runtime visibility, while a
+ * global cache flush alone did not invalidate the stale SiteGround post-meta
+ * entry exercised by the PR preview. Keeping both checks here makes the failure
+ * boundary explicit: committed DB visibility is distinguished from a stale API
+ * cache/read.
+ */
+function nvx_h1_verify_meta_after_commit( int $post_id, string $meta_key, string $expected ): void {
+	global $wpdb;
+
+	if ( $post_id <= 0 ) {
+		throw new RuntimeException( 'post_meta_postcommit_invalid_post_id' );
+	}
+
+	$failure_key   = ltrim( sanitize_key( $meta_key ), '_' );
+	$stored_values = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s ORDER BY meta_id ASC",
+			$post_id,
+			$meta_key
+		)
+	);
+	if ( ! is_array( $stored_values ) || array() === $stored_values ) {
+		throw new RuntimeException( 'post_meta_postcommit_durable_value_missing_' . $failure_key );
+	}
+	foreach ( $stored_values as $stored_value ) {
+		if ( $expected !== (string) maybe_unserialize( $stored_value ) ) {
+			throw new RuntimeException( 'post_meta_postcommit_durable_verification_failed_' . $failure_key );
+		}
+	}
+
+	// Invalidate the exact runtime cache key after COMMIT. clean_post_cache()
+	// also clears the corresponding post cache without relying on a global flush.
+	wp_cache_delete( $post_id, 'post_meta' );
+	clean_post_cache( $post_id );
+	wp_cache_delete( $post_id, 'post_meta' );
+
+	if ( $expected !== (string) get_post_meta( $post_id, $meta_key, true ) ) {
+		throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_' . $failure_key );
+	}
+}
+
 /** Resolve and verify the WordPress runtime metadata view after COMMIT. */
 function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
-	wp_cache_flush();
-
 	$ops = isset( $plan['ops'] ) && is_array( $plan['ops'] ) ? $plan['ops'] : array();
 	foreach ( $ops as $op ) {
 		$scope   = (string) ( $op['scope'] ?? '' );
@@ -278,21 +322,15 @@ function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 
 		if ( 'strategy' === $scope && in_array( $action, array( 'update_seed_review_meta', 'create_seed' ), true ) ) {
 			$expected = (string) ( $payload['review_status'] ?? '' );
-			if ( $post_id <= 0 || $expected !== (string) get_post_meta( $post_id, '_nvx_strategy_review_status', true ) ) {
-				throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_nvx_strategy_review_status' );
-			}
+			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_strategy_review_status', $expected );
 			continue;
 		}
 
 		if ( 'aesthetic' === $scope && in_array( $action, array( 'repair_seed_meta', 'create_seed' ), true ) ) {
 			$expected_key    = sanitize_key( (string) ( $payload['key'] ?? '' ) );
 			$expected_review = 'create_seed' === $action ? 'pending' : (string) ( $payload['target_review'] ?? 'pending' );
-			if ( $post_id <= 0 || $expected_key !== (string) get_post_meta( $post_id, '_nvx_aesthetic_treatment_key', true ) ) {
-				throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_nvx_aesthetic_treatment_key' );
-			}
-			if ( $expected_review !== strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_review_status', true ) ) ) ) {
-				throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_nvx_medical_review_status' );
-			}
+			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_aesthetic_treatment_key', $expected_key );
+			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_medical_review_status', $expected_review );
 		}
 	}
 }
