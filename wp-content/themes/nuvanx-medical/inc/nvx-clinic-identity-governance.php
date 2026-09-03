@@ -71,35 +71,49 @@ function nvx_clinic_identity_is_clinic_node( array $node ): bool {
 }
 
 /**
- * Keep only clinic references whose @id belongs to an allowed branch.
+ * Remove only references to clinic branches that are not allowed on this route.
  *
  * Both a single associative reference and a list of references are supported
- * because Schema emitters may legitimately use either shape.
+ * because Schema emitters may legitimately use either shape. References to
+ * non-clinic organizations remain untouched; this module is not their owner.
  *
- * @param mixed              $refs        Incoming reference value.
- * @param array<string,bool> $allowed_ids Allowed clinic node IDs.
+ * @param mixed              $refs         Incoming reference value.
+ * @param array<string,bool> $allowed_ids  Allowed clinic node IDs.
+ * @param array<string,bool> $all_clinic_ids All clinic node IDs in the graph.
  * @return mixed
  */
-function nvx_clinic_identity_filter_refs( $refs, array $allowed_ids ) {
+function nvx_clinic_identity_filter_refs( $refs, array $allowed_ids, array $all_clinic_ids ) {
 	if ( ! is_array( $refs ) ) {
 		return $refs;
 	}
 
 	if ( array_key_exists( '@id', $refs ) ) {
 		$id = (string) $refs['@id'];
-		return '' !== $id && isset( $allowed_ids[ $id ] ) ? $refs : array();
+		return '' !== $id && isset( $all_clinic_ids[ $id ] ) && ! isset( $allowed_ids[ $id ] )
+			? array()
+			: $refs;
+	}
+
+	$is_list = empty( $refs ) || array_keys( $refs ) === range( 0, count( $refs ) - 1 );
+	if ( ! $is_list ) {
+		// Inline Schema objects without @id are associative values, not lists.
+		// They do not identify a known clinic node and remain under their owner.
+		return $refs;
 	}
 
 	$filtered = array();
 	foreach ( $refs as $ref ) {
 		if ( ! is_array( $ref ) ) {
+			$filtered[] = $ref;
 			continue;
 		}
 
 		$id = (string) ( $ref['@id'] ?? '' );
-		if ( '' !== $id && isset( $allowed_ids[ $id ] ) ) {
-			$filtered[] = $ref;
+		if ( '' !== $id && isset( $all_clinic_ids[ $id ] ) && ! isset( $allowed_ids[ $id ] ) ) {
+			continue;
 		}
+
+		$filtered[] = $ref;
 	}
 
 	return $filtered;
@@ -118,8 +132,10 @@ function nvx_clinic_identity_schema_graph( $graph ) {
 
 	$allowed_keys = array_fill_keys( nvx_clinic_identity_allowed_schema_keys(), true );
 	$allowed_ids  = array();
+	$clinic_ids   = array();
 
-	// Resolve the complete allowed clinic ID set before filtering references.
+	// Resolve both the complete clinic set and the route-allowed subset before
+	// filtering references. Unknown organization IDs must not be treated as clinics.
 	foreach ( $graph as $node ) {
 		if ( ! is_array( $node ) || ! nvx_clinic_identity_is_clinic_node( $node ) ) {
 			continue;
@@ -127,6 +143,9 @@ function nvx_clinic_identity_schema_graph( $graph ) {
 
 		$key = sanitize_key( (string) ( $node['branchCode'] ?? '' ) );
 		$id  = (string) ( $node['@id'] ?? '' );
+		if ( '' !== $id ) {
+			$clinic_ids[ $id ] = true;
+		}
 		if ( '' !== $id && '' !== $key && isset( $allowed_keys[ $key ] ) ) {
 			$allowed_ids[ $id ] = true;
 		}
@@ -152,7 +171,7 @@ function nvx_clinic_identity_schema_graph( $graph ) {
 				continue;
 			}
 
-			$refs = nvx_clinic_identity_filter_refs( $node[ $property ], $allowed_ids );
+			$refs = nvx_clinic_identity_filter_refs( $node[ $property ], $allowed_ids, $clinic_ids );
 			if ( is_array( $refs ) && empty( $refs ) ) {
 				unset( $node[ $property ] );
 			} else {
