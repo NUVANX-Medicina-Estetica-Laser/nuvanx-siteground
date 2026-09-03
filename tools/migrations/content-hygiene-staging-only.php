@@ -129,7 +129,7 @@ function nvx_h1_apply_bridal_partial_provenance_repair( array $repair ): void {
 	throw new RuntimeException( 'bridal_partial_provenance_ambiguous' );
 }
 
-$nvx_h1_plan          = nvx_h1_build_plan();
+$nvx_h1_plan           = nvx_h1_build_plan();
 $nvx_bridal_mismatches = array_values( array_filter( $nvx_h1_plan['errors'], 'nvx_h1_is_bridal_partial_provenance_error' ) );
 $nvx_other_errors      = array_values(
 	array_filter(
@@ -227,7 +227,21 @@ $core_command = sprintf(
 	$nvx_dry_run ? '1' : '0',
 	escapeshellarg( $core_path )
 );
-passthru( $core_command, $core_status );
+
+// The wrapper is the sole owner of the public "Status:" contract. Capture the
+// child process output so its historical Status line cannot be mistaken for the
+// final wrapper result by the deployment gate.
+$core_output = array();
+exec( $core_command . ' 2>&1', $core_output, $core_status );
+foreach ( $core_output as $core_line ) {
+	$core_line = (string) $core_line;
+	if ( str_starts_with( $core_line, 'Status: ' ) ) {
+		$core_token = preg_replace( '/[^A-Z0-9_:-]/', '', substr( $core_line, 8 ) );
+		printf( "H1_HYGIENE_CORE_STATUS=%s\n", is_string( $core_token ) ? $core_token : 'INVALID' );
+		continue;
+	}
+	echo $core_line . "\n";
+}
 if ( 0 !== $core_status ) {
 	fwrite( STDERR, "[FATAL] canonical Staging hygiene core failed.\n" );
 	echo "H1_SEED_RECONCILIATION=FAIL reason=hygiene_core\n";
