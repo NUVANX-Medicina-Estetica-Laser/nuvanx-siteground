@@ -923,7 +923,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 		$endpoint      = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
 		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
 		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
-			wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
+			$updated = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
+			if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
+				nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'quarantine_transition_failed' );
+				return false;
+			}
 			nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'invalid_dedupe_metadata' );
 			return false;
 		}
@@ -931,26 +935,39 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
 		$current   = nvx_supabase_relay_queue_fresh_option( $claim_key );
 		if ( ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
-			if ( '' !== $publish_claim && $publish_claim === $current && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
+			if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
 				return false;
 			}
-			wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
+			$updated = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
+			if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
+				nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'quarantine_transition_failed' );
+				return false;
+			}
 			nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'publication_incomplete' );
 			return false;
 		}
 
-		if ( '' !== $publish_claim && $publish_claim === $current && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
+		if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
 			return false;
 		}
+
+		// Due visibility must become durable before the fence can promote a
+		// prepared row to pending. If fencing is lost after this write, the normal
+		// due query can still rediscover the row; no pending-but-invisible state is
+		// created by recovery.
+		$due = (string) nvx_supabase_relay_time();
+		if ( ! add_post_meta( $post_id, '_nvx_relay_next_attempt', $due, true ) ) {
+			$current_due = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
+			if ( $current_due < 1 && ! nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, absint( $due ) ) ) {
+				nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'recovery_due_write_failed' );
+				return false;
+			}
+		}
+
 		if ( ! nvx_supabase_relay_queue_acquire_publication_fence( $post_id, $dedupe_key ) ) {
 			return false;
 		}
-		$due = (string) nvx_supabase_relay_time();
-		if ( add_post_meta( $post_id, '_nvx_relay_next_attempt', $due, true ) ) {
-			return true;
-		}
-		$current_due = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
-		return $current_due > 0 || nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, absint( $due ) );
+		return true;
 	}
 }
 
@@ -1001,12 +1018,10 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
 		if ( $is_prepared && ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
 			$dedupe_valid = 1 === preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key );
 			if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
-				if ( ! $dedupe_valid ) {
-					return false;
-				}
-				if ( $publish_claim === nvx_supabase_relay_queue_fresh_option( nvx_supabase_relay_queue_claim_key( $dedupe_key ) ) ) {
-					return false;
-				}
+				// A live publication generation is still authoritative even if the
+				// option owner has already advanced. Never quarantine an in-flight
+				// publisher; recovery begins only after its generation expires.
+				return false;
 			}
 			// A prepared row that carries a valid identity and durable due-visibility
 			// is a structurally complete publication whose only missing write is the
