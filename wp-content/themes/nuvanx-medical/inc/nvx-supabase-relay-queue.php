@@ -805,6 +805,85 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_is_valid_pending_item' ) ) {
 }
 
 /**
+ * Acquire or verify the durable publication fence for one pending item.
+ *
+ * A pending CPT row is persisted before its claim is bound, so post_status by
+ * itself is never delivery authority. Exactly one row for a dedupe identity can
+ * become drainable: the row whose ID owns the claim option. The drainer may
+ * adopt legacy rows without a claim and may recover an expired publisher, but
+ * it never steals an active publisher or another valid pending row's fence.
+ *
+ * @param int    $post_id Pending outbox post ID.
+ * @param string $dedupe_key Expected dedupe hash.
+ * @return bool True only when this exact post owns the durable claim.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_acquire_publication_fence' ) ) {
+	function nvx_supabase_relay_queue_acquire_publication_fence(
+		int $post_id,
+		string $dedupe_key
+	): bool {
+		$post_id = absint( $post_id );
+		if (
+			$post_id < 1
+			|| '' === $dedupe_key
+			|| ! nvx_supabase_relay_queue_is_valid_pending_item( $post_id, $dedupe_key )
+		) {
+			return false;
+		}
+
+		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
+		$expected  = (string) $post_id;
+		$current   = nvx_supabase_relay_queue_fresh_option( $claim_key );
+
+		if ( $expected === $current ) {
+			return true;
+		}
+
+		// Legacy pending rows had no claim. The UNIQUE option key makes adoption
+		// atomic against a concurrent publisher or drainer.
+		if ( '' === $current ) {
+			if ( add_option( $claim_key, $expected, '', false ) ) {
+				return true;
+			}
+
+			return $expected === nvx_supabase_relay_queue_fresh_option( $claim_key );
+		}
+
+		// A numeric claim owned by a different valid row is the canonical fence.
+		// Only replace numeric state that is demonstrably stale for this identity.
+		if ( ctype_digit( $current ) ) {
+			$current_post_id = absint( $current );
+			if ( nvx_supabase_relay_queue_is_valid_pending_item( $current_post_id, $dedupe_key ) ) {
+				return false;
+			}
+
+			return nvx_supabase_relay_compare_and_swap_option(
+				$claim_key,
+				$current,
+				$expected
+			);
+		}
+
+		$parts        = explode( '|', $current, 2 );
+		$claim_expiry = isset( $parts[0] ) && is_numeric( $parts[0] )
+			? (int) $parts[0]
+			: 0;
+
+		if ( $claim_expiry > nvx_supabase_relay_time() ) {
+			return false;
+		}
+
+		// Recover only expired or malformed in-flight state through CAS. A single
+		// contender wins and all other duplicate rows remain non-drainable.
+		return nvx_supabase_relay_compare_and_swap_option(
+			$claim_key,
+			$current,
+			$expected
+		);
+	}
+}
+
+/**
  * Atomic attempt accumulation primitive.
  */
 if ( ! function_exists( 'nvx_supabase_relay_queue_atomic_add_attempts' ) ) {
@@ -894,6 +973,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
 
 		$next_attempt = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
 		if ( $next_attempt > nvx_supabase_relay_time() ) {
+			return false;
+		}
+
+		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		if ( ! nvx_supabase_relay_queue_acquire_publication_fence( $post_id, $dedupe_key ) ) {
 			return false;
 		}
 
@@ -1002,8 +1086,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_record_existing_attempt' ) ) {
  *    Once exclusive claim ownership is secured, it checks whether a matching pending
  *    queue item already exists (legacy un-claimed post). If so, it binds the claim
  *    to that item and merges attempts, preventing duplicate deliveries.
- * 4. Publication publishes directly to 'pending' (single-phase).
- *    On success, the claim is atomically bound to the post ID via CAS.
+ * 4. Publication is two-phase: the row is persisted as pending, then its claim
+ *    is atomically bound to the post ID. The drainer independently requires that
+ *    durable post-ID fence, so an unbound pending row is never deliverable.
  *    On failure, the claim is conditionally released only if still owned by this token.
  *
  * @param string               $endpoint Registered outbox endpoint key.
@@ -1294,16 +1379,23 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		);
 
 		if ( ! $claim_bound ) {
-			// Publication took too long or in-flight lease expired, and a contender
-			// seized the claim. Delete this redundant pending post so it cannot
-			// deliver duplicate events later.
-			wp_delete_post( $post_id, true );
-
-			// Check whether the winning contender published a valid pending item.
-			$current_claim = (string) get_option( $claim_key, '' );
+			// Publication took too long or the lease expired. Resolve the successor's
+			// durable state before deleting anything: the successor may have adopted
+			// this exact post, in which case deleting it would lose the only retry.
+			$current_claim = nvx_supabase_relay_queue_fresh_option( $claim_key );
 			if ( '' !== $current_claim && ctype_digit( $current_claim ) ) {
 				$existing_post_id = absint( $current_claim );
 				if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) ) {
+					if ( $existing_post_id === $post_id ) {
+						$GLOBALS['nvx_supabase_relay_queue_dirty'] = true;
+						nvx_supabase_relay_log( $endpoint, 'QUEUED' );
+
+						return $post_id;
+					}
+
+					// A different fenced row won. This row is now provably redundant.
+					wp_delete_post( $post_id, true );
+
 					return nvx_supabase_relay_queue_record_existing_attempt(
 						$existing_post_id,
 						$endpoint,
@@ -1312,9 +1404,14 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 				}
 			}
 
+			// Do not delete while a successor is merely in-flight: it can still adopt
+			// this row. Pending status alone is harmless because the drainer requires
+			// the durable post-ID publication fence above.
 			// Fallback: check queue directly for any matching pending post.
 			$fallback = nvx_supabase_relay_existing_item( $dedupe_key );
-			if ( $fallback > 0 ) {
+			if ( $fallback > 0 && $fallback !== $post_id ) {
+				wp_delete_post( $post_id, true );
+
 				return nvx_supabase_relay_queue_record_existing_attempt(
 					$fallback,
 					$endpoint,
