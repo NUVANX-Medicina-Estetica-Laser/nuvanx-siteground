@@ -9,7 +9,6 @@
  *
  * @package NUVANX_Medical
  */
-
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -101,48 +100,6 @@ function nvx_filter_strip_embedded_jsonld( $content ) {
 add_filter( 'the_content', 'nvx_filter_strip_embedded_jsonld', NVX_HOOK_PRIO_JSONLD_STRIP );
 
 /**
- * Strip standalone JSON-LD blocks from wp_head output.
- *
- * This catches legacy Schema.org emitters that inject JSON-LD directly in wp_head
- * before the governance retirement routines can remove them. It runs at a very late
- * priority to ensure it processes all head output after all callbacks have run.
- *
- * @param string $head HTML head content.
- * @return string
- */
-function nvx_filter_head_standalone_jsonld( $head ) {
-	if ( ! nvx_should_strip_embedded_jsonld() ) {
-		return $head;
-	}
-
-	// Remove all standalone JSON-LD blocks except the canonical Yoast graph
-	// The canonical Yoast graph has class="yoast-schema-graph"
-	$script_tags = [];
-	$patterns = [
-		'/<script\s+[^>]*type\s*=\s*["\']?application\/ld\+json["\']?[^>]*>[\s\S]*?<\/script>/i',
-	];
-
-	foreach ( $patterns as $pattern ) {
-		preg_match_all( $pattern, $head, $matches );
-		if ( ! empty( $matches[0] ) ) {
-			foreach ( $matches[0] as $script ) {
-				// Keep if it has the Yoast class
-				if ( strpos( $script, 'yoast-schema-graph' ) !== false ) {
-					continue;
-				}
-				$script_tags[] = $script;
-			}
-		}
-	}
-
-	// Remove the identified standalone blocks
-	$filtered = str_replace( $script_tags, '', $head );
-
-	return $filtered;
-}
-add_filter( 'wp_head', 'nvx_filter_head_standalone_jsonld', PHP_INT_MAX - 1 );
-
-/**
  * Resolve the source file for a registered WordPress callback without executing it.
  *
  * Results are cached per callback to avoid repeated reflection overhead on busy sites.
@@ -153,19 +110,19 @@ add_filter( 'wp_head', 'nvx_filter_head_standalone_jsonld', PHP_INT_MAX - 1 );
 function nvx_jsonld_callback_source_file( $callback ): string {
 	static $cache = array();
 
-	// Generate a cache key based on callback type and value
+	// Generate a cache key based on callback type and value.
 	if ( $callback instanceof Closure ) {
 		$cache_key = 'closure_' . spl_object_hash( $callback );
 	} elseif ( is_string( $callback ) ) {
 		$cache_key = 'string_' . $callback;
 	} elseif ( is_array( $callback ) && 2 === count( $callback ) ) {
-		$class = is_object( $callback[0] ) ? get_class( $callback[0] ) : (string) $callback[0];
+		$class     = is_object( $callback[0] ) ? get_class( $callback[0] ) : (string) $callback[0];
 		$cache_key = 'array_' . $class . '::' . (string) $callback[1];
 	} else {
 		return '';
 	}
 
-	// Return cached result if available
+	// Return cached result if available.
 	if ( isset( $cache[ $cache_key ] ) ) {
 		return $cache[ $cache_key ];
 	}
@@ -174,8 +131,8 @@ function nvx_jsonld_callback_source_file( $callback ): string {
 		if ( $callback instanceof Closure ) {
 			$cache[ $cache_key ] = (string) ( new ReflectionFunction( $callback ) )->getFileName();
 		} elseif ( is_string( $callback ) ) {
-			// Handle 'Class::method' string form that WordPress also accepts
-			if ( strpos( $callback, '::' ) !== false ) {
+			// Handle 'Class::method' string form that WordPress also accepts.
+			if ( false !== strpos( $callback, '::' ) ) {
 				list( $class, $method ) = explode( '::', $callback, 2 );
 				if ( class_exists( $class ) && method_exists( $class, $method ) ) {
 					$cache[ $cache_key ] = (string) ( new ReflectionMethod( $class, $method ) )->getFileName();
@@ -231,7 +188,7 @@ function nvx_jsonld_is_retired_standalone_schema_callback( $callback ): bool {
 	}
 
 	// Verify the file lives in allowed roots to prevent removing output from unrelated files
-	// with the same basename in plugins or other locations
+	// with the same basename in plugins or other locations.
 	$allowed_roots = array( get_template_directory(), get_stylesheet_directory(), WPMU_PLUGIN_DIR );
 	foreach ( $allowed_roots as $root ) {
 		if ( is_string( $root ) && '' !== $root && 0 === strpos( $file, $root ) ) {
@@ -262,7 +219,7 @@ function nvx_jsonld_retire_legacy_standalone_schema_callbacks(): void {
 
 		foreach ( $callbacks_by_priority as $priority => $callbacks ) {
 			foreach ( $callbacks as $registered ) {
-				// Add robust guards for unexpected hook structures
+				// Guard unexpected hook structures.
 				if ( ! is_array( $registered ) || ! isset( $registered['function'] ) ) {
 					continue;
 				}

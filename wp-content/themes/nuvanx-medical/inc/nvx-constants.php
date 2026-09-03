@@ -94,9 +94,9 @@ const NVX_HOOK_PRIO_BTL_GOVERNANCE  = 99;
 const NVX_HOOK_PRIO_DR_RIVERA                  = 121;
 const NVX_HOOK_PRIO_QUE_EXIGIR                 = 122;
 const NVX_HOOK_PRIO_EXION_INVESTMENT           = 126;
-const NVX_HOOK_PRIO_MEDICAL_REVIEW             = 144;
 const NVX_HOOK_PRIO_CLINICAL_AUTHORITY_BYLINE  = 145;
 const NVX_HOOK_PRIO_TREATMENT_AUTHORITY_CASES  = 146;
+const NVX_HOOK_PRIO_MEDICAL_REVIEW             = 147;
 
 // Late Editorial / Media Governance
 const NVX_HOOK_PRIO_AUTHENTIC_PHOTOGRAPHY   = 175;
@@ -106,8 +106,11 @@ const NVX_HOOK_PRIO_RESPONSIVE_IMAGES        = 200;
 const NVX_HOOK_PRIO_MAPS_IFRAMES             = 201;
 const NVX_HOOK_PRIO_INVALID_LIST_ROLES       = 202;
 
+// Final semantic/output governance before extreme wrapper normalization.
+const NVX_HOOK_PRIO_SIGNATURE_NAMES     = 219;
+const NVX_HOOK_PRIO_CLINICS_APPROVED_EQUIPMENT = 220;
+const NVX_HOOK_PRIO_TARIFF_OUTPUT_GUARD = 221;
+
 // Extreme Late Normalization
-const NVX_HOOK_PRIO_SIGNATURE_NAMES                   = 219;
-const NVX_HOOK_PRIO_CLINICS_APPROVED_EQUIPMENT        = 220;
 const NVX_HOOK_PRIO_BRAND_WRAPPER_NORMALIZE           = PHP_INT_MAX;
 const NVX_HOOK_PRIO_MANAGED_COMPONENT_PROSE_WRAPPER   = PHP_INT_MAX; // Intentional collision; load order determines final normalizer order.
