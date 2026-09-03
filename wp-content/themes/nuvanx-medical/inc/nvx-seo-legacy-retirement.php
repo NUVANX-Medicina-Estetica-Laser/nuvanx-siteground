@@ -13,10 +13,15 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-// Retire the legacy Gracias nofollow owner globally rather than from the page
-// template so frontend, Yoast/REST and controlled WP-CLI surfaces resolve the
-// same publication-manifest robots policy before any presentation is built.
-require_once __DIR__ . '/nvx-gracias-robots-governance.php';
+/**
+ * Retire the legacy direct-header owner.
+ *
+ * nvx-seo-production-readiness.php is the canonical X-Robots-Tag owner through
+ * the wp_headers filter. Keeping a second send_headers/header() writer makes
+ * the final policy order-dependent and can weaken the stronger noarchive /
+ * nosnippet staging contract.
+ */
+remove_action( 'send_headers', 'nvx_seo_enforce_http_robots_header', 1 );
 
 /**
  * Identifies indexable publication-manifest routes whose Yoast canonical must
