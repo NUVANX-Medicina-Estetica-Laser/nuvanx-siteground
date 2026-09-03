@@ -70,6 +70,7 @@ function nvx_theme_bootstrap_manifest(): array {
 		'inc/nvx-structured-data.php',
 		'inc/nvx-schema-website-governance.php',
 		'inc/nvx-schema-semantic-governance.php',
+		'inc/nvx-clinic-identity-governance.php',
 		'inc/nvx-deploy-stamp.php',
 
 		// Shared presentation primitives.

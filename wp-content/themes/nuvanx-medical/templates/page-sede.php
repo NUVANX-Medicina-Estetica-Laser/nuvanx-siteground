@@ -11,27 +11,44 @@
 defined( 'ABSPATH' ) || exit;
 
 // The clinics hub owns its complete hero/content through nvx-clinics-hub.php.
-// Route only that hub through the canonical shell so page-sede.php does not
-// print a second H1 before the managed the_content renderer runs.
-if ( function_exists( 'nvxIsClinicsHub' ) && nvxIsClinicsHub() ) {
+// Only the immutable exact canonical hub route may enter that managed shell.
+$request_path = function_exists( 'nvx_theme_request_path' ) ? (string) nvx_theme_request_path() : '/';
+if ( function_exists( 'nvx_clinic_is_exact_hub_path' ) && nvx_clinic_is_exact_hub_path( $request_path ) ) {
 	get_template_part( 'template-parts/content/nvx-page-shell' );
 	return;
 }
 
-// Get clinic-specific data for individual clinic pages.
+// Individual clinic identity is resolved exclusively from the immutable path
+// against clinics.json. The routed query value is only a consistency witness:
+// if another component injects a different valid clinic key, fail closed rather
+// than rendering content whose NAP disagrees with the final Schema fence.
 $clinics = function_exists( 'nvx_schema_clinics' ) ? nvx_schema_clinics() : array();
 $config  = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
 
-// Determine which clinic this page represents based on URL/slug.
-$current_slug = get_post_field( 'post_name', get_the_ID() );
-$clinic_key   = 'chamberi';
+$resolved_clinic_key = function_exists( 'nvx_current_clinic_landing_key' )
+	? nvx_current_clinic_landing_key()
+	: null;
+$clinic_key = is_string( $resolved_clinic_key ) ? sanitize_key( $resolved_clinic_key ) : '';
 
-if ( strpos( $current_slug, 'goya' ) !== false || strpos( $current_slug, 'salamanca' ) !== false ) {
-	$clinic_key = 'goya';
+if ( '' !== $clinic_key && function_exists( 'get_query_var' ) ) {
+	$routed_clinic_key = sanitize_key( (string) get_query_var( 'nvx_clinic_key', '' ) );
+	if ( '' !== $routed_clinic_key && $routed_clinic_key !== $clinic_key ) {
+		$clinic_key = '';
+	}
 }
 
-$clinic_data   = isset( $clinics[ $clinic_key ] ) && is_array( $clinics[ $clinic_key ] ) ? $clinics[ $clinic_key ] : array();
-$clinic_config = isset( $config[ $clinic_key ] ) && is_array( $config[ $clinic_key ] ) ? $config[ $clinic_key ] : array();
+if (
+	'' === $clinic_key
+	|| ! isset( $clinics[ $clinic_key ], $config[ $clinic_key ] )
+	|| ! is_array( $clinics[ $clinic_key ] )
+	|| ! is_array( $config[ $clinic_key ] )
+) {
+	get_template_part( 'template-parts/content/nvx-page-shell' );
+	return;
+}
+
+$clinic_data   = $clinics[ $clinic_key ];
+$clinic_config = $config[ $clinic_key ];
 
 $clinic_name    = ! empty( $clinic_data['name'] ) ? (string) $clinic_data['name'] : '';
 $clinic_address = ! empty( $clinic_config['address'] )
