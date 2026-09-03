@@ -104,6 +104,7 @@ for (const match of bootstrapSource.matchAll(/['"](inc\/[A-Za-z0-9_./-]+\.php)['
 const externalRuntimeIncludes = new Set(['wp-load.php']);
 const externalRuntimeOwners = [];
 const literalPhpEdges = [];
+const unanchoredLiteralIncludes = [];
 
 function assertPhpInclude(file, baseDirectory, target) {
   const relativeTarget = target.replace(/^\/+/, '');
@@ -206,9 +207,15 @@ for (const file of includeCheckedPhpFiles) {
       continue;
     }
 
+    // Bare literal includes do not resolve relative to the including file in
+    // PHP. Their runtime lookup depends on include_path and the executing
+    // script's working directory, neither of which is a repository invariant.
+    // Keep them explicitly outside this anchored-path gate rather than model
+    // them incorrectly. They remain visible in the report for later migration
+    // toward __DIR__-anchored ownership.
     const plainLiteralMatch = expression.match(plainLiteralIncludePattern);
     if (plainLiteralMatch) {
-      assertPhpInclude(file, fileDirectory, plainLiteralMatch[2]);
+      unanchoredLiteralIncludes.push(`${file}->${plainLiteralMatch[2]}`);
       continue;
     }
 
@@ -224,6 +231,9 @@ for (const file of includeCheckedPhpFiles) {
 if (externalRuntimeOwners.length > 0) {
   report.push(`EXTERNAL_WORDPRESS_RUNTIME_DEPENDENCIES=${[...new Set(externalRuntimeOwners)].join(',')}`);
 }
+if (unanchoredLiteralIncludes.length > 0) {
+  report.push(`UNANCHORED_LITERAL_PHP_INCLUDES=${[...new Set(unanchoredLiteralIncludes)].join(',')}`);
+}
 
 const textExtensions = /\.(?:md|txt|json|ya?ml|php|mjs|js|cjs|sh|py|css)$/i;
 const textFiles = tracked.filter((file) => textExtensions.test(file));
@@ -236,27 +246,54 @@ for (const file of textFiles) {
   }
 }
 
-// Every immediate theme/inc PHP module must have an executable WordPress load
-// edge: canonical bootstrap manifest or a literal include from runtime PHP.
-// Tests, phpstan bootstrap, compiler tools, comments and inert strings do not
-// count as production ownership.
+// Theme ownership is reachability, not mere textual adjacency. Established
+// WordPress entry surfaces are roots; literal include edges plus the canonical
+// bootstrap manifest are traversed transitively. An orphan cycle under inc/
+// therefore cannot make itself look owned.
 const themeRuntimePhpFiles = phpFiles.filter((file) =>
   file.startsWith(themeRoot)
   && !file.startsWith(`${themeRoot}tests/`)
   && !file.startsWith(`${themeRoot}tools/`),
 );
-const themeRuntimeOwnerSet = new Set(themeRuntimePhpFiles);
+const themeRuntimePhpSet = new Set(themeRuntimePhpFiles);
 const immediateThemeModules = themeRuntimePhpFiles.filter((file) =>
   new RegExp(`^${themeRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}inc/[^/]+\\.php$`).test(file),
 );
-const executableThemeModuleOwners = new Set(bootstrapModules);
+const themeEntryRoots = new Set(
+  themeRuntimePhpFiles.filter((file) => {
+    const relative = file.slice(themeRoot.length);
+    return !relative.includes('/')
+      || relative.startsWith('templates/')
+      || relative.startsWith('template-parts/');
+  }),
+);
+const themeAdjacency = new Map();
+for (const file of themeRuntimePhpFiles) themeAdjacency.set(file, new Set());
 for (const edge of literalPhpEdges) {
-  if (themeRuntimeOwnerSet.has(edge.owner) && immediateThemeModules.includes(edge.target)) {
-    executableThemeModuleOwners.add(edge.target);
+  if (themeRuntimePhpSet.has(edge.owner) && themeRuntimePhpSet.has(edge.target)) {
+    themeAdjacency.get(edge.owner)?.add(edge.target);
+  }
+}
+if (themeRuntimePhpSet.has(bootstrapPath)) {
+  const bootstrapEdges = themeAdjacency.get(bootstrapPath) || new Set();
+  for (const modulePath of bootstrapModules) {
+    if (themeRuntimePhpSet.has(modulePath)) bootstrapEdges.add(modulePath);
+  }
+  themeAdjacency.set(bootstrapPath, bootstrapEdges);
+}
+
+const reachableThemePhp = new Set();
+const reachabilityQueue = [...themeEntryRoots];
+while (reachabilityQueue.length > 0) {
+  const current = reachabilityQueue.shift();
+  if (!current || reachableThemePhp.has(current) || !themeRuntimePhpSet.has(current)) continue;
+  reachableThemePhp.add(current);
+  for (const target of themeAdjacency.get(current) || []) {
+    if (!reachableThemePhp.has(target)) reachabilityQueue.push(target);
   }
 }
 for (const modulePath of immediateThemeModules) {
-  if (!executableThemeModuleOwners.has(modulePath)) {
+  if (!reachableThemePhp.has(modulePath)) {
     fail('UNREFERENCED_THEME_MODULE', modulePath);
   }
 }
@@ -339,9 +376,12 @@ console.log(
   + ` workflows=${workflowFiles.length}`
   + ` php=${phpFiles.length}`
   + ` php_include_edges=${literalPhpEdges.length}`
+  + ` theme_roots=${themeEntryRoots.size}`
+  + ` theme_reachable=${reachableThemePhp.size}`
   + ` theme_modules=${immediateThemeModules.length}`
   + ` migrations=${migrations.length}`
   + ` retained_legacy_migrations=${retainedLegacyMigrations.length}`
   + ` external_runtime_dependencies=${new Set(externalRuntimeOwners).size}`
+  + ` unanchored_literal_includes=${new Set(unanchoredLiteralIncludes).size}`
   + ` zero_byte=0 root_code=0 residue=0 broken_exec_refs=0 orphan_theme_modules=0 orphan_migrations=0 unowned_variants=0`,
 );
