@@ -45,15 +45,15 @@ function nvx_css_hash(string $content): string {
 function nvx_css_read(string $path): string {
     $contents = file_get_contents($path);
     if (false === $contents) {
-        throw new RuntimeException('Unable to read CSS file: ' . $path);
+        throw new RuntimeException('Unable to read required CSS source or artifact');
     }
     return nvx_css_normalize($contents);
 }
 
-/** Write a generated UTF-8 artifact atomically enough for release materialization. */
+/** Write a generated UTF-8 artifact for isolated release materialization. */
 function nvx_css_write(string $path, string $contents): void {
     if (false === file_put_contents($path, $contents)) {
-        throw new RuntimeException('Unable to write CSS artifact: ' . $path);
+        throw new RuntimeException('Unable to write generated CSS artifact');
     }
 }
 
@@ -62,7 +62,7 @@ function nvx_css_source_files(string $theme_dir): array {
     $css_dir = $theme_dir . '/assets/css';
     $entries = scandir($css_dir);
     if (false === $entries) {
-        throw new RuntimeException('Unable to enumerate CSS source directory: ' . $css_dir);
+        throw new RuntimeException('Unable to enumerate CSS source directory');
     }
 
     $files = array();
@@ -79,18 +79,18 @@ function nvx_css_source_files(string $theme_dir): array {
 function nvx_css_compile(string $theme_dir): array {
     $dist_dir = $theme_dir . '/dist';
     if (!is_dir($dist_dir) && !mkdir($dist_dir, 0775, true) && !is_dir($dist_dir)) {
-        throw new RuntimeException('Unable to create CSS dist directory: ' . $dist_dir);
+        throw new RuntimeException('Unable to create CSS distribution directory');
     }
 
     $existing = scandir($dist_dir);
     if (false === $existing) {
-        throw new RuntimeException('Unable to enumerate CSS dist directory: ' . $dist_dir);
+        throw new RuntimeException('Unable to enumerate CSS distribution directory');
     }
     foreach ($existing as $entry) {
         if (str_ends_with($entry, '.css') || 'manifest.json' === $entry) {
             $artifact = $dist_dir . '/' . $entry;
             if (is_file($artifact) && !unlink($artifact)) {
-                throw new RuntimeException('Unable to remove stale CSS artifact: ' . $artifact);
+                throw new RuntimeException('Unable to remove stale CSS distribution artifact');
             }
         }
     }
@@ -129,7 +129,7 @@ function nvx_css_compile(string $theme_dir): array {
 
     foreach (NVX_CSS_BUNDLES as $bundle_name => $sources) {
         if (count($sources) < 2) {
-            throw new RuntimeException('Bundle must aggregate at least two sources: ' . $bundle_name);
+            throw new RuntimeException('CSS bundle must aggregate at least two sources');
         }
         $parts = array();
         foreach ($sources as $relative_source) {
@@ -194,7 +194,7 @@ function nvx_css_verify(string $theme_dir): void {
     sort($route_sources, SORT_STRING);
     $overlap = array_intersect($route_sources, $core_sources);
     if (!empty($overlap)) {
-        throw new RuntimeException('CSS source has duplicate runtime representation: ' . implode(', ', $overlap));
+        throw new RuntimeException('CSS source has duplicate runtime representation');
     }
     $represented = array_merge($core_sources, $route_sources);
     sort($represented, SORT_STRING);
@@ -217,10 +217,10 @@ function nvx_css_verify(string $theme_dir): void {
         $reconstructed = implode("\n\n", $parts);
         $dist_content = nvx_css_read($dist_dir . '/' . $file);
         if (nvx_css_hash($reconstructed) !== $hash || nvx_css_hash($dist_content) !== $hash) {
-            throw new RuntimeException('CSS bundle hash mismatch: ' . $bundle_name);
+            throw new RuntimeException('CSS bundle hash mismatch');
         }
         if (!str_contains($file, $hash) || strlen($reconstructed) !== (int) ($info['size'] ?? -1) || $reconstructed !== $dist_content) {
-            throw new RuntimeException('CSS bundle reconstruction mismatch: ' . $bundle_name);
+            throw new RuntimeException('CSS bundle reconstruction mismatch');
         }
     }
 
@@ -228,16 +228,16 @@ function nvx_css_verify(string $theme_dir): void {
         $file = (string) ($info['file'] ?? '');
         $hash = (string) ($info['hash'] ?? '');
         if ('' === $file || '' === $hash || isset($referenced[$file])) {
-            throw new RuntimeException('Invalid or duplicate route CSS artifact reference: ' . $relative_source);
+            throw new RuntimeException('Invalid or duplicate route CSS artifact reference');
         }
         $referenced[$file] = true;
         $source_content = nvx_css_read($theme_dir . '/' . $relative_source);
         $dist_content = nvx_css_read($dist_dir . '/' . $file);
         if ($source_content !== $dist_content || nvx_css_hash($source_content) !== $hash || nvx_css_hash($dist_content) !== $hash) {
-            throw new RuntimeException('Route CSS distribution mismatch: ' . $relative_source);
+            throw new RuntimeException('Route CSS distribution mismatch');
         }
         if (!str_contains($file, $hash) || strlen($source_content) !== (int) ($info['size'] ?? -1)) {
-            throw new RuntimeException('Route CSS metadata mismatch: ' . $relative_source);
+            throw new RuntimeException('Route CSS metadata mismatch');
         }
     }
 
