@@ -104,12 +104,20 @@ for (const match of bootstrapSource.matchAll(/['"](inc\/[A-Za-z0-9_./-]+\.php)['
   }
 }
 
+const externalRuntimeIncludes = new Set(['wp-load.php']);
+const externalRuntimeOwners = [];
+
 function assertPhpInclude(file, baseDirectory, target) {
   const relativeTarget = target.replace(/^\/+/, '');
   const resolved = path.posix.normalize(path.posix.join(baseDirectory, relativeTarget));
-  if (!trackedSet.has(resolved)) {
-    fail('BROKEN_LITERAL_PHP_INCLUDE', `${file} -> ${resolved}`);
+  if (trackedSet.has(resolved)) return;
+
+  if (externalRuntimeIncludes.has(resolved) && file.startsWith('tools/migrations/')) {
+    externalRuntimeOwners.push(`${file}->${resolved}`);
+    return;
   }
+
+  fail('BROKEN_LITERAL_PHP_INCLUDE', `${file} -> ${resolved}`);
 }
 
 const phpFiles = tracked.filter((file) => file.endsWith('.php'));
@@ -117,20 +125,33 @@ for (const file of phpFiles) {
   const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
   const fileDirectory = path.posix.dirname(file);
 
-  for (const match of source.matchAll(/\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?__DIR__\s*\.\s*['"]([^'"]+\.php)['"]/g)) {
-    const before = source.slice(Math.max(0, match.index - 16), match.index);
-    if (/dirname\s*\(\s*$/i.test(before)) continue;
-    assertPhpInclude(file, fileDirectory, match[1]);
-  }
+  for (const line of source.split(/\r?\n/)) {
+    if (!/\b(?:require|require_once|include|include_once)\b/.test(line)) continue;
 
-  for (const match of source.matchAll(/\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?dirname\s*\(\s*__DIR__\s*,\s*(\d+)\s*\)\s*\.\s*['"]([^'"]+\.php)['"]/g)) {
-    let baseDirectory = fileDirectory;
-    const levels = Number.parseInt(match[1], 10);
-    for (let level = 0; level < levels; level += 1) {
-      baseDirectory = path.posix.dirname(baseDirectory);
+    const dirnameMatch = line.match(
+      /\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?dirname\s*\(\s*__DIR__(?:\s*,\s*(\d+))?\s*\)\s*\.\s*['"]([^'"]+\.php)['"]/
+    );
+    if (dirnameMatch) {
+      let baseDirectory = fileDirectory;
+      const levels = dirnameMatch[1] ? Number.parseInt(dirnameMatch[1], 10) : 1;
+      for (let level = 0; level < levels; level += 1) {
+        baseDirectory = path.posix.dirname(baseDirectory);
+      }
+      assertPhpInclude(file, baseDirectory, dirnameMatch[2]);
+      continue;
     }
-    assertPhpInclude(file, baseDirectory, match[2]);
+
+    const directMatch = line.match(
+      /\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?__DIR__\s*\.\s*['"]([^'"]+\.php)['"]/
+    );
+    if (directMatch) {
+      assertPhpInclude(file, fileDirectory, directMatch[1]);
+    }
   }
+}
+
+if (externalRuntimeOwners.length > 0) {
+  report.push(`EXTERNAL_WORDPRESS_RUNTIME_DEPENDENCIES=${[...new Set(externalRuntimeOwners)].join(',')}`);
 }
 
 const textExtensions = /\.(?:md|txt|json|ya?ml|php|mjs|js|cjs|sh|py|css)$/i;
@@ -216,5 +237,6 @@ console.log(
   + ` php=${phpFiles.length}`
   + ` migrations=${migrations.length}`
   + ` retained_legacy_migrations=${retainedLegacyMigrations.length}`
+  + ` external_runtime_dependencies=${new Set(externalRuntimeOwners).size}`
   + ` zero_byte=0 root_code=0 residue=0 broken_refs=0`,
 );
