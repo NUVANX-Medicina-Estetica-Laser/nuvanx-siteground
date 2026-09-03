@@ -540,8 +540,10 @@ unset( $GLOBALS['nvx_mock_time'] );
 // Assert Test 12: Duplicate enqueue accumulates attempts and enforces max retry limits
 $dedupe_test_body = '{"lead_id":"dedupe-test-99"}';
 $existing_item_id = 3001;
+$dedupe_test_key  = nvx_supabase_relay_dedupe_key( 'lead_captured', $dedupe_test_body, '' );
 $GLOBALS['post_meta'][$existing_item_id] = array(
-	'_nvx_relay_attempts' => '2',
+	'_nvx_relay_attempts'   => '2',
+	'_nvx_relay_dedupe_key' => $dedupe_test_key,
 );
 $GLOBALS['mock_get_posts'] = array( $existing_item_id );
 

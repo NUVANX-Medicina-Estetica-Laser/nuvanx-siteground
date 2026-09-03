@@ -49,6 +49,10 @@ if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS' ) ) {
 	define( 'NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS', 60 );
 }
 
+if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS' ) ) {
+	define( 'NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS', 'nvx_relay_prepared' );
+}
+
 /**
  * Safely derive lock lease duration based on batch size and worst-case transport timeouts.
  *
@@ -118,6 +122,18 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_endpoints' ) ) {
  */
 if ( ! function_exists( 'nvx_supabase_relay_queue_register_cpt' ) ) {
 	function nvx_supabase_relay_queue_register_cpt(): void {
+		register_post_status(
+			NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+			array(
+				'label'                     => 'Prepared Supabase relay item',
+				'public'                    => false,
+				'internal'                  => true,
+				'exclude_from_search'       => true,
+				'show_in_admin_all_list'    => false,
+				'show_in_admin_status_list' => false,
+			)
+		);
+
 		register_post_type(
 			NVX_SUPABASE_RELAY_QUEUE_CPT,
 			array(
@@ -466,7 +482,10 @@ if ( ! function_exists( 'nvx_supabase_relay_dedupe_key' ) ) {
 }
 
 /**
- * Locate an already-pending identical queue item.
+ * Locate an already-persisted identical queue item.
+ *
+ * Prepared rows are eligible for adoption because they already own complete
+ * metadata but are not drainable until their claim is bound and finalized.
  */
 if ( ! function_exists( 'nvx_supabase_relay_existing_item' ) ) {
 	function nvx_supabase_relay_existing_item(
@@ -475,7 +494,7 @@ if ( ! function_exists( 'nvx_supabase_relay_existing_item' ) ) {
 		$ids = get_posts(
 			array(
 				'post_type'              => NVX_SUPABASE_RELAY_QUEUE_CPT,
-				'post_status'            => 'pending',
+				'post_status'            => array( 'pending', NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ),
 				'posts_per_page'         => 1,
 				'fields'                 => 'ids',
 				'no_found_rows'          => true,
@@ -496,6 +515,49 @@ if ( ! function_exists( 'nvx_supabase_relay_existing_item' ) ) {
 		}
 
 		return absint( $ids[0] );
+	}
+}
+
+/**
+ * Retire every non-canonical persisted row for one dedupe identity.
+ *
+ * A successor can miss a publisher that has inserted its private row but has
+ * not written the final dedupe readiness marker yet. Whichever row later binds
+ * the durable claim must therefore remove all other ready rows before becoming
+ * drainable. This prevents an old prepared row from being adopted after the
+ * winner drains and releases its claim.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_retire_duplicate_rows' ) ) {
+	function nvx_supabase_relay_queue_retire_duplicate_rows(
+		int $canonical_post_id,
+		string $dedupe_key
+	): void {
+		$canonical_post_id = absint( $canonical_post_id );
+		$ids               = get_posts(
+			array(
+				'post_type'              => NVX_SUPABASE_RELAY_QUEUE_CPT,
+				'post_status'            => array( 'pending', NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ),
+				'posts_per_page'         => -1,
+				'fields'                 => 'ids',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'meta_query'             => array(
+					array(
+						'key'     => '_nvx_relay_dedupe_key',
+						'value'   => $dedupe_key,
+						'compare' => '=',
+					),
+				),
+			)
+		);
+
+		foreach ( $ids as $candidate_id ) {
+			$candidate_id = absint( $candidate_id );
+			if ( $candidate_id > 0 && $candidate_id !== $canonical_post_id ) {
+				wp_delete_post( $candidate_id, true );
+			}
+		}
 	}
 }
 
@@ -805,6 +867,179 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_is_valid_pending_item' ) ) {
 }
 
 /**
+ * Verify whether a fully prepared, non-drainable row matches a dedupe identity.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_is_valid_prepared_item' ) ) {
+	function nvx_supabase_relay_queue_is_valid_prepared_item(
+		int $post_id,
+		string $dedupe_key
+	): bool {
+		if ( $post_id <= 0 ) {
+			return false;
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post || NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS !== ( $post->post_status ?? '' ) ) {
+			return false;
+		}
+
+		$stored_dedupe = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		return '' !== $stored_dedupe && hash_equals( $dedupe_key, $stored_dedupe );
+	}
+}
+
+/**
+ * Convert an exactly fenced prepared row into a drainable pending row.
+ *
+ * The claim is checked immediately before the status transition. Both the
+ * original publisher and a recovery contender may call this idempotently.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_finalize_publication' ) ) {
+	function nvx_supabase_relay_queue_finalize_publication(
+		int $post_id,
+		string $dedupe_key
+	): bool {
+		$post_id   = absint( $post_id );
+		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
+
+		if ( (string) $post_id !== nvx_supabase_relay_queue_fresh_option( $claim_key ) ) {
+			return false;
+		}
+
+		nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key );
+
+		if ( nvx_supabase_relay_queue_is_valid_pending_item( $post_id, $dedupe_key ) ) {
+			return true;
+		}
+
+		if ( ! nvx_supabase_relay_queue_is_valid_prepared_item( $post_id, $dedupe_key ) ) {
+			return false;
+		}
+
+		$updated = wp_update_post(
+			array(
+				'ID'          => $post_id,
+				'post_status' => 'pending',
+			),
+			true
+		);
+
+		if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
+			return false;
+		}
+
+		if ( function_exists( 'clean_post_cache' ) ) {
+			clean_post_cache( $post_id );
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( $post_id, 'posts' );
+			wp_cache_delete( $post_id, 'post_meta' );
+		}
+
+		return (string) $post_id === nvx_supabase_relay_queue_fresh_option( $claim_key )
+			&& nvx_supabase_relay_queue_is_valid_pending_item( $post_id, $dedupe_key );
+	}
+}
+
+/**
+ * Acquire or verify the durable publication fence for one pending item.
+ *
+ * A CPT row is first persisted under a private prepared status. Exactly one row
+ * for a dedupe identity can become pending and drainable: the row whose ID owns
+ * the claim option. The drainer may adopt legacy pending rows without a claim
+ * and may recover an expired prepared publisher, but it never steals an active
+ * publisher or another valid row's fence.
+ *
+ * @param int    $post_id Pending outbox post ID.
+ * @param string $dedupe_key Expected dedupe hash.
+ * @return bool True only when this exact post owns the durable claim.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_acquire_publication_fence' ) ) {
+	function nvx_supabase_relay_queue_acquire_publication_fence(
+		int $post_id,
+		string $dedupe_key
+	): bool {
+		$post_id = absint( $post_id );
+		$is_pending  = nvx_supabase_relay_queue_is_valid_pending_item( $post_id, $dedupe_key );
+		$is_prepared = nvx_supabase_relay_queue_is_valid_prepared_item( $post_id, $dedupe_key );
+		if ( $post_id < 1 || '' === $dedupe_key || ( ! $is_pending && ! $is_prepared ) ) {
+			return false;
+		}
+
+		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
+		$expected  = (string) $post_id;
+		$current   = nvx_supabase_relay_queue_fresh_option( $claim_key );
+
+		if ( $expected === $current ) {
+			return nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
+		}
+
+		// Legacy pending rows had no claim. The UNIQUE option key makes adoption
+		// atomic against a concurrent publisher or drainer.
+		if ( '' === $current ) {
+			if ( $is_prepared ) {
+				// Prepared rows are not legacy rows; they require a durable claim
+				// bound during publication. An empty claim indicates this row was
+				// superseded or abandoned. Retire it so it cannot be adopted later.
+				wp_delete_post( $post_id, true );
+
+				return false;
+			}
+
+			if ( add_option( $claim_key, $expected, '', false ) ) {
+				return nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
+			}
+
+			return $expected === nvx_supabase_relay_queue_fresh_option( $claim_key )
+				&& nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
+		}
+
+		// A numeric claim owned by a different valid row is the canonical fence.
+		// Only replace numeric state that is demonstrably stale for this identity.
+		if ( ctype_digit( $current ) ) {
+			$current_post_id = absint( $current );
+			if (
+				nvx_supabase_relay_queue_is_valid_pending_item( $current_post_id, $dedupe_key )
+				|| nvx_supabase_relay_queue_is_valid_prepared_item( $current_post_id, $dedupe_key )
+			) {
+				// This row is a proven non-owner. Retire it now so it cannot
+				// become a later delivery after the canonical owner releases.
+				wp_delete_post( $post_id, true );
+
+				return false;
+			}
+
+			$acquired = nvx_supabase_relay_compare_and_swap_option(
+				$claim_key,
+				$current,
+				$expected
+			);
+
+			return $acquired && nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
+		}
+
+		$parts        = explode( '|', $current, 2 );
+		$claim_expiry = isset( $parts[0] ) && is_numeric( $parts[0] )
+			? (int) $parts[0]
+			: 0;
+
+		if ( $claim_expiry > nvx_supabase_relay_time() ) {
+			return false;
+		}
+
+		// Recover only expired or malformed in-flight state through CAS. A single
+		// contender wins and all other duplicate rows remain non-drainable.
+		$acquired = nvx_supabase_relay_compare_and_swap_option(
+			$claim_key,
+			$current,
+			$expected
+		);
+
+		return $acquired && nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
+	}
+}
+
+/**
  * Atomic attempt accumulation primitive.
  */
 if ( ! function_exists( 'nvx_supabase_relay_queue_atomic_add_attempts' ) ) {
@@ -888,12 +1123,36 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
 		}
 
 		$post = get_post( $post_id );
-		if ( ! $post instanceof WP_Post || 'pending' !== $post->post_status ) {
+		if (
+			! $post instanceof WP_Post
+			|| ! in_array(
+				$post->post_status,
+				array( 'pending', NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ),
+				true
+			)
+		) {
+			return false;
+		}
+
+		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
+			$endpoint = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
+			nvx_supabase_relay_queue_mark_dead(
+				$post_id,
+				$endpoint,
+				0,
+				'invalid_dedupe_metadata'
+			);
+
 			return false;
 		}
 
 		$next_attempt = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
 		if ( $next_attempt > nvx_supabase_relay_time() ) {
+			return false;
+		}
+
+		if ( ! nvx_supabase_relay_queue_acquire_publication_fence( $post_id, $dedupe_key ) ) {
 			return false;
 		}
 
@@ -1002,8 +1261,10 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_record_existing_attempt' ) ) {
  *    Once exclusive claim ownership is secured, it checks whether a matching pending
  *    queue item already exists (legacy un-claimed post). If so, it binds the claim
  *    to that item and merges attempts, preventing duplicate deliveries.
- * 4. Publication publishes directly to 'pending' (single-phase).
- *    On success, the claim is atomically bound to the post ID via CAS.
+ * 4. Publication is two-phase: the row is persisted in a private prepared
+ *    status with complete metadata, then its claim is atomically bound to the
+ *    post ID before the row becomes pending. The drainer independently requires
+ *    that durable post-ID fence and can recover an interrupted finalization.
  *    On failure, the claim is conditionally released only if still owned by this token.
  *
  * @param string               $endpoint Registered outbox endpoint key.
@@ -1089,8 +1350,20 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 				// Subcase A: Claim is bound to a post ID.
 				if ( '' !== $current && ctype_digit( $current ) ) {
 					$existing_post_id = absint( $current );
-					if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) ) {
-						// Referenced item is genuinely pending — merge attempts.
+					if (
+						nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key )
+						|| nvx_supabase_relay_queue_is_valid_prepared_item( $existing_post_id, $dedupe_key )
+					) {
+						if ( nvx_supabase_relay_queue_acquire_publication_fence( $existing_post_id, $dedupe_key ) ) {
+							return nvx_supabase_relay_queue_record_existing_attempt(
+								$existing_post_id,
+								$endpoint,
+								$attempts
+							);
+						}
+
+						// Preserve accounting even when the idempotent prepared→pending
+						// transition is temporarily unavailable.
 						return nvx_supabase_relay_queue_record_existing_attempt(
 							$existing_post_id,
 							$endpoint,
@@ -1129,11 +1402,22 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 
 			if ( ! $we_own_claim ) {
 				// Contention loops exhausted without winning takeover.
-				// Final check: did the winner finish publishing a valid pending item?
+				// Final check: did the winner bind a valid persisted item?
 				$final_claim = (string) get_option( $claim_key, '' );
 				if ( '' !== $final_claim && ctype_digit( $final_claim ) ) {
 					$existing_post_id = absint( $final_claim );
-					if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) ) {
+					if (
+						nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key )
+						|| nvx_supabase_relay_queue_is_valid_prepared_item( $existing_post_id, $dedupe_key )
+					) {
+						if ( nvx_supabase_relay_queue_acquire_publication_fence( $existing_post_id, $dedupe_key ) ) {
+							return nvx_supabase_relay_queue_record_existing_attempt(
+								$existing_post_id,
+								$endpoint,
+								$attempts
+							);
+						}
+
 						return nvx_supabase_relay_queue_record_existing_attempt(
 							$existing_post_id,
 							$endpoint,
@@ -1142,9 +1426,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 					}
 				}
 
-				// Fallback: check queue directly for any matching pending post.
+				// Fallback: check queue directly for any matching persisted row.
 				$fallback = nvx_supabase_relay_existing_item( $dedupe_key );
-				if ( $fallback > 0 ) {
+				if ( $fallback > 0 && nvx_supabase_relay_queue_acquire_publication_fence( $fallback, $dedupe_key ) ) {
 					return nvx_supabase_relay_queue_record_existing_attempt(
 						$fallback,
 						$endpoint,
@@ -1164,25 +1448,55 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		}
 
 		// ── Rollout adoption path ────────────────────────────────────────────────
-		// Check whether a matching pending item already exists in the queue
-		// (e.g. legacy pending post from before rollout or concurrent creation).
+		// Check whether a matching pending/prepared item already exists in the queue
+		// (e.g. legacy pending post or a publisher that lost its lease after prepare).
 		$existing_pending = nvx_supabase_relay_existing_item( $dedupe_key );
 		if ( $existing_pending > 0 ) {
-			// Bind our claim permanently to the existing item via CAS.
-			nvx_supabase_relay_compare_and_swap_option(
+			// Bind our claim permanently to the existing item via CAS. If the bind
+			// loses, only the winner's exact post-ID claim may be consumed.
+			$adoption_bound = nvx_supabase_relay_compare_and_swap_option(
 				$claim_key,
 				$in_flight_value,
 				(string) $existing_pending
 			);
 
-			return nvx_supabase_relay_queue_record_existing_attempt(
-				$existing_pending,
-				$endpoint,
-				$attempts
-			);
+			if ( $adoption_bound && nvx_supabase_relay_queue_acquire_publication_fence( $existing_pending, $dedupe_key ) ) {
+				return nvx_supabase_relay_queue_record_existing_attempt(
+					$existing_pending,
+					$endpoint,
+					$attempts
+				);
+			}
+
+			$current_claim = nvx_supabase_relay_queue_fresh_option( $claim_key );
+			if ( ctype_digit( $current_claim ) ) {
+				$current_post_id = absint( $current_claim );
+				if (
+					nvx_supabase_relay_queue_is_valid_pending_item( $current_post_id, $dedupe_key )
+					|| nvx_supabase_relay_queue_is_valid_prepared_item( $current_post_id, $dedupe_key )
+				) {
+					if ( nvx_supabase_relay_queue_acquire_publication_fence( $current_post_id, $dedupe_key ) ) {
+						return nvx_supabase_relay_queue_record_existing_attempt(
+							$current_post_id,
+							$endpoint,
+							$attempts
+						);
+					}
+
+					return nvx_supabase_relay_queue_record_existing_attempt(
+						$current_post_id,
+						$endpoint,
+						$attempts
+					);
+				}
+			}
+
+			nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'adoption_claim_lost' );
+
+			return 0;
 		}
 
-		// ── Publish directly to pending ──────────────────────────────────────────
+		// ── Prepare privately, then fence and publish ────────────────────────────
 		$attempts = max(
 			1,
 			min(
@@ -1199,7 +1513,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		$post_id = wp_insert_post(
 			array(
 				'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
-				'post_status'  => 'pending',
+				'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
 				'post_title'   => sanitize_text_field(
 					$endpoint
 					. ' '
@@ -1256,13 +1570,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			true
 		) && $meta_ok;
 
-		$meta_ok = add_post_meta(
-			$post_id,
-			'_nvx_relay_dedupe_key',
-			$dedupe_key,
-			true
-		) && $meta_ok;
-
 		if ( '' !== $origin ) {
 			$meta_ok = add_post_meta(
 				$post_id,
@@ -1271,6 +1578,15 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 				true
 			) && $meta_ok;
 		}
+
+		// Dedupe is the readiness marker and must be written last. A prepared row
+		// without it is structurally incomplete and cannot be adopted or drained.
+		$meta_ok = add_post_meta(
+			$post_id,
+			'_nvx_relay_dedupe_key',
+			$dedupe_key,
+			true
+		) && $meta_ok;
 
 		if ( ! $meta_ok ) {
 			wp_delete_post( $post_id, true );
@@ -1294,16 +1610,28 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		);
 
 		if ( ! $claim_bound ) {
-			// Publication took too long or in-flight lease expired, and a contender
-			// seized the claim. Delete this redundant pending post so it cannot
-			// deliver duplicate events later.
-			wp_delete_post( $post_id, true );
-
-			// Check whether the winning contender published a valid pending item.
-			$current_claim = (string) get_option( $claim_key, '' );
+			// Publication took too long or the lease expired. Resolve the successor's
+			// durable state before deleting anything: the successor may have adopted
+			// this exact post, in which case deleting it would lose the only retry.
+			$current_claim = nvx_supabase_relay_queue_fresh_option( $claim_key );
 			if ( '' !== $current_claim && ctype_digit( $current_claim ) ) {
 				$existing_post_id = absint( $current_claim );
-				if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) ) {
+				if (
+					nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key )
+					|| nvx_supabase_relay_queue_is_valid_prepared_item( $existing_post_id, $dedupe_key )
+				) {
+					if ( $existing_post_id === $post_id ) {
+						$GLOBALS['nvx_supabase_relay_queue_dirty'] = true;
+						nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
+						nvx_supabase_relay_log( $endpoint, 'QUEUED', 0, 'successor_adopted_prepared_row' );
+
+						return $post_id;
+					}
+
+					// A different fenced row won. This row is now provably redundant.
+					wp_delete_post( $post_id, true );
+					nvx_supabase_relay_queue_acquire_publication_fence( $existing_post_id, $dedupe_key );
+
 					return nvx_supabase_relay_queue_record_existing_attempt(
 						$existing_post_id,
 						$endpoint,
@@ -1312,9 +1640,17 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 				}
 			}
 
-			// Fallback: check queue directly for any matching pending post.
+			// Do not delete while a successor is merely in-flight: it can still adopt
+			// this prepared row. Fallback to a different row only after it owns the
+			// durable publication fence.
 			$fallback = nvx_supabase_relay_existing_item( $dedupe_key );
-			if ( $fallback > 0 ) {
+			if (
+				$fallback > 0
+				&& $fallback !== $post_id
+				&& nvx_supabase_relay_queue_acquire_publication_fence( $fallback, $dedupe_key )
+			) {
+				wp_delete_post( $post_id, true );
+
 				return nvx_supabase_relay_queue_record_existing_attempt(
 					$fallback,
 					$endpoint,
@@ -1331,6 +1667,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 
 			return 0;
 		}
+
+		// Binding is durable before the public pending transition. A temporary
+		// status-update failure leaves a recoverable prepared row, never an
+		// unfenced deliverable row.
+		nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
 
 		$GLOBALS['nvx_supabase_relay_queue_dirty'] = true;
 
@@ -1720,6 +2061,15 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_mark_dead' ) ) {
 		string $reason
 	): void {
 		$post_id = absint( $post_id );
+		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		if (
+			'' !== $dedupe_key
+			&& (string) $post_id === nvx_supabase_relay_queue_fresh_option(
+				nvx_supabase_relay_queue_claim_key( $dedupe_key )
+			)
+		) {
+			nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key );
+		}
 
 		wp_update_post(
 			array(
@@ -1728,7 +2078,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_mark_dead' ) ) {
 			)
 		);
 
-		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
 		if ( '' !== $dedupe_key && function_exists( 'nvx_supabase_relay_queue_release_claim' ) ) {
 			nvx_supabase_relay_queue_release_claim( $dedupe_key, (string) $post_id );
 		}
@@ -1773,7 +2122,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 			$query = new WP_Query(
 				array(
 					'post_type'              => NVX_SUPABASE_RELAY_QUEUE_CPT,
-					'post_status'            => 'pending',
+					'post_status'            => array( 'pending', NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ),
 					'posts_per_page'         => $limit,
 					'orderby'                => 'ID',
 					'order'                  => 'ASC',
@@ -1894,6 +2243,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 
 				if ( 'SUCCESS' === $class['outcome'] ) {
 					$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+					if ( '' !== $dedupe_key ) {
+						nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key );
+					}
 
 					wp_delete_post(
 						$post_id,
