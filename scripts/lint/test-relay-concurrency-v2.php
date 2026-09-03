@@ -442,6 +442,32 @@ add_post_meta( $valid_post15, '_nvx_relay_next_attempt', '0', true );
 $require( nvx_supabase_relay_queue_item_due( $valid_post15, $drain_lock, 60 ), 'VALID_ROW_AFTER_INVALID_BATCH_IS_DUE' );
 $require( (string) $valid_post15 === (string) get_option( nvx_supabase_relay_queue_claim_key( $valid_dedupe15 ), '' ), 'VALID_ROW_AFTER_BATCH_OWNS_FENCE' );
 
+// If a successor misses an earlier private row before its readiness marker,
+// the eventual claim winner must retire that row before becoming drainable.
+$body16       = '{"submission_id":"inv16-superseded-prepared"}';
+$dedupe_key16 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body16, '' );
+$claim_key16  = nvx_supabase_relay_queue_claim_key( $dedupe_key16 );
+$loser16      = wp_insert_post( array( 'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS, 'post_content' => $body16 ) );
+add_post_meta( $loser16, '_nvx_relay_dedupe_key', $dedupe_key16, true );
+$winner16 = wp_insert_post( array( 'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS, 'post_content' => $body16 ) );
+add_post_meta( $winner16, '_nvx_relay_dedupe_key', $dedupe_key16, true );
+$GLOBALS['nvx_mock_options'][ $claim_key16 ] = (string) $winner16;
+
+$require( nvx_supabase_relay_queue_finalize_publication( $winner16, $dedupe_key16 ), 'WINNER_FINALIZES_AFTER_MISSED_LOOKUP' );
+$require( ! isset( $GLOBALS['nvx_mock_posts'][ $loser16 ] ), 'SUPERSEDED_PREPARED_ROW_RETIRED' );
+$require( isset( $GLOBALS['nvx_mock_posts'][ $winner16 ] ) && 'pending' === $GLOBALS['nvx_mock_posts'][ $winner16 ]->post_status, 'ONLY_WINNER_BECOMES_PENDING' );
+
+$remaining16 = 0;
+foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
+	if (
+		in_array( ( $p_obj->post_status ?? '' ), array( 'pending', NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ), true )
+		&& ( $GLOBALS['nvx_mock_post_meta'][ $p_id ]['_nvx_relay_dedupe_key'] ?? '' ) === $dedupe_key16
+	) {
+		$remaining16++;
+	}
+}
+$require( 1 === $remaining16, 'WINNER_RETIRES_ALL_OTHER_READY_ROWS' );
+
 // ── Invariant 11: SOURCE_INTEGRITY ───────────────────────────────────────────
 $src = (string) file_get_contents( $queue_path );
 $require( false !== strpos( $src, 'nvx_relay_claim_' ), 'CLAIM_KEY_PREFIX_IN_SOURCE' );
@@ -450,6 +476,7 @@ $require( false !== strpos( $src, 'nvx_supabase_relay_queue_release_claim' ), 'R
 $require( false !== strpos( $src, 'nvx_supabase_relay_queue_is_valid_pending_item' ), 'VALID_PENDING_HELPER_IN_SOURCE' );
 $require( false !== strpos( $src, 'nvx_supabase_relay_queue_acquire_publication_fence' ), 'PUBLICATION_FENCE_IN_SOURCE' );
 $require( false !== strpos( $src, 'NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS' ), 'PRIVATE_PREPARED_STATUS_IN_SOURCE' );
+$require( false !== strpos( $src, 'nvx_supabase_relay_queue_retire_duplicate_rows' ), 'SUPERSEDED_ROW_RETIREMENT_IN_SOURCE' );
 $require( false !== strpos( $src, 'claim_lost_during_publish' ), 'CLAIM_LOST_HANDLED_IN_SOURCE' );
 
 $enqueue_fn_pos = strpos( $src, 'function nvx_supabase_relay_queue_enqueue' );
@@ -468,4 +495,4 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 two_phase_fence=1 private_prepare=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 expired_bind_cleanup=1 adopted_retry_preserved=1 drainable_exactly_one=1 incomplete_batch_quarantined=1 source_integrity=1\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 two_phase_fence=1 private_prepare=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 expired_bind_cleanup=1 adopted_retry_preserved=1 drainable_exactly_one=1 incomplete_batch_quarantined=1 superseded_rows_retired=1 source_integrity=1\n";
