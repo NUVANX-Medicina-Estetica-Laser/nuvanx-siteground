@@ -260,6 +260,65 @@ function nvx_h1_set_meta_verified( int $post_id, string $meta_key, string $value
 	}
 }
 
+/**
+ * Verify one metadata value after COMMIT against both durable storage and the
+ * WordPress runtime view.
+ *
+ * Targeted invalidation happens only after the transaction is committed. The
+ * previous pre-COMMIT targeted read could not prove runtime visibility, while a
+ * global cache flush alone did not invalidate the stale SiteGround post-meta
+ * entry exercised by the PR preview. Keeping both checks here makes the failure
+ * boundary explicit: committed DB visibility is distinguished from a stale API
+ * cache/read.
+ */
+function nvx_h1_verify_meta_after_commit( int $post_id, string $meta_key, string $expected ): void {
+	global $wpdb;
+
+	if ( $post_id <= 0 ) {
+		throw new RuntimeException( 'post_meta_postcommit_invalid_post_id' );
+	}
+
+	$failure_key   = ltrim( sanitize_key( $meta_key ), '_' );
+	$stored_values = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s ORDER BY meta_id ASC",
+			$post_id,
+			$meta_key
+		)
+	);
+	if ( ! is_array( $stored_values ) || array() === $stored_values ) {
+		throw new RuntimeException( 'post_meta_postcommit_durable_value_missing_' . $failure_key );
+	}
+	foreach ( $stored_values as $stored_value ) {
+		if ( $expected !== (string) maybe_unserialize( $stored_value ) ) {
+			throw new RuntimeException( 'post_meta_postcommit_durable_verification_failed_' . $failure_key );
+		}
+	}
+
+	// Invalidate the exact runtime cache key after COMMIT. clean_post_cache()
+	// also clears the corresponding post cache without relying on a global flush.
+	wp_cache_delete( $post_id, 'post_meta' );
+	clean_post_cache( $post_id );
+	wp_cache_delete( $post_id, 'post_meta' );
+
+	if ( $expected !== (string) get_post_meta( $post_id, $meta_key, true ) ) {
+		throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_' . $failure_key );
+	}
+}
+
+/** Invalidate post-level and query caches for one affected post after COMMIT. */
+function nvx_h1_invalidate_post_cache( int $post_id ): void {
+	if ( $post_id <= 0 ) {
+		return;
+	}
+	wp_cache_delete( $post_id, 'post_meta' );
+	wp_cache_delete( $post_id, 'posts' );
+	clean_post_cache( $post_id );
+	wp_cache_delete( $post_id, 'post_meta' );
+	wp_cache_delete( $post_id, 'posts' );
+	wp_cache_delete( 'last_changed', 'posts' );
+}
+
 /** Resolve and verify the WordPress runtime metadata view after COMMIT. */
 function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 	wp_cache_flush();
@@ -272,29 +331,47 @@ function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 		$payload = isset( $op['payload'] ) && is_array( $op['payload'] ) ? $op['payload'] : array();
 		$post_id = (int) ( $payload['id'] ?? 0 );
 
-		if ( 'create_seed' === $action && in_array( $scope, array( 'strategy', 'aesthetic' ), true ) ) {
+		if ( 'create_seed' === $action && in_array( $scope, array( 'strategy', 'aesthetic', 'journal' ), true ) ) {
 			$post_id = (int) ( $created_ids[ $scope . '|' . $slug ] ?? 0 );
 		}
 
+		if ( $post_id <= 0 ) {
+			throw new RuntimeException( 'postcommit_runtime_invalid_post_id_' . sanitize_key( $scope ) );
+		}
+
+		nvx_h1_invalidate_post_cache( $post_id );
+
 		if ( 'strategy' === $scope && in_array( $action, array( 'update_seed_review_meta', 'create_seed' ), true ) ) {
 			$expected = (string) ( $payload['review_status'] ?? '' );
-			if ( $post_id <= 0 || $expected !== (string) get_post_meta( $post_id, '_nvx_strategy_review_status', true ) ) {
-				throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_nvx_strategy_review_status' );
-			}
+			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_strategy_review_status', $expected );
 			continue;
 		}
 
 		if ( 'aesthetic' === $scope && in_array( $action, array( 'repair_seed_meta', 'create_seed' ), true ) ) {
 			$expected_key    = sanitize_key( (string) ( $payload['key'] ?? '' ) );
 			$expected_review = 'create_seed' === $action ? 'pending' : (string) ( $payload['target_review'] ?? 'pending' );
-			if ( $post_id <= 0 || $expected_key !== (string) get_post_meta( $post_id, '_nvx_aesthetic_treatment_key', true ) ) {
-				throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_nvx_aesthetic_treatment_key' );
+			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_aesthetic_treatment_key', $expected_key );
+			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_medical_review_status', $expected_review );
+			continue;
+		}
+
+		if ( 'journal' === $scope && 'create_seed' === $action ) {
+			$post = get_post( $post_id );
+			if ( ! ( $post instanceof WP_Post ) || 'post' !== $post->post_type || 'publish' !== $post->post_status || $slug !== (string) $post->post_name ) {
+				throw new RuntimeException( 'journal_postcommit_runtime_verification_failed' );
 			}
-			if ( $expected_review !== strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_review_status', true ) ) ) ) {
-				throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_nvx_medical_review_status' );
+			continue;
+		}
+
+		if ( 'bridal' === $scope && 'retire_exact_seed' === $action ) {
+			if ( 'draft' !== get_post_status( $post_id ) ) {
+				throw new RuntimeException( 'bridal_postcommit_runtime_verification_failed' );
 			}
+			continue;
 		}
 	}
+
+	wp_cache_flush();
 }
 
 /** Assert that one prevalidated post still exists before applying its operation. */
@@ -418,6 +495,7 @@ function nvx_h1_apply_plan( array $plan ): array {
 				if ( is_wp_error( $result ) || (int) $result <= 0 ) {
 					throw new RuntimeException( 'journal_insert_failed' );
 				}
+				$created_ids[ $scope . '|' . $slug ] = (int) $result;
 			} elseif ( 'bridal' === $scope && 'retire_exact_seed' === $action ) {
 				$post       = nvx_h1_require_post( (int) ( $payload['id'] ?? 0 ) );
 				$seed_key   = (string) get_post_meta( $post->ID, '_nvx_aesthetic_treatment_key', true );

@@ -66,18 +66,38 @@ assert.match(core, /outer H1\s+\/\/ reconciliation transaction|outer H1[\s\S]{0,
 assert.match(helper, /\$wpdb->postmeta/, 'H1 metadata verification must inspect durable postmeta storage');
 assert.match(helper, /post_meta_durable_value_missing/);
 assert.match(helper, /post_meta_durable_verification_failed/);
+assert.match(helper, /function\s+nvx_h1_verify_meta_after_commit\s*\(\s*int\s+\$post_id,\s*string\s+\$meta_key,\s*string\s+\$expected\s*\)/,
+  'H1 must verify each metadata value after COMMIT through one explicit boundary');
+assert.match(helper, /post_meta_postcommit_durable_value_missing_/,
+  'Post-commit verification must distinguish missing committed storage');
+assert.match(helper, /post_meta_postcommit_durable_verification_failed_/,
+  'Post-commit verification must distinguish committed durable mismatch');
+assert.match(helper, /wp_cache_delete\s*\(\s*\$post_id\s*,\s*'post_meta'\s*\)/,
+  'Post-commit verification must invalidate the exact post_meta cache key');
+assert.match(helper, /clean_post_cache\s*\(\s*\$post_id\s*\)/,
+  'Post-commit verification must invalidate the exact post object cache');
 assert.match(helper, /function\s+nvx_h1_verify_runtime_plan\s*\(\s*array\s+\$plan,\s*array\s+\$created_ids\s*\)/,
   'H1 must have a dedicated post-commit runtime verifier with exact inserted IDs');
+assert.match(helper, /nvx_h1_verify_meta_after_commit\s*\(\s*\$post_id,\s*'_nvx_aesthetic_treatment_key'/,
+  'Aesthetic provenance must pass the post-commit durable/cache/runtime boundary');
+assert.match(helper, /nvx_h1_verify_meta_after_commit\s*\(\s*\$post_id,\s*'_nvx_medical_review_status'/,
+  'Medical review status must pass the post-commit durable/cache/runtime boundary');
 assert.match(helper, /\$created_ids\s*=\s*array\s*\(\s*\)/,
   'Apply owner must track IDs returned by successful inserts');
 assert.match(helper, /\$created_ids\s*\[\s*\$scope\s*\.\s*'\|'\s*\.\s*\$slug\s*\]\s*=\s*\(int\)\s*\$result/,
   'Created strategy/aesthetic seeds must carry the exact wp_insert_post ID');
 assert.match(helper, /\$created_ids\s*\[\s*\$scope\s*\.\s*'\|'\s*\.\s*\$slug\s*\]\s*\?\?\s*0/,
   'Post-commit verification must consume the exact inserted ID, not re-resolve by slug');
-assert.match(helper, /wp_cache_flush\s*\(\s*\)/,
-  'Post-commit runtime verification must invalidate WordPress cache state');
-assert.match(helper, /post_meta_postcommit_runtime_verification_failed_nvx_aesthetic_treatment_key/);
-assert.match(helper, /post_meta_postcommit_runtime_verification_failed_nvx_medical_review_status/);
+assert.match(helper, /post_meta_postcommit_runtime_verification_failed_/,
+  'Post-commit verification must distinguish a stale WordPress runtime view');
+assert.match(helper, /function\s+nvx_h1_invalidate_post_cache\s*\(\s*int\s+\$post_id\s*\)/,
+  'H1 must provide bounded post and query cache invalidation');
+assert.match(helper, /wp_cache_delete\s*\(\s*'last_changed',\s*'posts'\s*\)/,
+  'Post-commit verification must invalidate post-query cache via last_changed');
+assert.match(helper, /journal_postcommit_runtime_verification_failed/,
+  'Post-commit verification must verify journal creation at runtime');
+assert.match(helper, /bridal_postcommit_runtime_verification_failed/,
+  'Post-commit verification must verify bridal retirement at runtime');
 const commitOffset = helper.indexOf("$wpdb->query( 'COMMIT' )");
 const runtimeVerifyOffset = helper.indexOf('nvx_h1_verify_runtime_plan( $plan, $created_ids )');
 assert.ok(commitOffset >= 0 && runtimeVerifyOffset > commitOffset,
@@ -110,4 +130,4 @@ assert.match(helper, /get_post_meta\s*\(/);
 assert.match(helper, /wp_insert_post\s*\(/);
 assert.match(helper, /wp_update_post\s*\(/);
 
-console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single meta_verification=durable-in-tx+runtime-postcommit created_ids=exact bridal_partial_provenance=bounded_fail_closed approvals=preserved');
+console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single meta_verification=durable-in-tx+durable-postcommit+targeted-cache+runtime-postcommit created_ids=exact bridal_partial_provenance=bounded_fail_closed approvals=preserved');
