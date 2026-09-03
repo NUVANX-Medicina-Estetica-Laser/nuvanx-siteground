@@ -329,12 +329,48 @@ $require( $adopted_id === $legacy_post_id, 'LEGACY_POST_ADOPTED' );
 $require( count( $GLOBALS['nvx_mock_posts'] ) === $total_posts_before, 'NO_DUPLICATE_POST_ON_ADOPTION' );
 $require( (string) get_option( $claim_key10, '' ) === (string) $legacy_post_id, 'CLAIM_BOUND_TO_ADOPTED_POST' );
 
+// ── Invariant 12: EXPIRED_PUBLISHER_LOST_BIND_CLEANS_UP (Devin Review) ───────
+// If publication exceeds lease TTL and a contender takes over the claim,
+// the original owner's CAS bind fails. The redundant pending post must be deleted
+// and the caller must route to the winning contender's item without duplicate delivery.
+$body12       = '{"submission_id":"inv12-expired-publish"}';
+$dedupe_key12 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body12, '' );
+$claim_key12  = nvx_supabase_relay_queue_claim_key( $dedupe_key12 );
+
+// Seed contender's valid pending post
+$contender_post_id = ++$GLOBALS['nvx_mock_next_post_id'];
+$contender_post    = new WP_Post();
+$contender_post->ID          = $contender_post_id;
+$contender_post->post_status = 'pending';
+$GLOBALS['nvx_mock_posts'][ $contender_post_id ] = $contender_post;
+$GLOBALS['nvx_mock_post_meta'][ $contender_post_id ]['_nvx_relay_dedupe_key'] = $dedupe_key12;
+$GLOBALS['nvx_mock_post_meta'][ $contender_post_id ]['_nvx_relay_attempts']   = '1';
+
+// When original publisher attempts to CAS bind the claim to its post_id,
+// simulate a contender having taken over the option with $contender_post_id.
+$GLOBALS['nvx_mock_option_cas_conflict_values'][ $claim_key12 ] = (string) $contender_post_id;
+
+$posts_before = count( $GLOBALS['nvx_mock_posts'] );
+$returned_id  = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body12, array(), 1 );
+
+$require( $returned_id === $contender_post_id, 'EXPIRED_PUBLISHER_ROUTES_TO_CONTENDER' );
+$require( count( $GLOBALS['nvx_mock_posts'] ) === $posts_before, 'REDUNDANT_POST_DELETED_ON_FAILED_BIND' );
+
+$pending_for_dedupe = 0;
+foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
+	if ( 'pending' === ( $p_obj->post_status ?? '' ) && ( $GLOBALS['nvx_mock_post_meta'][ $p_id ]['_nvx_relay_dedupe_key'] ?? '' ) === $dedupe_key12 ) {
+		$pending_for_dedupe++;
+	}
+}
+$require( 1 === $pending_for_dedupe, 'NO_DUPLICATE_PENDING_DELIVERIES_ON_EXPIRED_PUBLISHER' );
+
 // ── Invariant 11: SOURCE_INTEGRITY ───────────────────────────────────────────
 $src = (string) file_get_contents( $queue_path );
 $require( false !== strpos( $src, 'nvx_relay_claim_' ), 'CLAIM_KEY_PREFIX_IN_SOURCE' );
 $require( false !== strpos( $src, 'add_option( $claim_key' ), 'ATOMIC_ACQUISITION_IN_SOURCE' );
 $require( false !== strpos( $src, 'nvx_supabase_relay_queue_release_claim' ), 'RELEASE_CLAIM_HELPER_IN_SOURCE' );
 $require( false !== strpos( $src, 'nvx_supabase_relay_queue_is_valid_pending_item' ), 'VALID_PENDING_HELPER_IN_SOURCE' );
+$require( false !== strpos( $src, 'claim_lost_during_publish' ), 'CLAIM_LOST_HANDLED_IN_SOURCE' );
 
 $enqueue_fn_pos = strpos( $src, 'function nvx_supabase_relay_queue_enqueue' );
 $post_id_return = strrpos( $src, 'return $post_id;' );
@@ -352,4 +388,4 @@ if ( ! empty( $failures ) ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 single_phase=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 source_integrity=1\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 single_phase=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 expired_bind_cleanup=1 source_integrity=1\n";

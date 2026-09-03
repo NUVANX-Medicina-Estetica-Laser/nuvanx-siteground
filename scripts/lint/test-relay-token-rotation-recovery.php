@@ -469,6 +469,7 @@ assert( '2' === (string) get_post_meta( $enqueued_id, '_nvx_relay_attempts', tru
 assert( 3 === count( $GLOBALS['remote_post_log'] ), 'Expected 3 HTTP calls: 1 initial send + 1 bootstrap + 1 retry send' );
 
 // Assert Test 10: Dispatch 401 -> bootstrap failure enqueues with 1 attempt
+$fail_body = '{"lead_id":"d1234567-89ab-4cde-0123-bootstrap-fail","client_timestamp":"2026-09-02T10:00:00Z"}';
 $GLOBALS['remote_post_log'] = array();
 $GLOBALS['mock_responses']  = array(
 	array( 'response' => array( 'code' => 401 ), 'body' => '{"error":"unauthorized"}' ),
@@ -477,7 +478,7 @@ $GLOBALS['mock_responses']  = array(
 
 set_transient( 'nvx_rt_boot_' . $active_hash, '1' );
 
-$dispatch_fail_boot = nvx_supabase_relay_dispatch( 'lead_captured', $valid_body );
+$dispatch_fail_boot = nvx_supabase_relay_dispatch( 'lead_captured', $fail_body );
 assert( 0 === $dispatch_fail_boot['status'], 'Bootstrap failure produces status 0' );
 assert( $dispatch_fail_boot['queued'] > 0, 'Bootstrap failure is retryable so item must be enqueued' );
 $enqueued_fail_id = $dispatch_fail_boot['queued'];

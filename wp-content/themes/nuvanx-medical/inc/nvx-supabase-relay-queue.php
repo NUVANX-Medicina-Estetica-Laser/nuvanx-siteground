@@ -1287,11 +1287,50 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		}
 
 		// Bind claim to published post_id atomically via CAS.
-		nvx_supabase_relay_compare_and_swap_option(
+		$claim_bound = nvx_supabase_relay_compare_and_swap_option(
 			$claim_key,
 			$in_flight_value,
 			(string) $post_id
 		);
+
+		if ( ! $claim_bound ) {
+			// Publication took too long or in-flight lease expired, and a contender
+			// seized the claim. Delete this redundant pending post so it cannot
+			// deliver duplicate events later.
+			wp_delete_post( $post_id, true );
+
+			// Check whether the winning contender published a valid pending item.
+			$current_claim = (string) get_option( $claim_key, '' );
+			if ( '' !== $current_claim && ctype_digit( $current_claim ) ) {
+				$existing_post_id = absint( $current_claim );
+				if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) ) {
+					return nvx_supabase_relay_queue_record_existing_attempt(
+						$existing_post_id,
+						$endpoint,
+						$attempts
+					);
+				}
+			}
+
+			// Fallback: check queue directly for any matching pending post.
+			$fallback = nvx_supabase_relay_existing_item( $dedupe_key );
+			if ( $fallback > 0 ) {
+				return nvx_supabase_relay_queue_record_existing_attempt(
+					$fallback,
+					$endpoint,
+					$attempts
+				);
+			}
+
+			nvx_supabase_relay_log(
+				$endpoint,
+				'TRANSPORT',
+				0,
+				'claim_lost_during_publish'
+			);
+
+			return 0;
+		}
 
 		$GLOBALS['nvx_supabase_relay_queue_dirty'] = true;
 

@@ -38,6 +38,7 @@ $root = dirname( __DIR__, 2 );
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-medical-review.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-btl-clinical-governance.php';
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-page-render-helpers.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-btl-detail-pages.php';
 
 $complete = array(
