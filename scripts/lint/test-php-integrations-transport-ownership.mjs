@@ -8,6 +8,7 @@ const hubspot = read('wp-content/themes/nuvanx-medical/inc/nvx-hubspot-secure-at
 const googleAuth = read('wp-content/themes/nuvanx-medical/inc/nvx-google-attribution-relay-auth.php');
 const attribution = read('wp-content/themes/nuvanx-medical/inc/nvx-attribution-integration.php');
 const lead = read('wp-content/themes/nuvanx-medical/inc/nvx-lead-captured-relay.php');
+const directForm = read('wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php');
 
 const modules = [
   'inc/nvx-marketing-consent.php',
@@ -27,6 +28,31 @@ for (const module of modules) {
   previous = offset;
 }
 
+assert.equal(
+  (bootstrap.match(/'inc\/nvx-marketing-consent\.php'/g) || []).length,
+  1,
+  'Canonical bootstrap must load the consent authority exactly once',
+);
+
+const phpFiles = [];
+const walkPhp = (directory) => {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const child = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) walkPhp(child);
+    else if (entry.isFile() && entry.name.endsWith('.php')) phpFiles.push(child);
+  }
+};
+walkPhp('wp-content/themes/nuvanx-medical');
+
+const lateralConsentLoaders = phpFiles
+  .filter((path) => path !== 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php')
+  .filter((path) => /\brequire(?:_once)?\s*(?:\(\s*)?[^;\n]*nvx-marketing-consent\.php/.test(read(path)));
+assert.deepEqual(
+  lateralConsentLoaders,
+  [],
+  `Consent authority must be bootstrap-only; lateral loaders: ${lateralConsentLoaders.join(', ')}`,
+);
+
 assert.match(consent, /if \( ! function_exists\( 'cmplz_has_consent' \) \) \{\s*return false;/,
   'Server consent must fail closed without the Complianz API');
 assert.doesNotMatch(consent, /\$_COOKIE|\$_POST|\$_GET|\$_REQUEST/,
@@ -38,6 +64,8 @@ assert.match(attribution, /nvx_marketing_consent_granted\(\)/,
   'Google attribution relay must consume the canonical consent authority');
 assert.match(lead, /nvx_marketing_consent_granted\(\)/,
   'Lead-captured relay must consume the canonical consent authority');
+assert.match(directForm, /nvx_marketing_consent_granted\(\)/,
+  'Direct valoración form must consume the canonical consent authority');
 
 assert.match(googleAuth, /hash_hmac\(\s*'sha256'/,
   'Google attribution transport must remain HMAC signed');
