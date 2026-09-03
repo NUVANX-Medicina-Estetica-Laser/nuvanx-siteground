@@ -37,7 +37,6 @@ wp-content/cache/
 wp-content/upgrade/
 wp-content/wflogs/
 wp-content/themes/nuvanx-medical/vendor/
-wp-content/themes/nuvanx-medical/dist/
 vendor/
 dist/
 supabase/.temp/
