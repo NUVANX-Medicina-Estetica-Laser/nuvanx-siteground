@@ -17,7 +17,7 @@
     "lint:runtime-seeds": "node scripts/lint/test-runtime-seed-boundary.mjs && php scripts/lint/test-h1-review-preservation.php",
     "lint:bootstrap": "node scripts/lint/test-theme-bootstrap-single-owner.mjs && php scripts/lint/test-theme-request-boundary.php",
     "lint:complianz": "node scripts/lint/test-complianz-a11y-sanitizer.mjs && node scripts/lint/test-complianz-policy-routing.mjs && php scripts/lint/test-complianz-policy-routing.php",
-    "lint:schema": "node scripts/lint/test-schema-semantic-contract.mjs && php scripts/lint/test-robots-txt-governance.php && php scripts/lint/test-treatment-faqpage-contract.php && php scripts/lint/test-php-data-seo-schema-runtime.php",
+    "lint:schema": "node scripts/lint/test-schema-semantic-contract.mjs && php scripts/lint/test-robots-txt-governance.php && php scripts/lint/test-treatment-faqpage-contract.php && php scripts/lint/test-php-strategy-signature-aesthetic.php && php scripts/lint/test-php-data-seo-schema-runtime.php",
     "lint:endolaser-approval": "node scripts/lint/test-endolaser-claim-approval.mjs",
     "lint:clinical-evidence": "node scripts/lint/test-clinical-evidence-contract.mjs && php scripts/lint/test-php-medical-provenance-owner.php",
     "lint:tariff-ssot": "php scripts/lint/test-tariff-ssot-runtime.php && php scripts/lint/test-tariff-schema-nested-fail-closed.php",
