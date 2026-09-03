@@ -524,6 +524,57 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_publish_claim_live' ) ) {
 	}
 }
 
+/** Create a live terminal claim that existing publisher fencing already respects. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_terminal_claim_value' ) ) {
+	function nvx_supabase_relay_queue_terminal_claim_value( int $post_id ): string {
+		$post_id = absint( $post_id );
+		if ( $post_id < 1 ) {
+			return '';
+		}
+		$token = function_exists( 'wp_generate_uuid4' ) ? wp_generate_uuid4() : bin2hex( random_bytes( 16 ) );
+		$lease = function_exists( 'nvx_supabase_relay_queue_lock_ttl' )
+			? nvx_supabase_relay_queue_lock_ttl( 1 )
+			: max( (int) NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL, (int) NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS );
+		return ( nvx_supabase_relay_time() + $lease ) . '|terminal:' . $post_id . ':' . $token;
+	}
+}
+
+/** Acquire a terminal fence by replacing the exact numeric publication owner. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_begin_terminal_lifecycle' ) ) {
+	function nvx_supabase_relay_queue_begin_terminal_lifecycle( int $post_id, string $dedupe_key ): string {
+		$post_id = absint( $post_id );
+		if ( $post_id < 1 || 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
+			return '';
+		}
+		$terminal_claim = nvx_supabase_relay_queue_terminal_claim_value( $post_id );
+		if ( '' === $terminal_claim ) {
+			return '';
+		}
+		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
+		return nvx_supabase_relay_compare_and_swap_option( $claim_key, (string) $post_id, $terminal_claim )
+			? $terminal_claim
+			: '';
+	}
+}
+
+/** Finish a fallback terminal lifecycle under the exact terminal claim. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_finish_terminal_lifecycle' ) ) {
+	function nvx_supabase_relay_queue_finish_terminal_lifecycle( int $post_id, string $dedupe_key, string $terminal_claim ): bool {
+		$post_id = absint( $post_id );
+		if ( $post_id < 1 || '' === $terminal_claim || 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
+			return false;
+		}
+		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
+		if ( $terminal_claim !== nvx_supabase_relay_queue_fresh_option( $claim_key ) ) {
+			return false;
+		}
+		if ( ! nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key, $terminal_claim ) ) {
+			return false;
+		}
+		return nvx_supabase_relay_queue_release_claim( $dedupe_key, $terminal_claim );
+	}
+}
+
 /**
  * Decide whether a prepared row belongs to the exact publication generation.
  * Pending rows are already public queue rows and remain rollout-compatible.
@@ -902,9 +953,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			break;
 		}
 
-		$attempts = max( 1, min( $attempts, (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES ) );
+		$attempts     = max( 1, min( $attempts, (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES ) );
 		$next_attempt = time() + nvx_supabase_relay_queue_backoff_seconds( $attempts );
-		$post_id = wp_insert_post(
+		$post_id      = wp_insert_post(
 			array(
 				'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
 				'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
@@ -1043,8 +1094,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_lock' ) ) {
 		if ( add_option( $key, $value, '', false ) ) {
 			return $token;
 		}
-		$current = (string) get_option( $key, '' );
-		$parts   = explode( '|', $current, 2 );
+		$current        = (string) get_option( $key, '' );
+		$parts          = explode( '|', $current, 2 );
 		$current_expiry = isset( $parts[0] ) ? absint( $parts[0] ) : 0;
 		if ( $current_expiry > 0 && $current_expiry <= nvx_supabase_relay_time() && nvx_supabase_relay_compare_and_swap_option( $key, $current, $value ) ) {
 			return $token;
@@ -1059,9 +1110,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_renew_lock' ) ) {
 		if ( '' === $token ) {
 			return false;
 		}
-		$key     = 'nvx_supabase_relay_drain_lock_v1';
-		$current = (string) get_option( $key, '' );
-		$parts   = explode( '|', $current, 2 );
+		$key            = 'nvx_supabase_relay_drain_lock_v1';
+		$current        = (string) get_option( $key, '' );
+		$parts          = explode( '|', $current, 2 );
 		$current_expiry = isset( $parts[0] ) ? absint( $parts[0] ) : 0;
 		$current_token  = isset( $parts[1] ) ? $parts[1] : '';
 		if ( $current_token !== $token || $current_expiry <= nvx_supabase_relay_time() ) {
@@ -1096,23 +1147,173 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_unlock' ) ) {
 	}
 }
 
+/** Clean post and claim caches after a terminal transaction or rollback. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_clean_terminal_caches' ) ) {
+	function nvx_supabase_relay_queue_clean_terminal_caches( int $post_id, string $claim_key ): void {
+		if ( function_exists( 'clean_post_cache' ) ) {
+			clean_post_cache( absint( $post_id ) );
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( absint( $post_id ), 'posts' );
+			wp_cache_delete( absint( $post_id ), 'post_meta' );
+			wp_cache_delete( $claim_key, 'options' );
+		}
+	}
+}
+
+/**
+ * Complete SUCCESS or DEAD under one dedupe ownership boundary.
+ *
+ * Production uses a row-locked MySQL transaction so duplicate cleanup, the
+ * canonical state transition and claim release commit atomically. The
+ * deterministic harness has no $wpdb; its fallback uses a live terminal claim
+ * that the existing publisher fence already treats as non-stealable.
+ */
+if ( ! function_exists( 'nvx_supabase_relay_queue_complete_terminal_state' ) ) {
+	function nvx_supabase_relay_queue_complete_terminal_state( int $post_id, string $endpoint, int $status, string $reason, bool $delete_post ): bool {
+		$post_id    = absint( $post_id );
+		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		$outcome    = $delete_post ? 'DRAINED' : 'DEAD';
+
+		if ( $post_id < 1 ) {
+			return false;
+		}
+
+		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
+			if ( $delete_post ) {
+				wp_delete_post( $post_id, true );
+			} else {
+				$updated = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
+				if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
+					return false;
+				}
+			}
+			nvx_supabase_relay_log( $endpoint, $outcome, $status, $reason );
+			return true;
+		}
+
+		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
+		$expected  = (string) $post_id;
+		global $wpdb;
+
+		$has_transaction_owner = isset( $wpdb )
+			&& method_exists( $wpdb, 'query' )
+			&& method_exists( $wpdb, 'prepare' )
+			&& method_exists( $wpdb, 'get_var' )
+			&& isset( $wpdb->options );
+
+		if ( $has_transaction_owner ) {
+			$options_table = (string) $wpdb->options;
+			$started       = $wpdb->query( 'START TRANSACTION' );
+			if ( false !== $started ) {
+				try {
+					$locked_claim = (string) $wpdb->get_var(
+						$wpdb->prepare(
+							"SELECT option_value FROM {$options_table} WHERE option_name = %s FOR UPDATE",
+							$claim_key
+						)
+					);
+					if ( $expected !== $locked_claim ) {
+						$wpdb->query( 'ROLLBACK' );
+						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
+						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_ownership_lost' );
+						return false;
+					}
+
+					if ( ! nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key, $expected ) ) {
+						$wpdb->query( 'ROLLBACK' );
+						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
+						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_cleanup_lost' );
+						return false;
+					}
+
+					if ( $expected !== (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$options_table} WHERE option_name = %s FOR UPDATE", $claim_key ) ) ) {
+						$wpdb->query( 'ROLLBACK' );
+						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
+						return false;
+					}
+
+					if ( $delete_post ) {
+						$transitioned = false !== wp_delete_post( $post_id, true );
+					} else {
+						$updated      = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
+						$transitioned = ! is_wp_error( $updated ) && absint( $updated ) === $post_id;
+					}
+					if ( ! $transitioned ) {
+						$wpdb->query( 'ROLLBACK' );
+						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
+						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_transition_failed' );
+						return false;
+					}
+
+					if ( ! nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key, $expected ) ) {
+						$wpdb->query( 'ROLLBACK' );
+						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
+						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_final_cleanup_lost' );
+						return false;
+					}
+
+					$deleted_claim = $wpdb->query(
+						$wpdb->prepare(
+							"DELETE FROM {$options_table} WHERE option_name = %s AND option_value = %s",
+							$claim_key,
+							$expected
+						)
+					);
+					if ( 1 !== $deleted_claim || false === $wpdb->query( 'COMMIT' ) ) {
+						$wpdb->query( 'ROLLBACK' );
+						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
+						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_commit_failed' );
+						return false;
+					}
+
+					nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
+					nvx_supabase_relay_log( $endpoint, $outcome, $status, $reason );
+					return true;
+				} catch ( Throwable $error ) {
+					unset( $error );
+					$wpdb->query( 'ROLLBACK' );
+					nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
+					nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_transaction_exception' );
+					return false;
+				}
+			}
+		}
+
+		$terminal_claim = nvx_supabase_relay_queue_begin_terminal_lifecycle( $post_id, $dedupe_key );
+		if ( '' === $terminal_claim ) {
+			nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_fence_acquire_failed' );
+			return false;
+		}
+		if ( ! nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key, $terminal_claim ) ) {
+			nvx_supabase_relay_compare_and_swap_option( $claim_key, $terminal_claim, $expected );
+			return false;
+		}
+		if ( $terminal_claim !== nvx_supabase_relay_queue_fresh_option( $claim_key ) ) {
+			return false;
+		}
+		if ( $delete_post ) {
+			$transitioned = false !== wp_delete_post( $post_id, true );
+		} else {
+			$updated      = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
+			$transitioned = ! is_wp_error( $updated ) && absint( $updated ) === $post_id;
+		}
+		if ( ! $transitioned ) {
+			nvx_supabase_relay_compare_and_swap_option( $claim_key, $terminal_claim, $expected );
+			return false;
+		}
+		if ( ! nvx_supabase_relay_queue_finish_terminal_lifecycle( $post_id, $dedupe_key, $terminal_claim ) ) {
+			return false;
+		}
+		nvx_supabase_relay_log( $endpoint, $outcome, $status, $reason );
+		return true;
+	}
+}
+
 /** Mark one queue item dead. */
 if ( ! function_exists( 'nvx_supabase_relay_queue_mark_dead' ) ) {
 	function nvx_supabase_relay_queue_mark_dead( int $post_id, string $endpoint, int $status, string $reason ): void {
-		$post_id    = absint( $post_id );
-		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
-		if ( '' !== $dedupe_key ) {
-			$expected = (string) $post_id;
-			$current  = nvx_supabase_relay_queue_fresh_option( nvx_supabase_relay_queue_claim_key( $dedupe_key ) );
-			if ( $expected === $current ) {
-				nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key, $expected );
-			}
-		}
-		wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ) );
-		if ( '' !== $dedupe_key ) {
-			nvx_supabase_relay_queue_release_claim( $dedupe_key, (string) $post_id );
-		}
-		nvx_supabase_relay_log( $endpoint, 'DEAD', $status, $reason );
+		nvx_supabase_relay_queue_complete_terminal_state( $post_id, $endpoint, $status, $reason, false );
 	}
 }
 
@@ -1179,18 +1380,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 					break;
 				}
 				if ( 'SUCCESS' === $class['outcome'] ) {
-					$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
-					if ( '' !== $dedupe_key ) {
-						$expected = (string) $post_id;
-						if ( $expected === nvx_supabase_relay_queue_fresh_option( nvx_supabase_relay_queue_claim_key( $dedupe_key ) ) ) {
-							nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key, $expected );
-						}
-					}
-					wp_delete_post( $post_id, true );
-					if ( '' !== $dedupe_key ) {
-						nvx_supabase_relay_queue_release_claim( $dedupe_key, (string) $post_id );
-					}
-					nvx_supabase_relay_log( $endpoint, 'DRAINED', $class['status'] );
+					nvx_supabase_relay_queue_complete_terminal_state( $post_id, $endpoint, $class['status'], '', true );
 					continue;
 				}
 				$new_attempts = nvx_supabase_relay_queue_atomic_add_attempts( $post_id, $delivery_attempts );
