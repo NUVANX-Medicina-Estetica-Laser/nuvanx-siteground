@@ -38,10 +38,17 @@ $require_v3(
 	'EXPLICIT_READINESS_MARKER_EXISTS'
 );
 
-$dedupe_offset  = strpos( $queue_source, "'_nvx_relay_dedupe_key'" );
-$next_offset    = strpos( $queue_source, "'_nvx_relay_next_attempt'", $dedupe_offset === false ? 0 : $dedupe_offset );
-$ready_offset   = strpos( $queue_source, "'_nvx_relay_ready'", $next_offset === false ? 0 : $next_offset );
-$bind_comment   = strpos( $queue_source, '// Bind claim to published post_id atomically via CAS.' );
+$enqueue_start = strpos( $queue_source, 'function nvx_supabase_relay_queue_enqueue' );
+$enqueue_end   = false !== $enqueue_start
+	? strpos( $queue_source, '/**\n * Send one persisted payload.', $enqueue_start )
+	: false;
+$enqueue_body  = false !== $enqueue_start && false !== $enqueue_end
+	? substr( $queue_source, $enqueue_start, $enqueue_end - $enqueue_start )
+	: '';
+$dedupe_offset = strpos( $enqueue_body, "'_nvx_relay_dedupe_key'" );
+$next_offset   = strpos( $enqueue_body, "'_nvx_relay_next_attempt'", $dedupe_offset === false ? 0 : $dedupe_offset );
+$ready_offset  = strpos( $enqueue_body, "'_nvx_relay_ready'", $next_offset === false ? 0 : $next_offset );
+$bind_comment  = strpos( $enqueue_body, '// Bind claim to published post_id atomically via CAS.' );
 $require_v3(
 	false !== $dedupe_offset
 	&& false !== $next_offset
