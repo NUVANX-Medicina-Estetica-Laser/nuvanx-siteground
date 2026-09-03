@@ -138,6 +138,55 @@ $GLOBALS['nvx_test_clinic_path'] = '/unrelated-page/';
 $external_department = nvx_clinic_identity_schema_graph( $external_department_graph );
 nvx_clinic_identity_test_assert( 'https://partner.test/#diagnostics' === ( $external_department[0]['department']['@id'] ?? '' ), 'NON_CLINIC_ASSOC_REF_UNCHANGED' );
 
+$inline_external_department_graph = array(
+	array(
+		'@type'      => 'Organization',
+		'@id'        => 'https://nuvanx.test/#organization',
+		'department' => array(
+			'@type' => 'Organization',
+			'name'  => 'External Partner',
+		),
+	),
+	$graph[1],
+	$graph[2],
+);
+$inline_external = nvx_clinic_identity_schema_graph( $inline_external_department_graph );
+nvx_clinic_identity_test_assert(
+	array(
+		'@type' => 'Organization',
+		'name'  => 'External Partner',
+	) === ( $inline_external[0]['department'] ?? array() ),
+	'NON_CLINIC_INLINE_ASSOC_REF_PRESERVED'
+);
+
+$inline_suborg_list_graph = array(
+	array(
+		'@type'           => 'Organization',
+		'@id'             => 'https://nuvanx.test/#organization',
+		'subOrganization' => array(
+			array(
+				'@type' => 'Organization',
+				'name'  => 'External Partner Lab',
+			),
+			array(
+				'@id' => 'https://nuvanx.test/#chamberi',
+			),
+		),
+	),
+	$graph[1],
+	$graph[2],
+);
+$inline_list_result = nvx_clinic_identity_schema_graph( $inline_suborg_list_graph );
+nvx_clinic_identity_test_assert(
+	array(
+		array(
+			'@type' => 'Organization',
+			'name'  => 'External Partner Lab',
+		),
+	) === ( $inline_list_result[0]['subOrganization'] ?? array() ),
+	'NON_CLINIC_INLINE_LIST_REF_PRESERVED_AND_DISALLOWED_PRUNED'
+);
+
 $GLOBALS['nvx_test_clinic_path'] = '/';
 $GLOBALS['nvx_test_front']       = true;
 $home = nvx_clinic_identity_schema_graph( $graph );
