@@ -3,11 +3,14 @@
  * Approval-gated medical review provenance for clinical pages.
  *
  * Visible review attribution and reviewedBy schema are emitted only when the
- * current page has a complete approval record in post meta:
+ * current page has a complete approval record from one canonical owner:
  *
- * - `_nvx_medical_review_status` = `approved`
- * - `_nvx_medical_reviewer`      = registered reviewer key
- * - `_nvx_medical_review_date`   = YYYY-MM-DD
+ * - treatment pages: approved post-meta record;
+ * - managed pages: approved versioned registry record.
+ *
+ * The managed governance perimeter is code-owned and independent from approval
+ * catalog availability. A missing, malformed or unsupported approval catalog
+ * therefore fails closed instead of restoring legacy page-level provenance.
  *
  * @package nuvanx-medical
  */
@@ -42,13 +45,172 @@ function nvx_medical_review_valid_date( string $date ): bool {
 	return checkdate( (int) $match[2], (int) $match[3], (int) $match[1] );
 }
 
-/** Restrict review provenance to registered treatment pages. */
+/** Restrict post-meta review provenance to registered treatment pages. */
 function nvx_medical_review_supported_page( int $post_id ): bool {
 	if ( $post_id <= 0 || ! function_exists( 'nvx_schema_resolve_treatment_key' ) ) {
 		return false;
 	}
 
 	return null !== nvx_schema_resolve_treatment_key( $post_id );
+}
+
+/** Normalize a request/permalink path for exact managed-page lookup. */
+function nvx_medical_review_normalize_path( string $path ): string {
+	$path = '/' . trim( $path, '/' );
+	return '/' === $path ? '/' : $path . '/';
+}
+
+/** Whether a registry key is already in the exact canonical public-path form. */
+function nvx_medical_review_registry_path_is_canonical( string $raw_path ): bool {
+	return '' !== $raw_path
+		&& trim( $raw_path ) === $raw_path
+		&& nvx_medical_review_normalize_path( $raw_path ) === $raw_path;
+}
+
+/**
+ * Code-owned managed-page governance perimeter.
+ *
+ * This list deliberately does not depend on the approval JSON. If approval
+ * loading fails these routes remain governed and legacy provenance is stripped.
+ *
+ * @return array<int,string>
+ */
+function nvx_medical_review_managed_paths(): array {
+	return array(
+		'/madrid/valoracion/',
+		'/papada-definicion-mandibular-madrid/',
+	);
+}
+
+/** Resolve the current canonical request path without trusting a second raw URI read. */
+function nvx_medical_review_current_path( int $post_id = 0 ): string {
+	if ( function_exists( 'nvx_theme_request_path' ) ) {
+		$path = (string) nvx_theme_request_path();
+		if ( '' !== $path ) {
+			return nvx_medical_review_normalize_path( $path );
+		}
+	}
+
+	$post_id = $post_id > 0 ? $post_id : (int) get_queried_object_id();
+	if ( $post_id <= 0 || ! function_exists( 'get_permalink' ) || ! function_exists( 'wp_parse_url' ) ) {
+		return '';
+	}
+
+	$permalink = get_permalink( $post_id );
+	if ( ! is_string( $permalink ) || '' === $permalink ) {
+		return '';
+	}
+
+	$path = wp_parse_url( $permalink, PHP_URL_PATH );
+	return is_string( $path ) && '' !== $path ? nvx_medical_review_normalize_path( $path ) : '';
+}
+
+/** Whether one canonical path belongs to the managed provenance perimeter. */
+function nvx_medical_review_is_managed_path( string $path ): bool {
+	return '' !== $path && in_array( $path, nvx_medical_review_managed_paths(), true );
+}
+
+/**
+ * Load validated managed-page provenance records.
+ *
+ * Only registry schema version 1 is supported. Registry keys must already be
+ * exact canonical paths and must belong to the code-owned governance perimeter.
+ * Missing, malformed, unsupported or unexpected records never become authority.
+ *
+ * @return array<string,array{status:string,reviewer:string,date:string}>
+ */
+function nvx_medical_review_managed_registry(): array {
+	if ( ! function_exists( 'nvx_catalog_json_load' ) ) {
+		return array();
+	}
+
+	$catalog = nvx_catalog_json_load( 'medical-review-approvals.json' );
+	if (
+		! empty( $catalog['_error'] )
+		|| 1 !== (int) ( $catalog['version'] ?? 0 )
+		|| ! isset( $catalog['managed_pages'] )
+		|| ! is_array( $catalog['managed_pages'] )
+	) {
+		return array();
+	}
+
+	$records = array();
+	foreach ( $catalog['managed_pages'] as $raw_path => $record ) {
+		if (
+			! is_string( $raw_path )
+			|| ! is_array( $record )
+			|| ! nvx_medical_review_registry_path_is_canonical( $raw_path )
+			|| ! nvx_medical_review_is_managed_path( $raw_path )
+		) {
+			continue;
+		}
+
+		$records[ $raw_path ] = array(
+			'status'   => strtolower( trim( (string) ( $record['status'] ?? '' ) ) ),
+			'reviewer' => strtolower( trim( (string) ( $record['reviewer'] ?? '' ) ) ),
+			'date'     => trim( (string) ( $record['date'] ?? '' ) ),
+		);
+	}
+
+	return $records;
+}
+
+/** Return the exact managed registry record for the current canonical path. */
+function nvx_medical_review_managed_record( int $post_id = 0 ): ?array {
+	$path = nvx_medical_review_current_path( $post_id );
+	if ( ! nvx_medical_review_is_managed_path( $path ) ) {
+		return null;
+	}
+
+	$registry = nvx_medical_review_managed_registry();
+	return isset( $registry[ $path ] ) ? $registry[ $path ] : null;
+}
+
+/** Whether the current page belongs to the canonical medical provenance perimeter. */
+function nvx_medical_review_governed_page( int $post_id = 0 ): bool {
+	$post_id = $post_id > 0 ? $post_id : (int) get_queried_object_id();
+	$path    = nvx_medical_review_current_path( $post_id );
+
+	if ( nvx_medical_review_is_managed_path( $path ) ) {
+		return true;
+	}
+
+	return nvx_medical_review_supported_page( $post_id );
+}
+
+/**
+ * Resolve one approval source without allowing page modules to author provenance.
+ *
+ * @return array{status:string,reviewer:string,date:string,source:string}|null
+ */
+function nvx_medical_review_approval( int $post_id = 0 ): ?array {
+	$post_id = $post_id > 0 ? $post_id : (int) get_queried_object_id();
+	$path    = nvx_medical_review_current_path( $post_id );
+
+	if ( nvx_medical_review_is_managed_path( $path ) ) {
+		$managed = nvx_medical_review_managed_record( $post_id );
+		if ( null === $managed ) {
+			return null;
+		}
+
+		return array(
+			'status'   => $managed['status'],
+			'reviewer' => $managed['reviewer'],
+			'date'     => $managed['date'],
+			'source'   => 'managed_registry',
+		);
+	}
+
+	if ( ! nvx_medical_review_supported_page( $post_id ) ) {
+		return null;
+	}
+
+	return array(
+		'status'   => strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_review_status', true ) ) ),
+		'reviewer' => strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_reviewer', true ) ) ),
+		'date'     => trim( (string) get_post_meta( $post_id, '_nvx_medical_review_date', true ) ),
+		'source'   => 'post_meta',
+	);
 }
 
 /** Whether a registered reviewer has every public provenance field required. */
@@ -65,17 +227,17 @@ function nvx_medical_review_reviewer_complete( array $reviewer ): bool {
 /**
  * Return one complete approval record or null.
  *
- * @return array{reviewer_key:string,name:string,license:string,url:string,id:string,title:string,date:string,date_label:string}|null
+ * @return array{reviewer_key:string,name:string,license:string,url:string,id:string,title:string,date:string,date_label:string,source:string}|null
  */
 function nvx_medical_review_record( int $post_id = 0 ): ?array {
-	$post_id = $post_id > 0 ? $post_id : (int) get_queried_object_id();
-	if ( ! nvx_medical_review_supported_page( $post_id ) ) {
+	$approval = nvx_medical_review_approval( $post_id );
+	if ( null === $approval ) {
 		return null;
 	}
 
-	$status       = strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_review_status', true ) ) );
-	$reviewer_key = strtolower( trim( (string) get_post_meta( $post_id, '_nvx_medical_reviewer', true ) ) );
-	$date         = trim( (string) get_post_meta( $post_id, '_nvx_medical_review_date', true ) );
+	$status       = $approval['status'];
+	$reviewer_key = $approval['reviewer'];
+	$date         = $approval['date'];
 	$reviewers    = nvx_medical_reviewers();
 
 	if ( 'approved' !== $status || ! isset( $reviewers[ $reviewer_key ] ) || ! nvx_medical_review_valid_date( $date ) ) {
@@ -101,6 +263,7 @@ function nvx_medical_review_record( int $post_id = 0 ): ?array {
 		'title'        => $reviewer['title'],
 		'date'         => $date,
 		'date_label'   => wp_date( 'j \d\e F \d\e Y', $time ),
+		'source'       => $approval['source'],
 	);
 }
 
@@ -119,23 +282,134 @@ function nvx_medical_review_byline_markup( array $record ): string {
 	return $html;
 }
 
-/**
- * Remove unconditional bylines so a single provenance block can be re-injected.
- *
- * Covers both the `<div>`-wrapped bylines emitted by page modules and the
- * `<address>`-wrapped hero byline emitted by BTL detail pages; the closing tag
- * is matched by backreference so the alternation never over-captures.
- */
-function nvx_medical_review_strip_unconditional_bylines( string $content ): string {
-	$pattern = '#<(div|address)\b[^>]*\bclass=["\'][^"\']*\bnvx-medical-byline\b[^"\']*["\'][^>]*>[\s\S]*?</div>\s*</\1>#iu';
-	$clean   = preg_replace( $pattern, '', $content );
+/** Whether one opening tag carries the requested class token. */
+function nvx_medical_review_tag_has_class( string $tag_html, string $class_name ): bool {
+	if ( 1 !== preg_match( '/\bclass\s*=\s*(["\'])(.*?)\1/isu', $tag_html, $match ) ) {
+		return false;
+	}
 
-	return is_string( $clean ) ? $clean : $content;
+	$classes = preg_split( '/\s+/u', trim( (string) $match[2] ) );
+	return is_array( $classes ) && in_array( $class_name, $classes, true );
 }
 
 /**
- * Enforce fail-closed visible provenance after all page builders have run.
+ * Locate complete legacy provenance wrappers with balanced tag ownership.
+ *
+ * @return array<int,array{start:int,length:int}>
  */
+function nvx_medical_review_legacy_wrapper_ranges( string $content ): array {
+	$matched = preg_match_all(
+		'#</?(?:div|address|p)\b[^>]*>#iu',
+		$content,
+		$tokens,
+		PREG_OFFSET_CAPTURE
+	);
+	if ( false === $matched || 0 === $matched ) {
+		return array();
+	}
+
+	$stack  = array();
+	$ranges = array();
+
+	foreach ( $tokens[0] as $token ) {
+		$tag_html = (string) $token[0];
+		$offset   = (int) $token[1];
+
+		if ( 1 === preg_match( '#^</\s*(div|address|p)\s*>#iu', $tag_html, $closing_match ) ) {
+			$closing_tag = strtolower( (string) $closing_match[1] );
+			$match_index = null;
+			for ( $index = count( $stack ) - 1; $index >= 0; --$index ) {
+				if ( $closing_tag === $stack[ $index ]['tag'] ) {
+					$match_index = $index;
+					break;
+				}
+			}
+			if ( null === $match_index ) {
+				continue;
+			}
+
+			// Any still-open entries above the matched ancestor are malformed.
+			// Preserve the reliable ancestor closing tag, but fail closed on an
+			// orphaned outermost provenance target by removing it up to this boundary.
+			for ( $orphan_index = count( $stack ) - 1; $orphan_index > $match_index; --$orphan_index ) {
+				$orphan = $stack[ $orphan_index ];
+				if ( $orphan['remove'] && $offset > $orphan['start'] ) {
+					$ranges[] = array(
+						'start'  => $orphan['start'],
+						'length' => $offset - $orphan['start'],
+					);
+				}
+			}
+
+			$entry = $stack[ $match_index ];
+			$stack = array_slice( $stack, 0, $match_index );
+			if ( $entry['remove'] ) {
+				$ranges[] = array(
+					'start'  => $entry['start'],
+					'length' => $offset + strlen( $tag_html ) - $entry['start'],
+				);
+			}
+			continue;
+		}
+
+		if ( 1 !== preg_match( '#^<\s*(div|address|p)\b#iu', $tag_html, $opening_match ) ) {
+			continue;
+		}
+
+		$tag       = strtolower( (string) $opening_match[1] );
+		$is_target = ( 'p' === $tag && nvx_medical_review_tag_has_class( $tag_html, 'nvx-medical-review' ) )
+			|| ( in_array( $tag, array( 'div', 'address' ), true ) && nvx_medical_review_tag_has_class( $tag_html, 'nvx-medical-byline' ) );
+		$inside_target = false;
+		foreach ( $stack as $ancestor ) {
+			if ( $ancestor['target'] ) {
+				$inside_target = true;
+				break;
+			}
+		}
+
+		$stack[] = array(
+			'tag'    => $tag,
+			'start'  => $offset,
+			'target' => $is_target,
+			'remove' => $is_target && ! $inside_target,
+		);
+	}
+
+	foreach ( $stack as $entry ) {
+		if ( $entry['remove'] ) {
+			$ranges[] = array(
+				'start'  => $entry['start'],
+				'length' => strlen( $content ) - $entry['start'],
+			);
+		}
+	}
+
+	return $ranges;
+}
+
+/** Remove every legacy visible provenance wrapper used by governed renderers. */
+function nvx_medical_review_strip_unconditional_bylines( string $content ): string {
+	$ranges = nvx_medical_review_legacy_wrapper_ranges( $content );
+	if ( empty( $ranges ) ) {
+		return $content;
+	}
+
+	usort(
+		$ranges,
+		static function ( array $left, array $right ): int {
+			return $right['start'] <=> $left['start'];
+		}
+	);
+
+	$clean = $content;
+	foreach ( $ranges as $range ) {
+		$clean = substr_replace( $clean, '', $range['start'], $range['length'] );
+	}
+
+	return $clean;
+}
+
+/** Enforce fail-closed visible provenance after every known attribution producer. */
 function nvx_medical_review_enforce_visible_provenance( string $content ): string {
 	if (
 		is_admin()
@@ -143,6 +417,7 @@ function nvx_medical_review_enforce_visible_provenance( string $content ): strin
 		|| is_feed()
 		|| ( defined( 'REST_REQUEST' ) && REST_REQUEST )
 		|| ( ! is_singular( 'page' ) && ! is_page() )
+		|| ! nvx_medical_review_governed_page()
 	) {
 		return $content;
 	}
@@ -160,26 +435,40 @@ function nvx_medical_review_enforce_visible_provenance( string $content ): strin
 }
 add_filter( 'the_content', 'nvx_medical_review_enforce_visible_provenance', NVX_HOOK_PRIO_MEDICAL_REVIEW );
 
-/** Test whether a schema type contains WebPage. */
+/** Test whether a schema type contains one requested type. */
 function nvx_medical_review_schema_has_type( $types, string $type ): bool {
 	return in_array( $type, is_array( $types ) ? $types : array( $types ), true );
 }
 
-/** Add reviewedBy only when the same approved reviewer disclosure is visible. */
+/** Whether a schema node is governed as a page provenance surface. */
+function nvx_medical_review_schema_is_page_node( array $piece ): bool {
+	if ( ! isset( $piece['@type'] ) ) {
+		return false;
+	}
+
+	return nvx_medical_review_schema_has_type( $piece['@type'], 'WebPage' )
+		|| nvx_medical_review_schema_has_type( $piece['@type'], 'MedicalWebPage' );
+}
+
+/** Enforce the canonical provenance owner on governed WebPage nodes. */
 function nvx_medical_review_schema_graph( $graph ) {
-	$record = nvx_medical_review_record();
-	if ( null === $record || ! is_array( $graph ) ) {
+	if ( ! is_array( $graph ) || ! nvx_medical_review_governed_page() ) {
 		return $graph;
 	}
 
+	$record = nvx_medical_review_record();
 	foreach ( $graph as $index => $piece ) {
-		if (
-			is_array( $piece )
-			&& isset( $piece['@type'] )
-			&& nvx_medical_review_schema_has_type( $piece['@type'], 'WebPage' )
-		) {
-			$graph[ $index ]['reviewedBy'] = array( '@id' => $record['id'] );
+		if ( ! is_array( $piece ) || ! nvx_medical_review_schema_is_page_node( $piece ) ) {
+			continue;
 		}
+
+		unset( $graph[ $index ]['reviewedBy'], $graph[ $index ]['lastReviewed'] );
+		if ( null === $record ) {
+			continue;
+		}
+
+		$graph[ $index ]['reviewedBy']   = array( '@id' => $record['id'] );
+		$graph[ $index ]['lastReviewed'] = $record['date'];
 	}
 
 	return $graph;
