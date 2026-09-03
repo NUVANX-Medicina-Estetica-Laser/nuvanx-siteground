@@ -29,6 +29,7 @@ $root              = dirname( __DIR__, 2 );
 $catalog_source    = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php' );
 $guard_source      = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-tariff-output-guard.php' );
 $structured_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-structured-data.php' );
+$constants_source  = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php' );
 
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-tariff-output-guard.php';
@@ -182,9 +183,10 @@ nvx_tariff_ssot_assert( false !== strpos( $catalog_source, 'nvx_catalog_faq_inde
 nvx_tariff_ssot_assert( false !== strpos( $catalog_source, "'marcacion_mandibular'" ), 'MANDIBULAR_CANONICAL_LOOKUP_PRESENT' );
 nvx_tariff_ssot_assert( false !== strpos( $catalog_source, "'muslos_internos'" ), 'INNER_THIGH_CANONICAL_LOOKUP_PRESENT' );
 nvx_tariff_ssot_assert( false !== strpos( $catalog_source, 'nvx_catalog_price_destination_valid' ), 'NESTED_DESTINATION_GUARD_PRESENT' );
-nvx_tariff_ssot_assert( false !== strpos( $guard_source, "add_filter( 'the_content', 'nvx_tariff_guard_public_content', 999 )" ), 'VISIBLE_OUTPUT_FINAL_FENCE_REGISTERED' );
+nvx_tariff_ssot_assert( false !== strpos( $guard_source, "add_filter( 'the_content', 'nvx_tariff_guard_public_content', NVX_HOOK_PRIO_TARIFF_OUTPUT_GUARD )" ), 'VISIBLE_OUTPUT_FINAL_FENCE_REGISTERED' );
+nvx_tariff_ssot_assert( false !== strpos( $constants_source, 'NVX_HOOK_PRIO_TARIFF_OUTPUT_GUARD = 221' ), 'VISIBLE_OUTPUT_PRIORITY_REGISTERED' );
 nvx_tariff_ssot_assert( false !== strpos( $guard_source, "add_filter( 'wpseo_schema_graph', 'nvx_tariff_guard_schema_graph', 900 )" ), 'SCHEMA_OUTPUT_FINAL_FENCE_REGISTERED' );
 nvx_tariff_ssot_assert( false !== strpos( $structured_source, "require_once __DIR__ . '/nvx-tariff-output-guard.php';" ), 'SCHEMA_BOOTSTRAP_LOADS_TARIFF_FENCE' );
 nvx_tariff_ssot_assert( false !== strpos( $catalog_source, "error_log( 'NUVANX catalog: ' . \$message )" ), 'PRODUCTION_INTEGRITY_LOGGING_PRESENT' );
 
-echo 'TARIFF_SSOT_RUNTIME=PASS source=tariff-catalog faq=semantic-identity reorder=pass duplicate=fail-closed anatomy=independent output=html+schema-fenced aesthetic=reorder-safe' . PHP_EOL;
+echo 'TARIFF_SSOT_RUNTIME=PASS source=tariff-catalog faq=semantic-identity reorder=pass duplicate=fail-closed anatomy=independent output=html+schema-fenced aesthetic=reorder-safe hook=registered' . PHP_EOL;
