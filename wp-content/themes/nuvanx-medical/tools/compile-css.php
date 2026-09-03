@@ -176,6 +176,27 @@ try {
         throw new RuntimeException('manifest_write_failed');
     }
 
+    if (getenv('NVX_CSS_EMIT_BASE64') === '1') {
+        $artifacts = scandir($distDir);
+        if ($artifacts === false) {
+            throw new RuntimeException('dist_artifact_scan_failed');
+        }
+        sort($artifacts, SORT_STRING);
+        foreach ($artifacts as $artifact) {
+            if ($artifact === '.' || $artifact === '..') {
+                continue;
+            }
+            if (!str_ends_with($artifact, '.css') && $artifact !== 'manifest.json') {
+                continue;
+            }
+            $artifactContents = file_get_contents($distDir . '/' . $artifact);
+            if ($artifactContents === false) {
+                throw new RuntimeException('dist_artifact_read_failed:' . $artifact);
+            }
+            echo 'CSS_ARTIFACT_BASE64 ' . $artifact . ' ' . base64_encode($artifactContents) . "\n";
+        }
+    }
+
     printf(
         "CSS_COMPILATION=PASS bundles=%d route_files=%d dist=wp-content/themes/nuvanx-medical/dist\n",
         count($manifest['bundles']),
