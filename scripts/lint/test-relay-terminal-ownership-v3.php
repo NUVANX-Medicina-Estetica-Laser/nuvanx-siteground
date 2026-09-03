@@ -40,7 +40,7 @@ $require_v3(
 
 $enqueue_start = strpos( $queue_source, 'function nvx_supabase_relay_queue_enqueue' );
 $enqueue_end   = false !== $enqueue_start
-	? strpos( $queue_source, '/**\n * Send one persisted payload.', $enqueue_start )
+	? strpos( $queue_source, "if ( ! function_exists( 'nvx_supabase_relay_queue_send' ) )", $enqueue_start )
 	: false;
 $enqueue_body  = false !== $enqueue_start && false !== $enqueue_end
 	? substr( $queue_source, $enqueue_start, $enqueue_end - $enqueue_start )
