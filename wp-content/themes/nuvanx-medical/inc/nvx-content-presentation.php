@@ -64,6 +64,10 @@ function nvx_home_action_banner_markup(): string {
 	$valoracion = nvx_cta_valoracion_url();
 	$whatsapp   = nvx_cta_whatsapp_url();
 
+	$modal_contract = function_exists( 'nvx_cta_valoracion_modal_contract' )
+		? nvx_cta_valoracion_modal_contract()
+		: array( 'class' => '', 'attrs' => '' );
+
 	// Stable structural id + data attribute for safe strip/replace (no broad markup regex).
 	$html  = '<div id="nvx-post-values-action-banner" class="nvx-home-action-banner-shell" data-nvx-action-banner="post-values">';
 	$html .= '<section class="nvx-home-action-banner" aria-labelledby="nvx-home-action-banner-title">';
@@ -78,8 +82,10 @@ function nvx_home_action_banner_markup(): string {
 	$html .= '<div class="nvx-home-action-banner__actions">';
 	// Pill CTAs from the design system (radius 999px) — never square blocks.
 	$html .= sprintf(
-		'<a class="nvx-brand-btn nvx-brand-btn--light nvx-home-action-banner__cta nvx-open-valoracion-modal" href="%1$s" data-nvx-valoracion-modal="1" aria-haspopup="dialog">%2$s</a>',
+		'<a class="nvx-brand-btn nvx-brand-btn--light nvx-home-action-banner__cta%1$s" href="%2$s"%3$s>%4$s</a>',
+		$modal_contract['class'],
 		esc_url( $valoracion ),
+		$modal_contract['attrs'],
 		esc_html__( 'Solicitar valoración médica', 'nuvanx-medical' )
 	);
 	$html .= sprintf(
