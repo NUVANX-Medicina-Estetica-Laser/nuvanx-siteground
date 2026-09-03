@@ -21,7 +21,6 @@ const forbiddenRuntimeSymbols = [
   [journal, 'nvx_journal_tech_article_seed_staging2'],
   [catalog, 'nvx_catalog_retire_unapproved_bridal_seed'],
 ];
-
 for (const [source, symbol] of forbiddenRuntimeSymbols) {
   assert.equal(source.includes(symbol), false, `Runtime mutation owner still present: ${symbol}`);
 }
@@ -57,34 +56,30 @@ assert.match(orchestrator, /hygiene_core_start/,
 assert.match(orchestrator, /if \( 0 !== \$core_status \)/,
   'Child non-zero exit must fail the outer migration');
 
-assert.doesNotMatch(
-  core,
-  /update_post_meta\s*\(\s*\$pid\s*,\s*'_nvx_aesthetic_treatment_key'/,
-  'Legacy hygiene core must not write aesthetic treatment provenance meta',
-);
-assert.doesNotMatch(
-  core,
-  /update_post_meta\s*\(\s*\$pid\s*,\s*'_nvx_medical_review_status'/,
-  'Legacy hygiene core must not write medical review status',
-);
+assert.doesNotMatch(core, /update_post_meta\s*\(\s*\$pid\s*,\s*'_nvx_aesthetic_treatment_key'/,
+  'Legacy hygiene core must not write aesthetic treatment provenance meta');
+assert.doesNotMatch(core, /update_post_meta\s*\(\s*\$pid\s*,\s*'_nvx_medical_review_status'/,
+  'Legacy hygiene core must not write medical review status');
 assert.match(core, /outer H1\s+\/\/ reconciliation transaction|outer H1[\s\S]{0,120}reconciliation transaction/,
   'Legacy core must document the canonical H1 metadata owner');
 
-// The transaction owns durable state only. Runtime/API verification must happen
-// after COMMIT so persistent/request caches cannot be compared to uncommitted DB
-// state. A post-commit mismatch still fails the migration and the outer Staging
-// workflow restores its database snapshot.
 assert.match(helper, /\$wpdb->postmeta/, 'H1 metadata verification must inspect durable postmeta storage');
 assert.match(helper, /post_meta_durable_value_missing/);
 assert.match(helper, /post_meta_durable_verification_failed/);
-assert.match(helper, /function\s+nvx_h1_verify_runtime_plan\s*\(/,
-  'H1 must have a dedicated post-commit runtime verifier');
+assert.match(helper, /function\s+nvx_h1_verify_runtime_plan\s*\(\s*array\s+\$plan,\s*array\s+\$created_ids\s*\)/,
+  'H1 must have a dedicated post-commit runtime verifier with exact inserted IDs');
+assert.match(helper, /\$created_ids\s*=\s*array\s*\(\s*\)/,
+  'Apply owner must track IDs returned by successful inserts');
+assert.match(helper, /\$created_ids\s*\[\s*\$scope\s*\.\s*'\|'\s*\.\s*\$slug\s*\]\s*=\s*\(int\)\s*\$result/,
+  'Created strategy/aesthetic seeds must carry the exact wp_insert_post ID');
+assert.match(helper, /\$created_ids\s*\[\s*\$scope\s*\.\s*'\|'\s*\.\s*\$slug\s*\]\s*\?\?\s*0/,
+  'Post-commit verification must consume the exact inserted ID, not re-resolve by slug');
 assert.match(helper, /wp_cache_flush\s*\(\s*\)/,
   'Post-commit runtime verification must invalidate WordPress cache state');
 assert.match(helper, /post_meta_postcommit_runtime_verification_failed_nvx_aesthetic_treatment_key/);
 assert.match(helper, /post_meta_postcommit_runtime_verification_failed_nvx_medical_review_status/);
 const commitOffset = helper.indexOf("$wpdb->query( 'COMMIT' )");
-const runtimeVerifyOffset = helper.indexOf('nvx_h1_verify_runtime_plan( $plan )');
+const runtimeVerifyOffset = helper.indexOf('nvx_h1_verify_runtime_plan( $plan, $created_ids )');
 assert.ok(commitOffset >= 0 && runtimeVerifyOffset > commitOffset,
   'Runtime metadata verification must execute only after COMMIT');
 assert.match(helper, /\$committed\s*=\s*false/,
@@ -115,4 +110,4 @@ assert.match(helper, /get_post_meta\s*\(/);
 assert.match(helper, /wp_insert_post\s*\(/);
 assert.match(helper, /wp_update_post\s*\(/);
 
-console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single meta_verification=durable-in-tx+runtime-postcommit bridal_partial_provenance=bounded_fail_closed approvals=preserved');
+console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single meta_verification=durable-in-tx+runtime-postcommit created_ids=exact bridal_partial_provenance=bounded_fail_closed approvals=preserved');
