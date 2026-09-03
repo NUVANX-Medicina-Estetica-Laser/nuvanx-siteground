@@ -25,7 +25,7 @@ wp_head();
 <body <?php body_class(); ?>>
 <a class="nvx-skip-link" href="#nvx-main"><?php esc_html_e( 'Saltar al contenido principal', 'nuvanx-medical' ); ?></a>
 <?php wp_body_open(); ?>
-<svg xmlns="http://www.w3.org/2000/svg" hidden style="display:none" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" hidden aria-hidden="true">
 	<symbol id="icon-location" viewBox="0 0 24 24">
 	<path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
 	</symbol>
