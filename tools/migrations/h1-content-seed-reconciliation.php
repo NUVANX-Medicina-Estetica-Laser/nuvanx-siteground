@@ -234,13 +234,65 @@ function nvx_h1_build_plan(): array {
 	return $plan;
 }
 
-/** Persist one meta value and verify durable storage inside the transaction. */
+/**
+ * Persist one postmeta value inside the SQL transaction without invoking the
+ * WordPress metadata API. `update_post_meta()` invalidates persistent object
+ * cache immediately, before COMMIT, so it cannot be the write owner inside a
+ * transaction whose visibility boundary is the database commit.
+ */
 function nvx_h1_set_meta_verified( int $post_id, string $meta_key, string $value ): void {
 	global $wpdb;
 
-	$current = (string) get_post_meta( $post_id, $meta_key, true );
-	if ( $value !== $current ) {
-		update_post_meta( $post_id, $meta_key, $value );
+	$meta_key = (string) $meta_key;
+	if ( $post_id <= 0 || '' === $meta_key ) {
+		throw new RuntimeException( 'post_meta_invalid_write_target' );
+	}
+
+	$serialized    = maybe_serialize( $value );
+	$stored_values = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s ORDER BY meta_id ASC",
+			$post_id,
+			$meta_key
+		)
+	);
+	if ( ! is_array( $stored_values ) ) {
+		throw new RuntimeException( 'post_meta_prewrite_read_failed:' . sanitize_key( $meta_key ) );
+	}
+
+	if ( array() === $stored_values ) {
+		$inserted = $wpdb->insert(
+			$wpdb->postmeta,
+			array(
+				'post_id'    => $post_id,
+				'meta_key'   => $meta_key,
+				'meta_value' => $serialized,
+			),
+			array( '%d', '%s', '%s' )
+		);
+		if ( false === $inserted || $inserted < 1 ) {
+			throw new RuntimeException( 'post_meta_transactional_insert_failed:' . sanitize_key( $meta_key ) );
+		}
+	} else {
+		$needs_update = false;
+		foreach ( $stored_values as $stored_value ) {
+			if ( $value !== (string) maybe_unserialize( $stored_value ) ) {
+				$needs_update = true;
+				break;
+			}
+		}
+		if ( $needs_update ) {
+			$updated = $wpdb->update(
+				$wpdb->postmeta,
+				array( 'meta_value' => $serialized ),
+				array( 'post_id' => $post_id, 'meta_key' => $meta_key ),
+				array( '%s' ),
+				array( '%d', '%s' )
+			);
+			if ( false === $updated ) {
+				throw new RuntimeException( 'post_meta_transactional_update_failed:' . sanitize_key( $meta_key ) );
+			}
+		}
 	}
 
 	$stored_values = $wpdb->get_col(
@@ -260,17 +312,7 @@ function nvx_h1_set_meta_verified( int $post_id, string $meta_key, string $value
 	}
 }
 
-/**
- * Verify one metadata value after COMMIT against both durable storage and the
- * WordPress runtime view.
- *
- * Targeted invalidation happens only after the transaction is committed. The
- * previous pre-COMMIT targeted read could not prove runtime visibility, while a
- * global cache flush alone did not invalidate the stale SiteGround post-meta
- * entry exercised by the PR preview. Keeping both checks here makes the failure
- * boundary explicit: committed DB visibility is distinguished from a stale API
- * cache/read.
- */
+/** Verify one metadata value after COMMIT against durable storage and runtime. */
 function nvx_h1_verify_meta_after_commit( int $post_id, string $meta_key, string $expected ): void {
 	global $wpdb;
 
@@ -295,18 +337,12 @@ function nvx_h1_verify_meta_after_commit( int $post_id, string $meta_key, string
 		}
 	}
 
-	// Invalidate the exact runtime cache key after COMMIT. clean_post_cache()
-	// also clears the corresponding post cache without relying on a global flush.
-	wp_cache_delete( $post_id, 'post_meta' );
-	clean_post_cache( $post_id );
-	wp_cache_delete( $post_id, 'post_meta' );
-
 	if ( $expected !== (string) get_post_meta( $post_id, $meta_key, true ) ) {
 		throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_' . $failure_key );
 	}
 }
 
-/** Invalidate post-level and query caches for one affected post after COMMIT. */
+/** Invalidate post-level and query caches for one affected post after COMMIT/ROLLBACK. */
 function nvx_h1_invalidate_post_cache( int $post_id ): void {
 	if ( $post_id <= 0 ) {
 		return;
@@ -319,10 +355,67 @@ function nvx_h1_invalidate_post_cache( int $post_id ): void {
 	wp_cache_delete( 'last_changed', 'posts' );
 }
 
-/** Resolve and verify the WordPress runtime metadata view after COMMIT. */
-function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
-	wp_cache_flush();
+/**
+ * Prime the complete WordPress post-meta cache from committed durable rows.
+ *
+ * Rebuilding the whole cache preserves unrelated metadata and avoids relying on
+ * a persistent-cache delete race to decide what `get_post_meta()` can observe.
+ */
+function nvx_h1_prime_post_meta_cache_from_durable_storage( int $post_id ): void {
+	global $wpdb;
 
+	if ( $post_id <= 0 ) {
+		throw new RuntimeException( 'post_meta_cache_prime_invalid_post_id' );
+	}
+
+	$rows = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d ORDER BY meta_id ASC",
+			$post_id
+		),
+		ARRAY_A
+	);
+	if ( ! is_array( $rows ) ) {
+		throw new RuntimeException( 'post_meta_cache_prime_durable_read_failed' );
+	}
+
+	$cache = array();
+	foreach ( $rows as $row ) {
+		if ( ! is_array( $row ) || ! array_key_exists( 'meta_key', $row ) || ! array_key_exists( 'meta_value', $row ) ) {
+			throw new RuntimeException( 'post_meta_cache_prime_row_malformed' );
+		}
+		$key             = (string) $row['meta_key'];
+		$cache[ $key ][] = (string) $row['meta_value'];
+	}
+
+	if ( false === wp_cache_set( $post_id, $cache, 'post_meta' ) ) {
+		throw new RuntimeException( 'post_meta_cache_prime_write_failed' );
+	}
+
+	$primed = wp_cache_get( $post_id, 'post_meta' );
+	if ( ! is_array( $primed ) || $cache !== $primed ) {
+		throw new RuntimeException( 'post_meta_cache_prime_verification_failed' );
+	}
+}
+
+/** Invalidate every exact post touched by a failed plan without a global flush. */
+function nvx_h1_invalidate_plan_caches( array $plan, array $created_ids ): void {
+	$ops = isset( $plan['ops'] ) && is_array( $plan['ops'] ) ? $plan['ops'] : array();
+	foreach ( $ops as $op ) {
+		$scope   = (string) ( $op['scope'] ?? '' );
+		$action  = (string) ( $op['action'] ?? '' );
+		$slug    = (string) ( $op['slug'] ?? '' );
+		$payload = isset( $op['payload'] ) && is_array( $op['payload'] ) ? $op['payload'] : array();
+		$post_id = (int) ( $payload['id'] ?? 0 );
+		if ( 'create_seed' === $action && in_array( $scope, array( 'strategy', 'aesthetic', 'journal' ), true ) ) {
+			$post_id = (int) ( $created_ids[ $scope . '|' . $slug ] ?? 0 );
+		}
+		nvx_h1_invalidate_post_cache( $post_id );
+	}
+}
+
+/** Resolve and verify the WordPress runtime view after COMMIT. */
+function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 	$ops = isset( $plan['ops'] ) && is_array( $plan['ops'] ) ? $plan['ops'] : array();
 	foreach ( $ops as $op ) {
 		$scope   = (string) ( $op['scope'] ?? '' );
@@ -340,6 +433,7 @@ function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 		}
 
 		nvx_h1_invalidate_post_cache( $post_id );
+		nvx_h1_prime_post_meta_cache_from_durable_storage( $post_id );
 
 		if ( 'strategy' === $scope && in_array( $action, array( 'update_seed_review_meta', 'create_seed' ), true ) ) {
 			$expected = (string) ( $payload['review_status'] ?? '' );
@@ -352,6 +446,9 @@ function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 			$expected_review = 'create_seed' === $action ? 'pending' : (string) ( $payload['target_review'] ?? 'pending' );
 			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_aesthetic_treatment_key', $expected_key );
 			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_medical_review_status', $expected_review );
+			if ( 'approved' === $expected_review && null === nvx_medical_review_record( $post_id ) ) {
+				throw new RuntimeException( 'approved_review_postcommit_verification_failed' );
+			}
 			continue;
 		}
 
@@ -370,8 +467,6 @@ function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 			continue;
 		}
 	}
-
-	wp_cache_flush();
 }
 
 /** Assert that one prevalidated post still exists before applying its operation. */
@@ -451,9 +546,6 @@ function nvx_h1_apply_plan( array $plan ): array {
 				}
 				nvx_h1_set_meta_verified( $post->ID, '_nvx_aesthetic_treatment_key', $key );
 				nvx_h1_set_meta_verified( $post->ID, '_nvx_medical_review_status', $target_review );
-				if ( 'approved' === $target_review && null === nvx_medical_review_record( $post->ID ) ) {
-					throw new RuntimeException( 'approved_review_restore_failed' );
-				}
 			} elseif ( 'aesthetic' === $scope && 'create_seed' === $action ) {
 				if ( get_page_by_path( $slug, OBJECT, 'page' ) instanceof WP_Post ) {
 					throw new RuntimeException( 'aesthetic_create_precondition_changed' );
@@ -527,7 +619,7 @@ function nvx_h1_apply_plan( array $plan ): array {
 		if ( ! $committed ) {
 			$wpdb->query( 'ROLLBACK' );
 		}
-		wp_cache_flush();
+		nvx_h1_invalidate_plan_caches( $plan, $created_ids );
 		throw $error;
 	}
 
