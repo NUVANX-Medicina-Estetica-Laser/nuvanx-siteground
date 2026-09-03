@@ -875,6 +875,18 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
 		string $lock,
 		int $lease_ttl
 	): bool {
+		// Force a fresh read: the batch query that produced this post_id cached the
+		// post object and its meta. Without shared object caching those cached values
+		// hide a concurrent cancellation, death, or reschedule, so evict them before
+		// revalidating the item's due state.
+		if ( function_exists( 'clean_post_cache' ) ) {
+			clean_post_cache( $post_id );
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( $post_id, 'posts' );
+			wp_cache_delete( $post_id, 'post_meta' );
+		}
+
 		$post = get_post( $post_id );
 		if ( ! $post instanceof WP_Post || 'pending' !== $post->post_status ) {
 			return false;
