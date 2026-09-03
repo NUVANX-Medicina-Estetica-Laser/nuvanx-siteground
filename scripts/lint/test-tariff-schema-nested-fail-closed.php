@@ -27,6 +27,10 @@ function wp_strip_all_tags( string $text ): string {
 	return strip_tags( $text );
 }
 
+function wp_json_encode( $value, int $flags = 0 ) {
+	return json_encode( $value, $flags );
+}
+
 function nvx_tariff_nested_assert( bool $condition, string $name ): void {
 	if ( ! $condition ) {
 		fwrite( STDERR, 'TARIFF_SCHEMA_NESTED=FAIL invariant=' . $name . PHP_EOL );
