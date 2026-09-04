@@ -32,6 +32,7 @@
 
 /* Logo lockup - diseño más elegante */
 .nvx-logo {
+  --nvx-logo-wordmark-size: var(--nvx-type-h5);
   display: inline-flex;
   flex: 0 0 auto;
   flex-direction: column;
@@ -65,7 +66,7 @@
 
 .nvx-logo__wordmark {
   font-family: var(--nvx-sans);
-  font-size: var(--nvx-space-2);
+  font-size: var(--nvx-logo-wordmark-size);
   font-weight: var(--nvx-fw-medium);
   line-height: var(--nvx-lh-nav);
   letter-spacing: 0.24em; /* nvx-token-exception: EXCEPTION_DOCUMENTED — logo wordmark tracking */
@@ -268,6 +269,9 @@
 
 /* Mobile nav drawer - diseño elegante */
 .nvx-mobile-nav {
+  --nvx-mobile-nav-close-glyph-size: var(--nvx-icon-md);
+  --nvx-mobile-nav-submenu-size: var(--nvx-type-h5);
+  --nvx-mobile-nav-toggle-glyph-size: var(--nvx-icon-sm);
   position: fixed;
   inset: 0;
   z-index: var(--nvx-z-modal);
@@ -309,7 +313,7 @@
   align-self: flex-end;
   border: 0;
   background: transparent;
-  font-size: var(--nvx-space-4);
+  font-size: var(--nvx-mobile-nav-close-glyph-size);
   line-height: var(--nvx-lh-nav);
   color: var(--nvx-ink);
 }
@@ -344,7 +348,7 @@
 
 .nvx-mobile-nav__list .sub-menu a {
   font-family: var(--nvx-sans);
-  font-size: var(--nvx-space-2);
+  font-size: var(--nvx-mobile-nav-submenu-size);
   line-height: var(--nvx-lh-nav-submenu);
 }
 
@@ -372,7 +376,7 @@
   border: none;
   background: transparent;
   color: var(--nvx-ink);
-  font-size: var(--nvx-space-3);
+  font-size: var(--nvx-mobile-nav-toggle-glyph-size);
   cursor: pointer;
   padding: 0;
   border-radius: var(--nvx-radius-button);
@@ -404,7 +408,7 @@
     padding-inline: calc(var(--nvx-space-1) * 0.4);
     letter-spacing: calc(var(--nvx-track-nav) * 0.9);
   }
-  
+
   .nvx-nav__list {
     gap: var(--nvx-nav-gap-compact);
   }
@@ -417,4 +421,7 @@
     padding-inline: calc(var(--nvx-space-1) * 0.35);
   }
 }
-.nvx-logo__img { mix-blend-mode: multiply; }
+
+.nvx-logo__img {
+  mix-blend-mode: multiply;
+}

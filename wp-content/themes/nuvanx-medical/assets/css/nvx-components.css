@@ -1085,7 +1085,7 @@ body .joinchat__qr canvas {
   border-radius:var(--nvx-radius-button);
   background:transparent;
   color:var(--nvx-ink);
-  font-size:calc(var(--nvx-space-1) * 3.5);
+  font-size:var(--nvx-type-control-glyph);
   line-height:1;
   cursor:pointer;
 }

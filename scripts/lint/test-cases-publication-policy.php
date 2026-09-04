@@ -44,7 +44,7 @@ if ( ! is_array( $cases_data ) ) {
 }
 
 $consent_states = $cases_data['consent_states'] ?? array();
-$valid_states = array_keys( $consent_states );
+$valid_states   = array_keys( $consent_states );
 if ( ! in_array( 'approved', $valid_states, true ) || ! in_array( 'withdrawn', $valid_states, true ) || ! in_array( 'pending', $valid_states, true ) ) {
 	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=missing_canonical_consent_states\n" );
 	exit( 1 );
@@ -86,18 +86,24 @@ foreach ( $forbidden_noindex_markers as $marker ) {
 	}
 }
 
-$required_template = array(
+$required_template_markers = array(
 	"nvx_catalog_json_load( 'patient-cases.json' )",
-	"\$cases_list = \$cases_data['cases'] ?? array();",
 	'<?php foreach ( $cases_list as $case ) : ?>',
 	'get_header();',
 	'get_footer();',
 );
-foreach ( $required_template as $marker ) {
+foreach ( $required_template_markers as $marker ) {
 	if ( false === strpos( $template, $marker ) ) {
 		fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=public_cases_template_runtime_missing\n" );
 		exit( 1 );
 	}
+}
+
+// Formatting is not part of the publication contract. Match the executable
+// assignment semantically so PHPCS/alignment changes cannot create a false red.
+if ( 1 !== preg_match( '/\$cases_list\s*=\s*\$cases_data\[\'cases\'\]\s*\?\?\s*array\(\s*\)\s*;/', $template ) ) {
+	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=public_cases_template_runtime_missing\n" );
+	exit( 1 );
 }
 
 $case_rows = is_array( $cases ) && isset( $cases['cases'] ) && is_array( $cases['cases'] ) ? $cases['cases'] : array();

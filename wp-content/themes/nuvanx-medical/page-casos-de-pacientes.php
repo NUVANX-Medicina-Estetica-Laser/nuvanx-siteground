@@ -14,14 +14,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$cases_data = function_exists( 'nvx_catalog_json_load' ) ? nvx_catalog_json_load( 'patient-cases.json' ) : array();
+$cases_data    = function_exists( 'nvx_catalog_json_load' ) ? nvx_catalog_json_load( 'patient-cases.json' ) : array();
 $consent_states = $cases_data['consent_states'] ?? array();
-$cases_list = $cases_data['cases'] ?? array();
+$cases_list     = $cases_data['cases'] ?? array();
 
-// Filter to only show cases with affirmative consent (approved state)
-$cases_list = array_filter( $cases_list, function( $case ) {
-	return ( $case['consent_status'] ?? '' ) === 'approved';
-} );
+// Filter to only show cases with affirmative consent (approved state).
+$cases_list = array_filter(
+	$cases_list,
+	function ( $case ) {
+		return ( $case['consent_status'] ?? '' ) === 'approved';
+	}
+);
 
 $disclaimer = $cases_data['disclaimer'] ?? __( 'Los resultados y evoluciones mostrados corresponden a casos individuales documentados en consulta médica con consentimiento expreso del paciente. La respuesta biológica, calidad tisular y tiempos de recuperación varían según cada persona. La documentación gráfica no constituye una garantía de resultado idéntico. Todo tratamiento médico requiere valoración anatómica presencial previa.', 'nuvanx-medical' );
 
@@ -32,14 +35,12 @@ if ( is_readable( $css_path ) ) {
 		? nvx_asset_version( $css_relative )
 		: (string) filemtime( $css_path );
 
-	if ( ! function_exists( 'nvx_theme_public_delivers_inline_styles' ) || ! nvx_theme_public_delivers_inline_styles() ) {
-		wp_enqueue_style(
-			'nvx-cases',
-			get_template_directory_uri() . $css_relative,
-			array( 'nvx-components', 'nvx-patterns' ),
-			$version
-		);
-	}
+	wp_enqueue_style(
+		'nvx-cases',
+		get_template_directory_uri() . $css_relative,
+		array( 'nvx-components', 'nvx-patterns' ),
+		$version
+	);
 }
 
 get_header();
