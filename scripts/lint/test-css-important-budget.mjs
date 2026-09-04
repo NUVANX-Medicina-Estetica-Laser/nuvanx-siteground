@@ -2,9 +2,10 @@
 /**
  * Exact exception budget for CSS !important declarations.
  *
- * !important is allowed only where the cascade must intentionally beat
- * third-party, reduced-motion or print-policy CSS. New exceptions require an
- * explicit review of this registry rather than a marker-only self-approval.
+ * Covers every repository-owned stylesheet shipped by the theme, including
+ * style.css and nested CSS source directories. !important is allowed only
+ * where the cascade must intentionally beat third-party, reduced-motion or
+ * print-policy CSS. New exceptions require explicit registry review.
  */
 
 import fs from 'node:fs/promises';
@@ -13,13 +14,14 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '../..');
-const CSS_ROOT = path.join(ROOT, 'wp-content/themes/nuvanx-medical/assets/css');
+const THEME_ROOT = path.join(ROOT, 'wp-content/themes/nuvanx-medical');
+const IGNORED_DIRS = new Set(['dist', 'node_modules', 'vendor', '.git']);
 
 const ALLOWLIST = new Map([
-  ['nvx-base.css', new Map([
+  ['assets/css/nvx-base.css', new Map([
     ['display: none !important; /* nvx-token-exception: PRINT_POLICY — interactive chrome must not print */', 1],
   ])],
-  ['nvx-accessibility-governance.css', new Map([
+  ['assets/css/nvx-accessibility-governance.css', new Map([
     ['min-height: var(--nvx-touch-target-min, 48px) !important; /* nvx-token-exception: THIRD_PARTY_CONTAINMENT — Complianz late CSS */', 1],
     ['animation-duration: 0.01ms !important; /* nvx-token-exception: reduced-motion override */', 1],
     ['animation-iteration-count: 1 !important; /* nvx-token-exception: reduced-motion override */', 1],
@@ -35,26 +37,60 @@ function maskComments(source) {
   return source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\r\n]/g, ' '));
 }
 
-const failures = [];
-const seen = new Map();
-const files = (await fs.readdir(CSS_ROOT)).filter((name) => name.endsWith('.css')).sort();
+async function walkCss(dir) {
+  const result = [];
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
+    const absolute = path.join(dir, entry.name);
+    if (entry.isDirectory()) result.push(...await walkCss(absolute));
+    else if (entry.isFile() && entry.name.endsWith('.css')) result.push(absolute);
+  }
+  return result;
+}
 
-for (const file of files) {
-  const source = await fs.readFile(path.join(CSS_ROOT, file), 'utf8');
+function importantDeclarations(source, relativePath) {
+  const declarations = [];
   const codeLines = maskComments(source).split('\n');
   const sourceLines = source.split('\n');
-  const allowed = ALLOWLIST.get(file) ?? new Map();
-
   codeLines.forEach((codeLine, index) => {
     if (!codeLine.includes('!important')) return;
-    const literal = (sourceLines[index] ?? '').trim();
-    if (!allowed.has(literal)) {
-      failures.push(`${file}:${index + 1} unapproved=${literal}`);
-      return;
-    }
-    const key = `${file}\n${literal}`;
-    seen.set(key, (seen.get(key) ?? 0) + 1);
+    declarations.push({
+      path: relativePath,
+      line: index + 1,
+      literal: (sourceLines[index] ?? '').trim(),
+    });
   });
+  return declarations;
+}
+
+// Contract fixtures: comments never count; style.css and nested styles are
+// treated exactly like assets/css sources and therefore cannot bypass budget.
+if (importantDeclarations('/* color:red !important; */\nbody { color: black; }', 'style.css').length !== 0) {
+  throw new Error('CSS_IMPORTANT_BUDGET_FIXTURE=FAIL comments');
+}
+if (importantDeclarations('body { color:red !important; }', 'style.css').length !== 1) {
+  throw new Error('CSS_IMPORTANT_BUDGET_FIXTURE=FAIL style_css');
+}
+if (importantDeclarations('.x { display:none !important; }', 'nested/deep.css').length !== 1) {
+  throw new Error('CSS_IMPORTANT_BUDGET_FIXTURE=FAIL nested_css');
+}
+
+const failures = [];
+const seen = new Map();
+const files = (await walkCss(THEME_ROOT)).sort();
+
+for (const absolute of files) {
+  const relative = path.relative(THEME_ROOT, absolute).split(path.sep).join('/');
+  const source = await fs.readFile(absolute, 'utf8');
+  const allowed = ALLOWLIST.get(relative) ?? new Map();
+  for (const declaration of importantDeclarations(source, relative)) {
+    if (!allowed.has(declaration.literal)) {
+      failures.push(`${relative}:${declaration.line} unapproved=${declaration.literal}`);
+      continue;
+    }
+    const key = `${relative}\n${declaration.literal}`;
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
 }
 
 let expectedTotal = 0;
@@ -69,13 +105,11 @@ for (const [file, rules] of ALLOWLIST) {
 }
 
 const actualTotal = [...seen.values()].reduce((sum, count) => sum + count, 0);
-if (actualTotal !== expectedTotal) {
-  failures.push(`total expected=${expectedTotal} actual=${actualTotal}`);
-}
+if (actualTotal !== expectedTotal) failures.push(`total expected=${expectedTotal} actual=${actualTotal}`);
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`CSS_IMPORTANT_BUDGET=FAIL ${failure}`);
   process.exit(1);
 }
 
-console.log(`CSS_IMPORTANT_BUDGET=PASS files=${files.length} owners=${ALLOWLIST.size} exceptions=${expectedTotal}`);
+console.log(`CSS_IMPORTANT_BUDGET=PASS files=${files.length} owners=${ALLOWLIST.size} exceptions=${expectedTotal} fixtures=3`);
