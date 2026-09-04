@@ -188,6 +188,53 @@ if ( $building_recovery_available ) {
 		(string) $complete_building_id === (string) get_option( $claim_complete_building, '' ),
 		'COMPLETE_BUILDING_BINDS_NUMERIC_FENCE'
 	);
+
+	// Crash in the exact next_attempt -> ready window. Identity, attempts, claim
+	// and due visibility are already durable. Recovery must not discard the payload;
+	// it wins BUILDING->PREPARED first, then the existing finalizer repairs ready.
+	$body_missing_ready   = '{"submission_id":"v4-building-missing-ready"}';
+	$dedupe_missing_ready = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_missing_ready, '' );
+	$claim_missing_ready  = nvx_supabase_relay_queue_claim_key( $dedupe_missing_ready );
+	$expired_missing_ready_claim = ( $GLOBALS['nvx_mock_time'] - 1 ) . '|missing_ready_generation';
+	$missing_ready_id     = wp_insert_post(
+		array(
+			'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+			'post_status'  => NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS,
+			'post_content' => wp_slash( $body_missing_ready ),
+		),
+		true
+	);
+	$missing_ready_id = absint( $missing_ready_id );
+	$missing_ready    = get_post( $missing_ready_id );
+	if ( $missing_ready instanceof WP_Post ) {
+		$missing_ready->post_date_gmt = gmdate(
+			'Y-m-d H:i:s',
+			$GLOBALS['nvx_mock_time'] - NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS - 1
+		);
+	}
+	add_post_meta( $missing_ready_id, '_nvx_relay_endpoint', 'lead_captured', true );
+	add_post_meta( $missing_ready_id, '_nvx_relay_attempts', '1', true );
+	add_post_meta( $missing_ready_id, '_nvx_relay_publish_claim', $expired_missing_ready_claim, true );
+	add_post_meta( $missing_ready_id, '_nvx_relay_dedupe_key', $dedupe_missing_ready, true );
+	add_post_meta( $missing_ready_id, '_nvx_relay_next_attempt', (string) ( $GLOBALS['nvx_mock_time'] - 1 ), true );
+	$GLOBALS['nvx_mock_options'][ $claim_missing_ready ] = $expired_missing_ready_claim;
+	$require_v4(
+		nvx_supabase_relay_queue_recover_building_item( $missing_ready_id ),
+		'MISSING_READY_BUILDING_RECOVERED'
+	);
+	$require_v4(
+		nvx_supabase_relay_queue_item_ready( $missing_ready_id ),
+		'MISSING_READY_REPAIRED_AFTER_BUILDING_CAS'
+	);
+	$require_v4(
+		get_post( $missing_ready_id ) instanceof WP_Post
+		&& 'pending' === get_post( $missing_ready_id )->post_status,
+		'MISSING_READY_BUILDING_PROMOTED_PENDING'
+	);
+	$require_v4(
+		(string) $missing_ready_id === (string) get_option( $claim_missing_ready, '' ),
+		'MISSING_READY_BINDS_NUMERIC_FENCE'
+	);
 }
 
 // ── Regression -2: BUILDING_ROWS_ARE_NOT_PREPARED_RECOVERY_VISIBLE ─────────
@@ -446,4 +493,4 @@ if ( $failures_v4 ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_POSTMERGE_RACES_V4=PASS building_recovery=1 building_status_cas=1 crash_after_insert_safe=1 crash_mid_metadata_quarantined=1 crash_after_metadata_recovered=1 building_hidden=1 finalize_fail_closed=1 preidentity_live_safe=1 live_claim_safe=1 due_before_fence=1 failed_quarantine_nonterminal=1\n";
+echo "OUTBOX_POSTMERGE_RACES_V4=PASS building_recovery=1 building_status_cas=1 crash_after_insert_safe=1 crash_mid_metadata_quarantined=1 crash_after_metadata_recovered=1 crash_before_ready_recovered=1 building_hidden=1 finalize_fail_closed=1 preidentity_live_safe=1 live_claim_safe=1 due_before_fence=1 failed_quarantine_nonterminal=1\n";
