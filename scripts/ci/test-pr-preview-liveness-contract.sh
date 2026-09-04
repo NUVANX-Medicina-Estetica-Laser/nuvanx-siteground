@@ -25,6 +25,9 @@ case "$target" in
       valid)
         printf '%s\n' '{"state":"open","merged_at":null,"head":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"base":{"ref":"master"}}'
         ;;
+      query_fail)
+        exit 1
+        ;;
       malformed_json)
         printf '%s\n' 'not json'
         ;;
@@ -168,16 +171,37 @@ set -e
 grep -Fq 'reason=duplicate_preview_superseded' "$paginated_log"
 grep -Fq 'newer_run_id=90' "$paginated_log"
 
-for scenario in query_fail malformed_json_runs non_object_runs missing_workflow_runs invalid_run_fields; do
+query_fail_log="$TMP/query_fail.log"
+set +e
+env "${common_env[@]}" TEST_DUP_SCENARIO=query_fail bash "$SUBJECT" contract >"$query_fail_log" 2>&1
+query_fail_rc=$?
+set -e
+[[ "$query_fail_rc" -eq 75 ]]
+grep -Fq 'PR_PREVIEW_LIVENESS=TRANSIENT' "$query_fail_log"
+grep -Fq 'reason=preview_run_query_failed' "$query_fail_log"
+grep -Fq 'mutation=forbidden' "$query_fail_log"
+
+for scenario in malformed_json_runs non_object_runs missing_workflow_runs invalid_run_fields; do
   log="$TMP/${scenario}.log"
   set +e
   env "${common_env[@]}" TEST_DUP_SCENARIO="$scenario" bash "$SUBJECT" contract >"$log" 2>&1
   rc=$?
   set -e
   [[ "$rc" -eq 1 ]]
-  grep -Fq 'reason=preview_run_query_failed' "$log"
+  grep -Fq 'PR_PREVIEW_LIVENESS=FAIL' "$log"
+  grep -Fq 'reason=preview_run_payload_invalid' "$log"
   grep -Fq 'mutation=forbidden' "$log"
 done
+
+pull_fail_log="$TMP/pull_query_fail.log"
+set +e
+env "${common_env[@]}" TEST_DUP_SCENARIO=none TEST_PULL_SCENARIO=query_fail bash "$SUBJECT" contract >"$pull_fail_log" 2>&1
+pull_fail_rc=$?
+set -e
+[[ "$pull_fail_rc" -eq 75 ]]
+grep -Fq 'PR_PREVIEW_LIVENESS=TRANSIENT' "$pull_fail_log"
+grep -Fq 'reason=pr_metadata_fetch_failed' "$pull_fail_log"
+grep -Fq 'mutation=forbidden' "$pull_fail_log"
 
 for pull_scenario in malformed_json missing_sha; do
   log="$TMP/pull_${pull_scenario}.log"
@@ -186,19 +210,31 @@ for pull_scenario in malformed_json missing_sha; do
   rc=$?
   set -e
   [[ "$rc" -eq 1 ]]
-  grep -Fq 'reason=pr_metadata_fetch_failed' "$log"
+  grep -Fq 'PR_PREVIEW_LIVENESS=FAIL' "$log"
+  grep -Fq 'reason=pr_metadata_payload_invalid' "$log"
   grep -Fq 'mutation=forbidden' "$log"
 done
 
-for job_scenario in query_fail malformed_json non_object; do
+job_fail_log="$TMP/job_query_fail.log"
+set +e
+env "${common_env[@]}" TEST_DUP_SCENARIO=newer_same TEST_JOB_SCENARIO=query_fail bash "$SUBJECT" contract >"$job_fail_log" 2>&1
+job_fail_rc=$?
+set -e
+[[ "$job_fail_rc" -eq 75 ]]
+grep -Fq 'PR_PREVIEW_LIVENESS=TRANSIENT' "$job_fail_log"
+grep -Fq 'reason=candidate_job_query_failed' "$job_fail_log"
+grep -Fq 'mutation=forbidden' "$job_fail_log"
+
+for job_scenario in malformed_json non_object; do
   log="$TMP/job_${job_scenario}.log"
   set +e
   env "${common_env[@]}" TEST_DUP_SCENARIO=newer_same TEST_JOB_SCENARIO="$job_scenario" bash "$SUBJECT" contract >"$log" 2>&1
   rc=$?
   set -e
   [[ "$rc" -eq 1 ]]
-  grep -Fq 'reason=preview_run_query_failed' "$log"
+  grep -Fq 'PR_PREVIEW_LIVENESS=FAIL' "$log"
+  grep -Fq 'reason=candidate_job_payload_invalid' "$log"
   grep -Fq 'mutation=forbidden' "$log"
 done
 
-echo 'PR_PREVIEW_LIVENESS_CONTRACT=PASS latest_same_head_owner=1 older_superseded=1 unrelated_runs_ignored=1 unrelated_labels_ignored=1 paginated_duplicates_found=1 schema_fail_closed=1 query_fail_closed=1'
+echo 'PR_PREVIEW_LIVENESS_CONTRACT=PASS latest_same_head_owner=1 older_superseded=1 unrelated_runs_ignored=1 unrelated_labels_ignored=1 paginated_duplicates_found=1 transient_exit_75=1 payload_fail_closed_exit_1=1'

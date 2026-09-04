@@ -1166,6 +1166,12 @@ jobs:
           ROLLBACK_DIR="$STAGING_PARENT/.nvx-rollback/pr-${PR_NUMBER}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${PR_PREVIEW_SHA}"
           REMOTE_RELEASE="$STAGING_ROOT/wp-content/.nuvanx-deployments/pr-${PR_NUMBER}-${PR_PREVIEW_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           echo "ROLLBACK_DIR=$ROLLBACK_DIR" >> "$GITHUB_ENV"; echo "REMOTE_RELEASE=$REMOTE_RELEASE" >> "$GITHUB_ENV"
+          clean_pre_mutation_snapshot() {
+            if [[ "${MUTATION_ARMED:-0}" -eq 0 && -n "${ROLLBACK_DIR:-}" && "$ROLLBACK_DIR" == "$STAGING_PARENT/.nvx-rollback/pr-"* ]]; then
+              ssh nvx-staging2-pr "rm -rf '$ROLLBACK_DIR'" 2>/dev/null || true
+            fi
+          }
+          trap clean_pre_mutation_snapshot EXIT
           ssh nvx-staging2-pr "STAGING_ROOT='$STAGING_ROOT' PROD_ROOT='$PROD_ROOT' ROLLBACK_DIR='$ROLLBACK_DIR' bash -se" <<'REMOTE'
           set -Eeuo pipefail
           test "$STAGING_ROOT" != "$PROD_ROOT"
@@ -1190,6 +1196,7 @@ jobs:
           rsync -az tools/deploy/deploy-to-staging2.sh "nvx-staging2-pr:$REMOTE_RELEASE/deploy-to-staging2.sh"
           rsync -az tools/deploy/siteground-cache-purge.sh "nvx-staging2-pr:$REMOTE_RELEASE/tools/deploy/siteground-cache-purge.sh"
           bash scripts/ci/validate-pr-preview-liveness.sh pre-mutation
+          MUTATION_ARMED=1
           echo 'STAGING_MUTATION_ARMED=1' >> "$GITHUB_ENV"
           ssh nvx-staging2-pr "NUVANX_CONFIRM=yes bash '$REMOTE_RELEASE/deploy-to-staging2.sh' --wp-root '$STAGING_ROOT' --source-theme '$REMOTE_RELEASE/theme' --sha '$PR_PREVIEW_SHA' --confirm"
           ssh nvx-staging2-pr "cd '$STAGING_ROOT' && wp eval-file '$REMOTE_RELEASE/tools/migrations/content-hygiene-shared.php' --allow-root 2>&1 | tee '$REMOTE_RELEASE/migration-shared-${{ github.sha }}.log'"
@@ -1309,7 +1316,11 @@ jobs:
           set +e
           if [[ -f "$HOME/.ssh/config" ]]; then
             [[ -z "${REMOTE_RELEASE:-}" ]] || ssh nvx-staging2-pr "rm -rf '$REMOTE_RELEASE'" || true
-            if [[ "${{ job.status }}" == 'success' && -n "${ROLLBACK_DIR:-}" ]]; then ssh nvx-staging2-pr "rm -rf '$ROLLBACK_DIR'" || true; fi
+            if [[ -n "${ROLLBACK_DIR:-}" && "$ROLLBACK_DIR" == "$STAGING_PARENT/.nvx-rollback/pr-"* ]]; then
+              if [[ "${{ job.status }}" == 'success' || "${STAGING_MUTATION_ARMED:-0}" == '0' ]]; then
+                ssh nvx-staging2-pr "rm -rf '$ROLLBACK_DIR'" || true
+              fi
+            fi
           fi
           rm -f "$HOME/.ssh/staging_pr_key" "$HOME/.ssh/known_hosts" "$HOME/.ssh/config"
           [[ -z "${CANDIDATE_ROOT:-}" ]] || git worktree remove --force "$CANDIDATE_ROOT" 2>/dev/null || true

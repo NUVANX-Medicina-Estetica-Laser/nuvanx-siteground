@@ -25,8 +25,8 @@ for attempt in 1 2 3; do
 done
 
 [[ -n "$pr_meta" ]] || {
-  echo "PR_PREVIEW_LIVENESS=FAIL reason=pr_metadata_fetch_failed pr=$PR_NUMBER stage=$stage mutation=forbidden" >&2
-  exit 1
+  echo "PR_PREVIEW_LIVENESS=TRANSIENT reason=pr_metadata_fetch_failed pr=$PR_NUMBER stage=$stage mutation=forbidden" >&2
+  exit 75
 }
 
 if ! printf '%s' "$pr_meta" | jq -e '
@@ -35,7 +35,7 @@ if ! printf '%s' "$pr_meta" | jq -e '
   and (.head | type == "object" and (.sha | type == "string"))
   and (.base | type == "object" and (.ref | type == "string"))
 ' >/dev/null 2>&1; then
-  echo "PR_PREVIEW_LIVENESS=FAIL reason=pr_metadata_fetch_failed pr=$PR_NUMBER stage=$stage mutation=forbidden" >&2
+  echo "PR_PREVIEW_LIVENESS=FAIL reason=pr_metadata_payload_invalid pr=$PR_NUMBER stage=$stage mutation=forbidden" >&2
   exit 1
 fi
 
@@ -77,8 +77,8 @@ while (( page <= max_pages )); do
   done
 
   [[ -n "$preview_runs" ]] || {
-    echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_query_failed pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
-    exit 1
+    echo "PR_PREVIEW_LIVENESS=TRANSIENT reason=preview_run_query_failed pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
+    exit 75
   }
 
   if ! printf '%s' "$preview_runs" | jq -e '
@@ -93,7 +93,7 @@ while (( page <= max_pages )); do
       and (.pull_requests | all(type == "object" and (.number | type == "number")))
     ))
   ' >/dev/null 2>&1; then
-    echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_query_failed pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
+    echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_payload_invalid pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
     exit 1
   fi
 
@@ -118,7 +118,7 @@ while (( page <= max_pages )); do
       | map(.id | tostring)
       | .[]
     ')" || {
-    echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_query_failed pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
+    echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_payload_invalid pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
     exit 1
   }
 
@@ -133,12 +133,12 @@ while (( page <= max_pages )); do
     done
 
     [[ -n "$cand_jobs" ]] || {
-      echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_query_failed pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
-      exit 1
+      echo "PR_PREVIEW_LIVENESS=TRANSIENT reason=candidate_job_query_failed pr=$PR_NUMBER sha=$PR_SHA cand_id=$cand_id stage=$stage mutation=forbidden" >&2
+      exit 75
     }
 
     if ! printf '%s' "$cand_jobs" | jq -e 'type == "object" and (.jobs | type == "array")' >/dev/null 2>&1; then
-      echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_query_failed pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
+      echo "PR_PREVIEW_LIVENESS=FAIL reason=candidate_job_payload_invalid pr=$PR_NUMBER sha=$PR_SHA cand_id=$cand_id stage=$stage mutation=forbidden" >&2
       exit 1
     fi
 
@@ -169,7 +169,7 @@ while (( page <= max_pages )); do
         "false"
       end
     ')" || {
-    echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_query_failed pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
+    echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_payload_invalid pr=$PR_NUMBER sha=$PR_SHA stage=$stage mutation=forbidden" >&2
     exit 1
   }
 
