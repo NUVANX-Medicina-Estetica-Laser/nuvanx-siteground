@@ -42,6 +42,75 @@ function nvx_h1_is_aesthetic_seed( WP_Post $post, string $key ): bool {
 }
 
 /**
+ * Read one postmeta value directly from durable storage.
+ *
+ * Planning cannot authorize a NOOP from WordPress object cache because a stale
+ * cache snapshot can outlive an exact-key invalidation on persistent backends.
+ * Identical duplicate rows are tolerated; conflicting durable rows are not a
+ * coherent source of truth and therefore fail closed before mutation.
+ */
+function nvx_h1_durable_meta_value( int $post_id, string $meta_key ): string {
+	global $wpdb;
+
+	if (
+		$post_id <= 0
+		|| '' === $meta_key
+		|| ! isset( $wpdb )
+		|| ! isset( $wpdb->postmeta )
+		|| ! method_exists( $wpdb, 'prepare' )
+		|| ! method_exists( $wpdb, 'get_col' )
+	) {
+		throw new RuntimeException( 'post_meta_durable_reader_unavailable' );
+	}
+
+	$stored_values = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s ORDER BY meta_id ASC",
+			$post_id,
+			$meta_key
+		)
+	);
+	if ( ! is_array( $stored_values ) ) {
+		throw new RuntimeException( 'post_meta_durable_read_failed_' . ltrim( sanitize_key( $meta_key ), '_' ) );
+	}
+	if ( array() === $stored_values ) {
+		return '';
+	}
+
+	$expected = (string) maybe_unserialize( $stored_values[0] );
+	foreach ( $stored_values as $stored_value ) {
+		if ( $expected !== (string) maybe_unserialize( $stored_value ) ) {
+			throw new RuntimeException( 'post_meta_durable_conflict_' . ltrim( sanitize_key( $meta_key ), '_' ) );
+		}
+	}
+
+	return $expected;
+}
+
+/**
+ * Resolve aesthetic medical-review state exclusively from durable postmeta.
+ *
+ * @return array{approved:bool,status:string,reviewer:string,date:string}
+ */
+function nvx_h1_durable_aesthetic_review_state( int $post_id ): array {
+	$status   = strtolower( trim( nvx_h1_durable_meta_value( $post_id, '_nvx_medical_review_status' ) ) );
+	$reviewer = strtolower( trim( nvx_h1_durable_meta_value( $post_id, '_nvx_medical_reviewer' ) ) );
+	$date     = trim( nvx_h1_durable_meta_value( $post_id, '_nvx_medical_review_date' ) );
+	$reviewers = nvx_medical_reviewers();
+	$approved  = 'approved' === $status
+		&& isset( $reviewers[ $reviewer ] )
+		&& nvx_medical_review_valid_date( $date )
+		&& nvx_medical_review_reviewer_complete( $reviewers[ $reviewer ] );
+
+	return array(
+		'approved' => $approved,
+		'status'   => $status,
+		'reviewer' => $reviewer,
+		'date'     => $date,
+	);
+}
+
+/**
  * Build and validate the entire H1 plan before the canonical migration writes.
  *
  * @return array{ops:array<int,array<string,mixed>>,noops:array<int,array<string,mixed>>,errors:array<int,array<string,mixed>>}
@@ -59,6 +128,9 @@ function nvx_h1_build_plan(): array {
 		'nvx_journal_tech_article_map',
 		'nvx_journal_tech_article_catalog',
 		'nvx_medical_review_record',
+		'nvx_medical_reviewers',
+		'nvx_medical_review_valid_date',
+		'nvx_medical_review_reviewer_complete',
 	);
 	foreach ( $required as $function_name ) {
 		if ( ! function_exists( $function_name ) ) {
@@ -90,7 +162,7 @@ function nvx_h1_build_plan(): array {
 				nvx_h1_plan_add( $plan, 'noops', 'strategy', 'existing_editorial', $slug );
 				continue;
 			}
-			$current = (string) get_post_meta( $existing->ID, '_nvx_strategy_review_status', true );
+			$current = nvx_h1_durable_meta_value( (int) $existing->ID, '_nvx_strategy_review_status' );
 			if ( $review_status === $current ) {
 				nvx_h1_plan_add( $plan, 'noops', 'strategy', 'seed_current', $slug );
 				continue;
@@ -137,11 +209,11 @@ function nvx_h1_build_plan(): array {
 				continue;
 			}
 
-			$approval       = nvx_medical_review_record( (int) $existing->ID );
-			$approved       = is_array( $approval );
+			$review_state   = nvx_h1_durable_aesthetic_review_state( (int) $existing->ID );
+			$approved       = (bool) $review_state['approved'];
 			$target_review  = nvx_h1_target_review_status( $approved );
-			$current_key    = (string) get_post_meta( $existing->ID, '_nvx_aesthetic_treatment_key', true );
-			$current_review = strtolower( trim( (string) get_post_meta( $existing->ID, '_nvx_medical_review_status', true ) ) );
+			$current_key    = nvx_h1_durable_meta_value( (int) $existing->ID, '_nvx_aesthetic_treatment_key' );
+			$current_review = (string) $review_state['status'];
 
 			if ( $key !== $current_key || $target_review !== $current_review ) {
 				nvx_h1_plan_add(
@@ -154,8 +226,8 @@ function nvx_h1_build_plan(): array {
 						'id'            => (int) $existing->ID,
 						'key'           => $key,
 						'target_review' => $target_review,
-						'reviewer'      => $approved ? (string) get_post_meta( $existing->ID, '_nvx_medical_reviewer', true ) : '',
-						'review_date'   => $approved ? (string) get_post_meta( $existing->ID, '_nvx_medical_review_date', true ) : '',
+						'reviewer'      => $approved ? (string) $review_state['reviewer'] : '',
+						'review_date'   => $approved ? (string) $review_state['date'] : '',
 					)
 				);
 			} else {
@@ -182,7 +254,7 @@ function nvx_h1_build_plan(): array {
 		$slug   = sanitize_title( (string) $raw_slug );
 		$marker = (string) ( $meta['marker'] ?? '' );
 		if ( '' === $slug || '' === $marker ) {
-			nvx_h1_plan_add( $plan, 'errors', 'journal', 'invalid_catalog_record', $slug );
+			nvx_h1_plan_add( $plan, 'errors', 'journal', 'invalid_catalog_record', $slug ?: $key );
 			continue;
 		}
 		$existing = get_page_by_path( $slug, OBJECT, 'post' );
@@ -214,7 +286,7 @@ function nvx_h1_build_plan(): array {
 	if ( ! ( $bridal instanceof WP_Post ) ) {
 		nvx_h1_plan_add( $plan, 'noops', 'bridal', 'page_absent', $bridal_slug );
 	} else {
-		$seed_key   = (string) get_post_meta( $bridal->ID, '_nvx_aesthetic_treatment_key', true );
+		$seed_key   = nvx_h1_durable_meta_value( (int) $bridal->ID, '_nvx_aesthetic_treatment_key' );
 		$content    = (string) $bridal->post_content;
 		$has_meta   = 'bridal_protocol' === $seed_key;
 		$has_marker = str_contains( $content, 'data-nvx-treatment="bridal_protocol"' )
@@ -540,8 +612,8 @@ function nvx_h1_apply_plan( array $plan ): array {
 				$target_review = (string) ( $payload['target_review'] ?? 'pending' );
 				if ( 'approved' === $target_review ) {
 					if (
-						(string) get_post_meta( $post->ID, '_nvx_medical_reviewer', true ) !== (string) ( $payload['reviewer'] ?? '' )
-						|| (string) get_post_meta( $post->ID, '_nvx_medical_review_date', true ) !== (string) ( $payload['review_date'] ?? '' )
+						nvx_h1_durable_meta_value( $post->ID, '_nvx_medical_reviewer' ) !== (string) ( $payload['reviewer'] ?? '' )
+						|| nvx_h1_durable_meta_value( $post->ID, '_nvx_medical_review_date' ) !== (string) ( $payload['review_date'] ?? '' )
 					) {
 						throw new RuntimeException( 'approved_review_provenance_changed' );
 					}
@@ -592,7 +664,7 @@ function nvx_h1_apply_plan( array $plan ): array {
 				$created_ids[ $scope . '|' . $slug ] = (int) $result;
 			} elseif ( 'bridal' === $scope && 'retire_exact_seed' === $action ) {
 				$post       = nvx_h1_require_post( (int) ( $payload['id'] ?? 0 ) );
-				$seed_key   = (string) get_post_meta( $post->ID, '_nvx_aesthetic_treatment_key', true );
+				$seed_key   = nvx_h1_durable_meta_value( $post->ID, '_nvx_aesthetic_treatment_key' );
 				$content    = (string) $post->post_content;
 				$has_meta   = 'bridal_protocol' === $seed_key;
 				$has_marker = str_contains( $content, 'data-nvx-treatment="bridal_protocol"' )
