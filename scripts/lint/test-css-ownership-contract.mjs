@@ -160,7 +160,7 @@ function maskCssComments(content) {
 
 function fontSizeDeclarations(source) {
   const code = maskCssComments(source);
-  return [...code.matchAll(/font-size\s*:\s*([^;{}]+)(?:;|(?=\s*}))/giu)].map((match) => ({
+  return [...code.matchAll(/font-size\s*:\s*([^;\{\}]+)(?:;|(?=\s*\}))/gi)].map((match) => ({
     value: match[1],
     index: match.index ?? 0,
   }));
