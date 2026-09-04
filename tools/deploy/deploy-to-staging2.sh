@@ -17,24 +17,21 @@ CONFIRM=0
 BACKUP_DIR=''
 MUTATION_STARTED=0
 CONFIG_BACKUP=''
+PR_PREVIEW_OUTER_ROLLBACK_DIR=''
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR=''
 PUBLIC_INTEGRATION_CONFIG=''
 CACHE_HELPER=''
 
 if [[ -d "$SCRIPT_DIR/tools/migrations" ]]; then
-  # Immutable GitHub Actions release layout: deploy script copied to release root.
   MIGRATIONS_DIR="$SCRIPT_DIR/tools/migrations"
 elif [[ -d "$SCRIPT_DIR/../migrations" ]]; then
-  # Repository/operator layout: tools/deploy/deploy-to-staging2.sh.
   MIGRATIONS_DIR="$(cd "$SCRIPT_DIR/../migrations" && pwd)"
 fi
 
 if [[ -f "$SCRIPT_DIR/lib/staging-public-integration-identities.json" ]]; then
-  # Immutable GitHub Actions release layout: lib/ is copied beside this script.
   PUBLIC_INTEGRATION_CONFIG="$SCRIPT_DIR/lib/staging-public-integration-identities.json"
 elif [[ -f "$SCRIPT_DIR/../../lib/staging-public-integration-identities.json" ]]; then
-  # Repository/operator layout: tools/deploy/deploy-to-staging2.sh.
   PUBLIC_INTEGRATION_CONFIG="$(cd "$SCRIPT_DIR/../.." && pwd)/lib/staging-public-integration-identities.json"
 fi
 
@@ -65,18 +62,63 @@ fail_config() {
   exit 78
 }
 
+disarm_pr_preview_outer_rollback() {
+  local reason="${1:-pre_mutation_exit}"
+  [[ -n "$PR_PREVIEW_OUTER_ROLLBACK_DIR" ]] || return 0
+  [[ "$PR_PREVIEW_OUTER_ROLLBACK_DIR" == '/home/customer/www/staging2.nuvanx.com/.nvx-rollback/pr-'* ]] \
+    || fail 'refusing to disarm unexpected PR rollback path'
+  rm -rf "$PR_PREVIEW_OUTER_ROLLBACK_DIR"
+  echo "PR_PREVIEW_OUTER_ROLLBACK=DISARMED reason=$reason live_mutation=0 path=$PR_PREVIEW_OUTER_ROLLBACK_DIR" >&2
+}
+
 superseded_pr_preview() {
   echo "MUTATION_FIFO=SUPERSEDED role=pr-preview reason=$1 stage=deploy-boundary mutation=forbidden" >&2
   exit 78
 }
 
-# A pull_request_target preview is rebuilt from trusted master and an immutable
-# PR head, but several workflow setup steps happen before this script runs. The
-# final mutation authority therefore lives here, inside the trusted mutator,
-# immediately before any live Staging2 write. The immutable release directory
-# carries PR number, synthetic preview SHA, run id and run attempt; the public
-# GitHub API supplies the original head SHA and current PR state without moving
-# any credential onto SiteGround.
+transient_pr_preview_authority() {
+  echo "PR_PREVIEW_AUTHORITY=TRANSIENT reason=$1 stage=deploy-boundary mutation=forbidden" >&2
+  exit 75
+}
+
+github_public_json() {
+  local url="$1"
+  local component="$2"
+  local response_file=''
+  local http_code=''
+  local curl_rc=0
+
+  response_file="$(mktemp)"
+  set +e
+  http_code="$(curl -sS --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 20 \
+    -o "$response_file" -w '%{http_code}' \
+    -H 'Accept: application/vnd.github+json' \
+    -H 'User-Agent: nuvanx-staging2-pr-authority' \
+    "$url")"
+  curl_rc=$?
+  set -e
+
+  if [[ "$curl_rc" -ne 0 ]]; then
+    rm -f "$response_file"
+    transient_pr_preview_authority "github_${component}_transport"
+  fi
+
+  case "$http_code" in
+    200)
+      cat "$response_file"
+      rm -f "$response_file"
+      ;;
+    403|408|425|429|5[0-9][0-9])
+      rm -f "$response_file"
+      transient_pr_preview_authority "github_${component}_http_${http_code}"
+      ;;
+    *)
+      rm -f "$response_file"
+      fail "GitHub ${component} authority request returned HTTP ${http_code:-missing}"
+      ;;
+  esac
+}
+
 verify_pr_preview_authority_if_applicable() {
   local release_dir=''
   local pr_number=''
@@ -108,14 +150,16 @@ verify_pr_preview_authority_if_applicable() {
   preview_sha="${BASH_REMATCH[2]}"
   run_id="${BASH_REMATCH[3]}"
   run_attempt="${BASH_REMATCH[4]}"
+  PR_PREVIEW_OUTER_ROLLBACK_DIR="$(dirname "$WP_ROOT")/.nvx-rollback/pr-${pr_number}-${run_id}-${run_attempt}-${preview_sha}"
+  [[ "$PR_PREVIEW_OUTER_ROLLBACK_DIR" == '/home/customer/www/staging2.nuvanx.com/.nvx-rollback/pr-'* ]] \
+    || fail 'PR preview rollback path is outside the canonical staging parent'
 
   [[ "$preview_sha" == "$DEPLOY_SHA" ]] || superseded_pr_preview 'preview_sha_mismatch'
 
-  run_json="$(curl -fsS --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 20 \
-    -H 'Accept: application/vnd.github+json' \
-    -H 'User-Agent: nuvanx-staging2-pr-authority' \
-    "$api_base/actions/runs/$run_id")" \
-    || fail 'Unable to verify PR preview workflow-run authority from GitHub'
+  run_json="$(github_public_json "$api_base/actions/runs/$run_id" 'run')"
+  if ! printf '%s' "$run_json" | jq -e 'type == "object"' >/dev/null 2>&1; then
+    transient_pr_preview_authority 'github_run_payload_invalid'
+  fi
 
   run_event="$(printf '%s' "$run_json" | jq -r '.event // ""')"
   run_head_sha="$(printf '%s' "$run_json" | jq -r '.head_sha // ""')"
@@ -123,15 +167,14 @@ verify_pr_preview_authority_if_applicable() {
   run_pr_matches="$(printf '%s' "$run_json" | jq -r --argjson pr "$pr_number" '[.pull_requests[]? | select(.number == $pr)] | length')"
 
   [[ "$run_event" == 'pull_request_target' ]] || superseded_pr_preview 'unexpected_run_event'
-  [[ "$run_head_sha" =~ ^[0-9a-f]{40}$ ]] || fail 'PR preview workflow run did not expose an immutable head SHA'
+  [[ "$run_head_sha" =~ ^[0-9a-f]{40}$ ]] || transient_pr_preview_authority 'github_run_head_missing'
   [[ "$api_run_attempt" == "$run_attempt" ]] || superseded_pr_preview 'run_attempt_mismatch'
   [[ "$run_pr_matches" == '1' ]] || superseded_pr_preview 'run_pr_binding_mismatch'
 
-  pr_json="$(curl -fsS --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 20 \
-    -H 'Accept: application/vnd.github+json' \
-    -H 'User-Agent: nuvanx-staging2-pr-authority' \
-    "$api_base/pulls/$pr_number")" \
-    || fail 'Unable to verify current PR preview authority from GitHub'
+  pr_json="$(github_public_json "$api_base/pulls/$pr_number" 'pr')"
+  if ! printf '%s' "$pr_json" | jq -e 'type == "object"' >/dev/null 2>&1; then
+    transient_pr_preview_authority 'github_pr_payload_invalid'
+  fi
 
   pr_state="$(printf '%s' "$pr_json" | jq -r '.state // ""')"
   merged_at="$(printf '%s' "$pr_json" | jq -r '.merged_at // ""')"
@@ -157,7 +200,6 @@ provision_staging_hubspot_identity() {
 
   [[ -n "$PUBLIC_INTEGRATION_CONFIG" && -f "$PUBLIC_INTEGRATION_CONFIG" ]] \
     || fail_config 'Staging public integration identity manifest is unavailable'
-
   jq -e 'type == "object"' "$PUBLIC_INTEGRATION_CONFIG" >/dev/null 2>&1 \
     || fail_config 'Staging public integration identity manifest is malformed or unreadable'
 
@@ -188,7 +230,6 @@ provision_staging_hubspot_identity() {
     [[ "$(wp config get NVX_HUBSPOT_PORTAL_ID)" == "$portal" ]]
     [[ "$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID)" == "$form" ]]
   )
-
   echo 'STAGING_HUBSPOT_PROVISION=PASS source=governed_public_manifest target=canonical_wp_config private_credentials=none production_mutation=none'
 }
 
@@ -225,7 +266,6 @@ verify_staging_hubspot_embed_contract() {
       || fail_config 'Staging2 canonical HubSpot form identity is not provisioned in wp-config.php'
     portal="$(wp config get NVX_HUBSPOT_PORTAL_ID 2>/dev/null || true)"
     form="$(wp config get NVX_HUBSPOT_VALORACION_FORM_ID 2>/dev/null || true)"
-
     [[ "$portal" =~ ^[0-9]{1,20}$ ]] || fail_config "Staging2 HubSpot portal identity is malformed source=$source"
     [[ "$form" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$ ]] || fail_config "Staging2 HubSpot form identity is malformed source=$source"
     echo "STAGING_HUBSPOT_CONFIG=PASS source=$source runtime_fallback=disabled browser_embed=0 first_party_owner=1"
@@ -236,10 +276,7 @@ sync_publication_topology() {
   local snapshot report
   snapshot="$(mktemp)"
   report="$(mktemp)"
-
-  cleanup_publication_sync() {
-    rm -f "$snapshot" "$report"
-  }
+  cleanup_publication_sync() { rm -f "$snapshot" "$report"; }
   trap cleanup_publication_sync RETURN
 
   echo '== Synchronize publication topology from production read-only source =='
@@ -251,19 +288,15 @@ sync_publication_topology() {
   [[ -s "$snapshot" ]] || fail 'production publication snapshot is empty'
   jq -e '.schema == "nuvanx-production-publication-snapshot" and (.routes | type == "object")' "$snapshot" >/dev/null \
     || fail 'production publication snapshot is invalid'
-
   (
     cd "$WP_ROOT"
-    PUBLICATION_SNAPSHOT_FILE="$snapshot" \
-      wp eval-file "$MIGRATIONS_DIR/prepare-staging-publication-collisions.php" --allow-root >&2
-    PUBLICATION_SNAPSHOT_FILE="$snapshot" \
-      wp eval-file "$MIGRATIONS_DIR/sync-staging-publication-parity.php" --allow-root > "$report"
+    PUBLICATION_SNAPSHOT_FILE="$snapshot" wp eval-file "$MIGRATIONS_DIR/prepare-staging-publication-collisions.php" --allow-root >&2
+    PUBLICATION_SNAPSHOT_FILE="$snapshot" wp eval-file "$MIGRATIONS_DIR/sync-staging-publication-parity.php" --allow-root > "$report"
   )
   [[ -s "$report" ]] || fail 'staging publication parity report is empty'
   jq -e --argjson expected "$(jq '.routes | length' "$snapshot")" \
     '.schema == "nuvanx-staging-publication-parity" and .route_count == $expected' "$report" >/dev/null \
     || fail 'staging publication parity report does not match production snapshot'
-
   echo "STAGING_PUBLICATION_TOPOLOGY=PASS routes=$(jq -r '.route_count' "$report") created=$(jq -r '.created' "$report") updated=$(jq -r '.updated' "$report") drafted=$(jq -r '.drafted_surplus' "$report")"
   cleanup_publication_sync
   trap - RETURN
@@ -290,7 +323,6 @@ done
 [[ -n "$CACHE_HELPER" && -f "$CACHE_HELPER" ]] || fail 'canonical SiteGround cache purge helper cannot be resolved from repository or immutable release layout'
 source "$CACHE_HELPER"
 declare -F siteground_cache_purge >/dev/null || fail 'canonical SiteGround cache purge function is unavailable'
-
 for command_name in wp rsync tar php find mktemp sha256sum awk jq curl; do
   command -v "$command_name" >/dev/null 2>&1 || fail "required command is unavailable: $command_name"
 done
@@ -332,7 +364,6 @@ SOURCE_REQUIRED_FILES=(
   inc/nvx-valoracion-modal.php
   inc/data/publication-manifest.json
 )
-
 for required_file in "${SOURCE_REQUIRED_FILES[@]}"; do
   [[ -f "$SOURCE_THEME/$required_file" ]] || fail "source theme is missing $required_file"
 done
@@ -344,7 +375,6 @@ echo 'STAGING_CSS_RELEASE=PASS source=exact-release runtime=compiled-dist'
 
 LIVE_THEME="$WP_ROOT/$THEME_REL"
 [[ -d "$LIVE_THEME" ]] || fail "live staging2 theme does not exist: $LIVE_THEME"
-
 DEPLOY_SUCCESS=0
 
 rollback() {
@@ -355,9 +385,7 @@ rollback() {
       echo 'SAFETY_RESTORE: restoring the pre-deploy staging2 theme after rejected deployment' >&2
       rm -rf "$LIVE_THEME"
       tar -xzf "$BACKUP_DIR/theme.tgz" -C "$WP_ROOT"
-      if ! siteground_cache_purge "$WP_ROOT" preserve; then
-        echo 'SAFETY_RESTORE_CACHE=FAIL' >&2
-      fi
+      if ! siteground_cache_purge "$WP_ROOT" preserve; then echo 'SAFETY_RESTORE_CACHE=FAIL' >&2; fi
       echo "SAFETY_RESTORE_COMPLETE backup=$BACKUP_DIR" >&2
     fi
     if [[ -n "$CONFIG_BACKUP" && -f "$CONFIG_BACKUP" ]]; then
@@ -365,12 +393,11 @@ rollback() {
       php -l "$WP_ROOT/wp-config.php" >/dev/null || true
       echo 'SAFETY_RESTORE_CONFIG=PASS' >&2
     fi
+    if [[ "$MUTATION_STARTED" -eq 0 ]]; then
+      disarm_pr_preview_outer_rollback 'trusted_deployer_pre_live_failure'
+    fi
   fi
-
-  if [[ -n "$CONFIG_BACKUP" && -f "$CONFIG_BACKUP" ]]; then
-    rm -f "$CONFIG_BACKUP"
-  fi
-
+  if [[ -n "$CONFIG_BACKUP" && -f "$CONFIG_BACKUP" ]]; then rm -f "$CONFIG_BACKUP"; fi
   exit "$exit_code"
 }
 trap rollback EXIT ERR
@@ -386,9 +413,7 @@ echo '== Guard staging2 identity =='
   theme="$(wp theme list --status=active --field=name)"
   nvx_env="$(wp eval 'echo defined("NVX_ENV") ? NVX_ENV : "";')"
   wp_environment="$(wp eval 'echo function_exists("wp_get_environment_type") ? wp_get_environment_type() : "";')"
-
   echo "siteurl=$siteurl home=$home active_theme=$theme blog_public=$blog_public nvx_env=$nvx_env wp_environment=$wp_environment"
-
   [[ "$siteurl" == "$EXPECTED_URL" ]] || fail "unexpected siteurl: $siteurl"
   [[ "$home" == "$EXPECTED_URL" ]] || fail "unexpected home URL: $home"
   [[ "$theme" == 'nuvanx-medical' ]] || fail "unexpected active theme: $theme"
@@ -407,8 +432,6 @@ echo '== Guard production read-only source identity =='
   [[ "$(wp theme list --status=active --field=name)" == 'nuvanx-medical' ]] || fail 'unexpected production active theme'
 )
 
-# Final trusted authority boundary. No wp-config, live theme, database or cache
-# mutation may occur above this call for PR previews.
 verify_pr_preview_authority_if_applicable
 
 CONFIG_BACKUP="$(mktemp)"
@@ -435,7 +458,6 @@ rm -f "$PHP_LINT_LOG"
 DATE="$(date +%Y%m%d-%H%M%S)"
 SHORT_SHA="${DEPLOY_SHA:0:12}"
 BACKUP_DIR="$WP_ROOT/wp-content/backups-nuvanx/pre-staging2-${DATE}-${SHORT_SHA}"
-
 echo "== Backup staging2 theme to $BACKUP_DIR =="
 mkdir -p "$BACKUP_DIR"
 tar -czf "$BACKUP_DIR/theme.tgz" -C "$WP_ROOT" "$THEME_REL"
@@ -455,7 +477,6 @@ rsync -a --delete \
   --exclude='*.bak*' \
   "$SOURCE_THEME/" \
   "$LIVE_THEME/"
-
 find "$LIVE_THEME/assets/css" -maxdepth 1 -type f -name 'nvx-*.min.css' -delete
 printf '%s\n' "$DEPLOY_SHA" > "$LIVE_THEME/.nvx-deploy-sha"
 
