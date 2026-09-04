@@ -31,11 +31,16 @@ done
 helper_purge_count="$(grep -Fc 'wp sg purge' "$HELPER" || true)"
 [[ "$helper_purge_count" -eq 1 ]] || fail "helper_wp_sg_purge_count=$helper_purge_count expected=1"
 
+# Inline purge mechanics are forbidden in every consumer. Staging's environment
+# isolation step is intentionally allowed to normalize plugin activation state;
+# that is a runtime-boundary prerequisite, not a cache-purge implementation.
 for consumer in "$STAGING_DEPLOY" "$STAGING_WORKFLOW" "$PROD_DEPLOY" "$PROD_WORKFLOW" "$PROD_COMPENSATION"; do
   inline_count="$(grep -Fc 'wp sg purge' "$consumer" || true)"
   [[ "$inline_count" -eq 0 ]] || fail "inline_wp_sg_purge file=$consumer count=$inline_count expected=0"
-  ! grep -Eq 'plugin (activate|deactivate)[[:space:]]+sg-cachepress' "$consumer" \
-    || fail "inline_optimizer_state_owner file=$consumer"
+done
+for purge_owner_candidate in "$STAGING_DEPLOY" "$PROD_DEPLOY" "$PROD_WORKFLOW" "$PROD_COMPENSATION"; do
+  ! grep -Eq 'plugin (activate|deactivate)[[:space:]]+sg-cachepress' "$purge_owner_candidate" \
+    || fail "inline_optimizer_state_owner file=$purge_owner_candidate"
 done
 
 # Staging owns policy/orchestration; the helper alone owns cache mechanics.
@@ -103,6 +108,10 @@ grep -Fq 'SITEGROUND_CACHE_PURGE_RESTORE=PASS' "$HELPER" \
   || fail 'helper_failure_restore_evidence_missing'
 grep -Fq 'trap - ERR' "$HELPER" \
   || fail 'helper_must_clear_inherited_err_trap_before_failure_cleanup'
+grep -Fq 'wp help sg' "$HELPER" \
+  || fail 'helper_command_first_capability_probe_missing'
+grep -Fq 'no_siteground_purge_capability' "$HELPER" \
+  || fail 'helper_missing_capability_must_fail_closed'
 
 bash -n "$HELPER"
 bash -n "$BEHAVIOR_TEST"
@@ -111,4 +120,4 @@ bash -n "$PROD_DEPLOY"
 bash -n "$PROD_COMPENSATION"
 bash "$BEHAVIOR_TEST"
 
-echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count staging_inline=0 production_inline=0 production_compensation_inline=0 retired_prod_duplicate=absent rollback_state=snapshot production_payload=lineage_verified fail_closed=true behavior=verified"
+echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count staging_inline=0 staging_isolation_state=allowed production_inline=0 production_compensation_inline=0 retired_prod_duplicate=absent rollback_state=snapshot production_payload=lineage_verified command_first=verified fail_closed=true behavior=verified"
