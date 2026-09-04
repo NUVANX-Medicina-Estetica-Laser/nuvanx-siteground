@@ -21,24 +21,96 @@ set -euo pipefail
 target="${2:-}"
 case "$target" in
   */pulls/1083)
-    printf '%s\n' '{"state":"open","merged_at":null,"head":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"base":{"ref":"master"}}'
+    case "${TEST_PULL_SCENARIO:-valid}" in
+      valid)
+        printf '%s\n' '{"state":"open","merged_at":null,"head":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"base":{"ref":"master"}}'
+        ;;
+      malformed_json)
+        printf '%s\n' 'not json'
+        ;;
+      missing_sha)
+        printf '%s\n' '{"state":"open","base":{"ref":"master"}}'
+        ;;
+      *)
+        echo "unexpected TEST_PULL_SCENARIO: ${TEST_PULL_SCENARIO}" >&2
+        exit 2
+        ;;
+    esac
     ;;
-  */actions/workflows/staging.yml/runs*)
-    case "${TEST_DUP_SCENARIO:-none}" in
-      newer_same)
-        printf '%s\n' '{"workflow_runs":[{"id":43,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}]}]}'
+  */actions/runs/*/jobs*)
+    case "${TEST_JOB_SCENARIO:-active}" in
+      active)
+        printf '%s\n' '{"total_count":1,"jobs":[{"id":1001,"name":"Labeled same-repo PR preview on Staging2","conclusion":null,"status":"in_progress"}]}'
         ;;
-      older_same)
-        printf '%s\n' '{"workflow_runs":[{"id":41,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}]}]}'
-        ;;
-      newer_other_pr)
-        printf '%s\n' '{"workflow_runs":[{"id":43,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1084}]}]}'
-        ;;
-      newer_other_sha)
-        printf '%s\n' '{"workflow_runs":[{"id":43,"event":"pull_request_target","head_sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pull_requests":[{"number":1083}]}]}'
+      skipped)
+        printf '%s\n' '{"total_count":1,"jobs":[{"id":1001,"name":"Labeled same-repo PR preview on Staging2","conclusion":"skipped","status":"completed"}]}'
         ;;
       query_fail)
         exit 1
+        ;;
+      malformed_json)
+        printf '%s\n' '{"jobs": malformed json'
+        ;;
+      non_object)
+        printf '%s\n' '["not", "an", "object"]'
+        ;;
+      *)
+        echo "unexpected TEST_JOB_SCENARIO: ${TEST_JOB_SCENARIO}" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  */actions/workflows/staging.yml/runs*)
+    page=1
+    if [[ "$target" =~ [?\&]page=([0-9]+) ]]; then
+      page="${BASH_REMATCH[1]}"
+    fi
+
+    case "${TEST_DUP_SCENARIO:-none}" in
+      newer_same)
+        printf '%s\n' '{"workflow_runs":[{"id":43,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}],"conclusion":null,"display_title":"Staging · PR #1083 preview"}]}'
+        ;;
+      older_same)
+        printf '%s\n' '{"workflow_runs":[{"id":41,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}],"conclusion":null,"display_title":"Staging · PR #1083 preview"}]}'
+        ;;
+      newer_other_pr)
+        printf '%s\n' '{"workflow_runs":[{"id":43,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1084}],"conclusion":null,"display_title":"Staging · PR #1084 preview"}]}'
+        ;;
+      newer_other_sha)
+        printf '%s\n' '{"workflow_runs":[{"id":43,"event":"pull_request_target","head_sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pull_requests":[{"number":1083}],"conclusion":null,"display_title":"Staging · PR #1083 preview"}]}'
+        ;;
+      newer_unrelated_label_title)
+        printf '%s\n' '{"workflow_runs":[{"id":43,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}],"conclusion":null,"display_title":"Staging · PR #1083 (docs)"}]}'
+        ;;
+      newer_unrelated_label_skipped_run)
+        printf '%s\n' '{"workflow_runs":[{"id":43,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}],"conclusion":"skipped","display_title":null}]}'
+        ;;
+      newer_unrelated_label_job_skipped)
+        printf '%s\n' '{"workflow_runs":[{"id":43,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}],"conclusion":null,"display_title":null}]}'
+        ;;
+      paginated_duplicate)
+        if [[ "$page" -eq 1 ]]; then
+          jq -nc '{"workflow_runs": [range(200; 100; -1) | {"id": ., "event": "pull_request_target", "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "pull_requests": [{"number": 1083}], "conclusion": null, "display_title": "Staging · PR #1083 preview"}]}'
+        elif [[ "$page" -eq 2 ]]; then
+          printf '%s\n' '{"workflow_runs":[{"id":90,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}],"conclusion":null,"display_title":"Staging · PR #1083 preview"},{"id":40,"event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}],"conclusion":null,"display_title":"Staging · PR #1083 preview"}]}'
+        else
+          printf '%s\n' '{"workflow_runs":[]}'
+        fi
+        ;;
+      query_fail)
+        exit 1
+        ;;
+      malformed_json_runs)
+        printf '%s\n' '{"workflow_runs": [invalid json'
+        ;;
+      non_object_runs)
+        printf '%s\n' '[{"id": 43}]'
+        ;;
+      missing_workflow_runs)
+        printf '%s\n' '{"message":"Not Found"}'
+        ;;
+      invalid_run_fields)
+        printf '%s\n' '{"workflow_runs":[{"id":"not_a_number","event":"pull_request_target","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_requests":[{"number":1083}]}]}'
         ;;
       none|*)
         printf '%s\n' '{"workflow_runs":[]}'
@@ -60,6 +132,7 @@ common_env=(
   "PR_NUMBER=$TEST_PR"
   "PR_SHA=$TEST_SHA"
   'GH_TOKEN=test-token'
+  'LIVENESS_RETRY_SLEEP=0'
 )
 
 pass_log="$TMP/pass.log"
@@ -76,19 +149,56 @@ set -e
 grep -Fq 'reason=duplicate_preview_superseded' "$newer_log"
 grep -Fq 'newer_run_id=43' "$newer_log"
 
-for scenario in older_same newer_other_pr newer_other_sha; do
+for scenario in older_same newer_other_pr newer_other_sha newer_unrelated_label_title newer_unrelated_label_skipped_run; do
   log="$TMP/${scenario}.log"
   env "${common_env[@]}" TEST_DUP_SCENARIO="$scenario" bash "$SUBJECT" contract >"$log" 2>&1
   grep -Fq 'PR_PREVIEW_LIVENESS=PASS' "$log"
 done
 
-query_fail_log="$TMP/query-fail.log"
-set +e
-env "${common_env[@]}" TEST_DUP_SCENARIO=query_fail bash "$SUBJECT" contract >"$query_fail_log" 2>&1
-query_fail_rc=$?
-set -e
-[[ "$query_fail_rc" -eq 1 ]]
-grep -Fq 'reason=preview_run_query_failed' "$query_fail_log"
-grep -Fq 'mutation=forbidden' "$query_fail_log"
+job_skip_log="$TMP/newer_unrelated_label_job_skipped.log"
+env "${common_env[@]}" TEST_DUP_SCENARIO=newer_unrelated_label_job_skipped TEST_JOB_SCENARIO=skipped bash "$SUBJECT" contract >"$job_skip_log" 2>&1
+grep -Fq 'PR_PREVIEW_LIVENESS=PASS' "$job_skip_log"
 
-echo 'PR_PREVIEW_LIVENESS_CONTRACT=PASS latest_same_head_owner=1 older_superseded=1 unrelated_runs_ignored=1 query_fail_closed=1'
+paginated_log="$TMP/paginated.log"
+set +e
+env "${common_env[@]}" TEST_DUP_SCENARIO=paginated_duplicate bash "$SUBJECT" contract >"$paginated_log" 2>&1
+paginated_rc=$?
+set -e
+[[ "$paginated_rc" -eq 78 ]]
+grep -Fq 'reason=duplicate_preview_superseded' "$paginated_log"
+grep -Fq 'newer_run_id=90' "$paginated_log"
+
+for scenario in query_fail malformed_json_runs non_object_runs missing_workflow_runs invalid_run_fields; do
+  log="$TMP/${scenario}.log"
+  set +e
+  env "${common_env[@]}" TEST_DUP_SCENARIO="$scenario" bash "$SUBJECT" contract >"$log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" -eq 1 ]]
+  grep -Fq 'reason=preview_run_query_failed' "$log"
+  grep -Fq 'mutation=forbidden' "$log"
+done
+
+for pull_scenario in malformed_json missing_sha; do
+  log="$TMP/pull_${pull_scenario}.log"
+  set +e
+  env "${common_env[@]}" TEST_DUP_SCENARIO=none TEST_PULL_SCENARIO="$pull_scenario" bash "$SUBJECT" contract >"$log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" -eq 1 ]]
+  grep -Fq 'reason=pr_metadata_fetch_failed' "$log"
+  grep -Fq 'mutation=forbidden' "$log"
+done
+
+for job_scenario in query_fail malformed_json non_object; do
+  log="$TMP/job_${job_scenario}.log"
+  set +e
+  env "${common_env[@]}" TEST_DUP_SCENARIO=newer_same TEST_JOB_SCENARIO="$job_scenario" bash "$SUBJECT" contract >"$log" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" -eq 1 ]]
+  grep -Fq 'reason=preview_run_query_failed' "$log"
+  grep -Fq 'mutation=forbidden' "$log"
+done
+
+echo 'PR_PREVIEW_LIVENESS_CONTRACT=PASS latest_same_head_owner=1 older_superseded=1 unrelated_runs_ignored=1 unrelated_labels_ignored=1 paginated_duplicates_found=1 schema_fail_closed=1 query_fail_closed=1'

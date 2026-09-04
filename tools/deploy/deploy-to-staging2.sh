@@ -156,6 +156,15 @@ verify_pr_preview_authority_if_applicable() {
 
   [[ "$preview_sha" == "$DEPLOY_SHA" ]] || superseded_pr_preview 'preview_sha_mismatch'
 
+  PREVIEW_OWNER_FILE="$(dirname "$WP_ROOT")/.nvx-preview-owner"
+  if [[ -f "$PREVIEW_OWNER_FILE" ]]; then
+    local server_owner_run_id=''
+    server_owner_run_id="$(tr -d '[:space:]' < "$PREVIEW_OWNER_FILE" || true)"
+    if [[ "$server_owner_run_id" =~ ^[0-9]+$ ]] && (( run_id < server_owner_run_id )); then
+      superseded_pr_preview 'server_owner_superseded'
+    fi
+  fi
+
   run_json="$(github_public_json "$api_base/actions/runs/$run_id" 'run')"
   if ! printf '%s' "$run_json" | jq -e 'type == "object"' >/dev/null 2>&1; then
     transient_pr_preview_authority 'github_run_payload_invalid'
@@ -184,6 +193,8 @@ verify_pr_preview_authority_if_applicable() {
   [[ "$pr_state" == 'open' && -z "$merged_at" ]] || superseded_pr_preview 'pr_not_open'
   [[ "$base_ref" == 'master' ]] || superseded_pr_preview 'pr_base_changed'
   [[ "$current_pr_sha" == "$run_head_sha" ]] || superseded_pr_preview 'pr_head_superseded'
+
+  printf '%s\n' "$run_id" > "$PREVIEW_OWNER_FILE"
 
   echo "PR_PREVIEW_AUTHORITY=PASS pr=$pr_number pr_sha=$run_head_sha preview_sha=$preview_sha run_id=$run_id run_attempt=$run_attempt stage=deploy-boundary"
 }

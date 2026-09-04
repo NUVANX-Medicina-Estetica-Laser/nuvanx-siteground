@@ -12,6 +12,9 @@ assert.match(source, /run_event.*pull_request_target/s, 'only pull_request_targe
 assert.match(source, /current_pr_sha.*run_head_sha/s, 'current PR head must still equal the triggering run head');
 assert.match(source, /base_ref.*master/s, 'preview PR must still target master');
 assert.match(source, /MUTATION_FIFO=SUPERSEDED[\s\S]*stage=deploy-boundary[\s\S]*mutation=forbidden/, 'superseded previews must fail closed at deploy boundary');
+assert.match(source, /PREVIEW_OWNER_FILE="\$\(dirname "\$WP_ROOT"\)\/\.nvx-preview-owner"/, 'deployer must define server-side preview owner marker');
+assert.match(source, /server_owner_superseded/, 'deployer must supersede older run if server owner run id is newer');
+assert.match(source, /printf '%s\\n' "\$run_id" > "\$PREVIEW_OWNER_FILE"/, 'deployer must claim server ownership upon passing authority');
 assert.doesNotMatch(source, /Authorization:|GH_TOKEN|GITHUB_TOKEN/, 'SiteGround authority check must not receive a GitHub credential');
 
 const authorityCall = source.indexOf('\nverify_pr_preview_authority_if_applicable\n');
