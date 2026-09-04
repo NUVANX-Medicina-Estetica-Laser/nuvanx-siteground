@@ -19,6 +19,10 @@ fail() {
 }
 
 [[ -s "$HELPER" ]] || fail "missing_helper=$HELPER"
+grep -Fq '! opcache_reset()' "$HELPER" \
+  || fail 'opcache_reset_return_value_must_be_checked'
+grep -Fq 'exit(1);' "$HELPER" \
+  || fail 'opcache_reset_false_must_produce_nonzero_wp_cli_status'
 mkdir -p "$MOCK_BIN" "$WP_ROOT/wp-content/uploads/siteground-optimizer-assets" "$WP_ROOT/wp-content/cache"
 
 cat > "$MOCK_BIN/wp" <<'MOCK'
@@ -126,4 +130,4 @@ run_success_case inactive_preserve_success inactive preserve inactive
 run_success_case inactive_active_success inactive active active
 run_success_case active_inactive_success active inactive inactive
 
-echo 'SITEGROUND_CACHE_BEHAVIOR=PASS failure_cases=4 success_cases=3 original_rc=preserved requested_state=restored'
+echo 'SITEGROUND_CACHE_BEHAVIOR=PASS failure_cases=4 success_cases=3 original_rc=preserved requested_state=restored opcache_return=fail_closed'
