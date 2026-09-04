@@ -3,8 +3,9 @@
  * Outbox v4 post-merge race regressions.
  *
  * Extends the canonical v2 harness with defects found after #1077:
- * - a not-ready prepared row owned by any live publication generation must not
- *   be quarantined just because the option currently names another owner;
+ * - a prepared row with any live publication generation must not be quarantined,
+ *   including the interval after the publish claim is written but before dedupe
+ *   identity has been persisted;
  * - recovery must make the due marker durable before attempting the publication
  *   fence, so interruption cannot turn a row pending while still invisible;
  * - quarantine telemetry may report DEAD only after a confirmed draft
@@ -32,6 +33,39 @@ $require_v4  = static function ( bool $condition, string $name ) use ( &$failure
 $queue_path   = dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-supabase-relay-queue.php';
 $queue_source = file_get_contents( $queue_path );
 $queue_source = is_string( $queue_source ) ? $queue_source : '';
+
+// ── Regression 0: LIVE_CLAIM_PRECEDES_IDENTITY_AND_MUST_BE_PRESERVED ────────
+// Enqueue publishes its generation claim before the dedupe identity. Recovery
+// is allowed to classify metadata only after proving no live publisher owns the
+// row; otherwise a normal in-flight publication can be quarantined as corrupt.
+$preidentity_generation = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|publisher_before_identity';
+$preidentity_post_id     = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+		'post_content' => wp_slash( '{"submission_id":"v4-preidentity-live"}' ),
+	),
+	true
+);
+$preidentity_post_id = absint( $preidentity_post_id );
+add_post_meta( $preidentity_post_id, '_nvx_relay_publish_claim', $preidentity_generation, true );
+add_post_meta( $preidentity_post_id, '_nvx_relay_endpoint', 'lead_captured', true );
+add_post_meta( $preidentity_post_id, '_nvx_relay_attempts', '1', true );
+
+$require_v4(
+	false === nvx_supabase_relay_queue_recover_prepared_without_due( $preidentity_post_id ),
+	'PREIDENTITY_LIVE_RECOVERY_DEFERS'
+);
+$preidentity_post = get_post( $preidentity_post_id );
+$require_v4(
+	$preidentity_post instanceof WP_Post
+	&& NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS === $preidentity_post->post_status,
+	'PREIDENTITY_LIVE_NOT_QUARANTINED'
+);
+$require_v4(
+	! in_array( $preidentity_post_id, $GLOBALS['nvx_mock_deleted_posts'], true ),
+	'PREIDENTITY_LIVE_NOT_DELETED'
+);
 
 // ── Regression 1: ANY_LIVE_PUBLISHER_IS_PRESERVED ──────────────────────────
 $body_live_mismatch      = '{"submission_id":"v4-live-mismatch"}';
@@ -78,7 +112,7 @@ $recover_end   = false !== $recover_start
 $recover_body  = false !== $recover_start && false !== $recover_end
 	? substr( $queue_source, $recover_start, $recover_end - $recover_start )
 	: '';
-$due_offset    = strpos( $recover_body, "'_nvx_relay_next_attempt'" );
+$due_offset    = strpos( $recover_body, "add_post_meta( \$post_id, '_nvx_relay_next_attempt', \$due, true )" );
 $fence_offset  = strpos( $recover_body, 'nvx_supabase_relay_queue_acquire_publication_fence' );
 $require_v4(
 	false !== $due_offset && false !== $fence_offset && $due_offset < $fence_offset,
@@ -87,12 +121,12 @@ $require_v4(
 
 // Runtime side of the same contract: when a successor prevents fencing, the
 // recovered row must still carry a due marker and remain discoverable.
-$body_recovery       = '{"submission_id":"v4-recovery-order"}';
-$dedupe_recovery     = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_recovery, '' );
-$claim_key_recovery  = nvx_supabase_relay_queue_claim_key( $dedupe_recovery );
-$expired_generation  = ( $GLOBALS['nvx_mock_time'] - 10 ) . '|expired_recovery_generation';
+$body_recovery        = '{"submission_id":"v4-recovery-order"}';
+$dedupe_recovery      = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_recovery, '' );
+$claim_key_recovery   = nvx_supabase_relay_queue_claim_key( $dedupe_recovery );
+$expired_generation   = ( $GLOBALS['nvx_mock_time'] - 10 ) . '|expired_recovery_generation';
 $successor_generation = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|successor_generation';
-$recovery_post_id    = wp_insert_post(
+$recovery_post_id     = wp_insert_post(
 	array(
 		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
 		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
@@ -167,9 +201,9 @@ $require_v4(
 );
 
 // Incomplete publication quarantine fails its draft transition.
-$body_incomplete      = '{"submission_id":"v4-incomplete"}';
-$dedupe_incomplete    = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_incomplete, '' );
-$incomplete_post_id   = wp_insert_post(
+$body_incomplete    = '{"submission_id":"v4-incomplete"}';
+$dedupe_incomplete  = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_incomplete, '' );
+$incomplete_post_id = wp_insert_post(
 	array(
 		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
 		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
@@ -207,4 +241,4 @@ if ( $failures_v4 ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_POSTMERGE_RACES_V4=PASS live_claim_safe=1 due_before_fence=1 failed_quarantine_nonterminal=1 success_hard_delete_contract=1\n";
+echo "OUTBOX_POSTMERGE_RACES_V4=PASS preidentity_live_safe=1 live_claim_safe=1 due_before_fence=1 failed_quarantine_nonterminal=1 success_hard_delete_contract=1\n";
