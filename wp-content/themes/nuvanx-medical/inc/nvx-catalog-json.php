@@ -697,6 +697,7 @@ function nvx_catalog_apply_optional_defaults( array $entry, string $catalog_name
 
 /** Retain only catalog records that contain every required key. */
 function nvx_catalog_filter_records( array $catalog, array $required_keys, string $catalog_name ): array {
+	unset( $catalog['_error'] );
 	$valid = array();
 	foreach ( $catalog as $key => $entry ) {
 		if ( is_array( $entry ) ) {
