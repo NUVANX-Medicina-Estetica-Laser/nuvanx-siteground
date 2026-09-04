@@ -587,6 +587,63 @@ if ( ! function_exists( 'nvx_supabase_relay_compare_and_swap_option' ) ) {
 	}
 }
 
+/** Atomically transition one queue row only from the expected status. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_compare_and_swap_status' ) ) {
+	function nvx_supabase_relay_queue_compare_and_swap_status( int $post_id, string $expected_status, string $new_status ): bool {
+		$post_id = absint( $post_id );
+		if ( $post_id < 1 || '' === $expected_status || '' === $new_status || $expected_status === $new_status ) {
+			return false;
+		}
+
+		global $wpdb;
+		if (
+			isset( $wpdb )
+			&& method_exists( $wpdb, 'query' )
+			&& method_exists( $wpdb, 'prepare' )
+			&& isset( $wpdb->posts )
+		) {
+			$posts_table = (string) $wpdb->posts;
+			$updated     = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$posts_table} SET post_status = %s WHERE ID = %d AND post_type = %s AND post_status = %s",
+					$new_status,
+					$post_id,
+					NVX_SUPABASE_RELAY_QUEUE_CPT,
+					$expected_status
+				)
+			);
+			if ( 1 !== $updated ) {
+				return false;
+			}
+			if ( function_exists( 'clean_post_cache' ) ) {
+				clean_post_cache( $post_id );
+			}
+			if ( function_exists( 'wp_cache_delete' ) ) {
+				wp_cache_delete( $post_id, 'posts' );
+			}
+			$post = get_post( $post_id );
+			return $post instanceof WP_Post && $new_status === (string) $post->post_status;
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post || $expected_status !== (string) $post->post_status ) {
+			return false;
+		}
+		$updated = wp_update_post(
+			array(
+				'ID'          => $post_id,
+				'post_status' => $new_status,
+			),
+			true
+		);
+		if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
+			return false;
+		}
+		$post = get_post( $post_id );
+		return $post instanceof WP_Post && $new_status === (string) $post->post_status;
+	}
+}
+
 /** Release a claim conditionally only if it still has the expected value. */
 if ( ! function_exists( 'nvx_supabase_relay_queue_release_claim' ) ) {
 	function nvx_supabase_relay_queue_release_claim( string $dedupe_key, string $expected_value ): bool {
@@ -782,11 +839,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_finalize_publication' ) ) {
 		}
 		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
 		if ( '' !== $publish_claim && ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
-			// Readiness is the final write of a publication. A row that already owns
-			// this exact numeric claim and carries durable identity plus due-visibility
-			// is structurally complete: an interruption merely lost the readiness
-			// marker. Repair it so the payload is delivered instead of stranded. A
-			// row still missing due-visibility is a genuinely partial preparation.
 			$has_due_visibility = '' !== (string) get_post_meta( $post_id, '_nvx_relay_next_attempt', true );
 			if ( ! $has_due_visibility ) {
 				return false;
@@ -835,10 +887,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_acquire_publication_fence' ) )
 			return nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
 		}
 		if ( '' === $current ) {
-			// A prepared row with no surviving claim is normally abandoned, but a
-			// structurally complete publication that merely lost its readiness write
-			// is recoverable: rebind the claim to this exact row and finalize it
-			// instead of deleting a deliverable payload.
 			if ( $is_prepared && ! nvx_supabase_relay_queue_prepared_row_recoverable( $post_id, $dedupe_key ) ) {
 				wp_delete_post( $post_id, true );
 				return false;
@@ -862,11 +910,8 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_acquire_publication_fence' ) )
 		}
 		if ( $is_prepared ) {
 			$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
-			// A row from a different, non-adoptable generation is redundant and is
-			// retired. A structurally complete publication that merely lost its
-			// readiness write is instead recovered by taking over the expired claim
-			// and finalizing it, so an interrupted payload is delivered, not deleted.
-			if ( '' !== $publish_claim
+			if (
+				'' !== $publish_claim
 				&& ! nvx_supabase_relay_queue_item_adoptable_for_claim( $post_id, $dedupe_key, $current )
 				&& ! nvx_supabase_relay_queue_prepared_row_recoverable( $post_id, $dedupe_key )
 			) {
@@ -923,6 +968,138 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_set_next_attempt_monotonic' ) 
 	}
 }
 
+/** Whether a BUILDING row has exceeded its durable construction grace window. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_building_expired' ) ) {
+	function nvx_supabase_relay_queue_building_expired( WP_Post $post ): bool {
+		$created_gmt = trim( (string) ( $post->post_date_gmt ?? '' ) );
+		if ( '' === $created_gmt || '0000-00-00 00:00:00' === $created_gmt ) {
+			return false;
+		}
+		$created = strtotime( $created_gmt . ' UTC' );
+		if ( false === $created || $created < 1 ) {
+			return false;
+		}
+		$grace = max( 1, (int) NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS );
+		return ( $created + $grace ) <= nvx_supabase_relay_time();
+	}
+}
+
+/** Whether a BUILDING row already contains a complete recoverable publication. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_building_complete' ) ) {
+	function nvx_supabase_relay_queue_building_complete( int $post_id ): bool {
+		$post_id = absint( $post_id );
+		$post    = get_post( $post_id );
+		if ( ! $post instanceof WP_Post || NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS !== (string) $post->post_status ) {
+			return false;
+		}
+
+		$endpoint = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
+		$origin   = nvx_supabase_relay_sanitize_origin( (string) get_post_meta( $post_id, '_nvx_relay_origin', true ) );
+		$body     = (string) $post->post_content;
+		$dedupe   = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		$claim    = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
+		$due      = (string) get_post_meta( $post_id, '_nvx_relay_next_attempt', true );
+		$attempts = absint( get_post_meta( $post_id, '_nvx_relay_attempts', true ) );
+		$endpoints = nvx_supabase_relay_queue_endpoints();
+
+		if ( ! isset( $endpoints[ $endpoint ] ) || '' === $endpoints[ $endpoint ] || ! nvx_supabase_relay_valid_body( $body ) ) {
+			return false;
+		}
+		if ( 'google_click' === $endpoint && '' === $origin ) {
+			return false;
+		}
+		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe ) || ! hash_equals( nvx_supabase_relay_dedupe_key( $endpoint, $body, $origin ), $dedupe ) ) {
+			return false;
+		}
+		if ( 1 !== preg_match( '/\A[0-9]+\|.+\z/', $claim ) || '' === $due || 1 !== preg_match( '/\A[0-9]+\z/', $due ) || $attempts < 1 ) {
+			return false;
+		}
+		return nvx_supabase_relay_queue_item_ready( $post_id );
+	}
+}
+
+/** Recover one expired BUILDING row without racing the old or successor publisher. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_recover_building_item' ) ) {
+	function nvx_supabase_relay_queue_recover_building_item( int $post_id ): bool {
+		$post_id = absint( $post_id );
+		$post    = get_post( $post_id );
+		if ( ! $post instanceof WP_Post || NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS !== (string) $post->post_status ) {
+			return false;
+		}
+
+		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
+		if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
+			return false;
+		}
+		if ( ! nvx_supabase_relay_queue_building_expired( $post ) ) {
+			return false;
+		}
+
+		$endpoint   = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
+		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+		$dedupe_ok  = 1 === preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key );
+		$complete   = $dedupe_ok && nvx_supabase_relay_queue_building_complete( $post_id );
+
+		if ( $complete ) {
+			$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
+			$current   = nvx_supabase_relay_queue_fresh_option( $claim_key );
+			if ( '' !== $current && ! ctype_digit( $current ) && nvx_supabase_relay_queue_publish_claim_live( $current ) ) {
+				return false;
+			}
+			if ( ctype_digit( $current ) ) {
+				$current_post_id = absint( $current );
+				if (
+					$current_post_id !== $post_id
+					&& ( nvx_supabase_relay_queue_is_valid_pending_item( $current_post_id, $dedupe_key ) || nvx_supabase_relay_queue_is_valid_prepared_item( $current_post_id, $dedupe_key ) )
+				) {
+					if ( nvx_supabase_relay_queue_compare_and_swap_status( $post_id, NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS, 'draft' ) ) {
+						nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'building_superseded' );
+					}
+					return false;
+				}
+			}
+
+			if ( ! nvx_supabase_relay_queue_compare_and_swap_status( $post_id, NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS, NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ) ) {
+				return false;
+			}
+			return nvx_supabase_relay_queue_acquire_publication_fence( $post_id, $dedupe_key );
+		}
+
+		if ( ! nvx_supabase_relay_queue_compare_and_swap_status( $post_id, NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS, 'draft' ) ) {
+			return false;
+		}
+		if ( $dedupe_ok && '' !== $publish_claim ) {
+			nvx_supabase_relay_queue_release_claim( $dedupe_key, $publish_claim );
+		}
+		nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'building_publication_incomplete' );
+		return false;
+	}
+}
+
+/** Discover a bounded oldest-first set of BUILDING rows and recover expired ones. */
+if ( ! function_exists( 'nvx_supabase_relay_queue_recover_building_rows' ) ) {
+	function nvx_supabase_relay_queue_recover_building_rows( int $limit ): void {
+		$limit = max( 1, min( $limit, (int) NVX_SUPABASE_RELAY_QUEUE_BATCH ) );
+		$query = new WP_Query(
+			array(
+				'post_type'              => NVX_SUPABASE_RELAY_QUEUE_CPT,
+				'post_status'            => array( NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS ),
+				'posts_per_page'         => $limit,
+				'orderby'                => 'ID',
+				'order'                  => 'ASC',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => true,
+				'update_post_term_cache' => false,
+			)
+		);
+		foreach ( $query->posts as $post ) {
+			if ( $post instanceof WP_Post ) {
+				nvx_supabase_relay_queue_recover_building_item( absint( $post->ID ) );
+			}
+		}
+	}
+}
+
 /** Recover a prepared publication that never received its final due marker. */
 if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' ) ) {
 	function nvx_supabase_relay_queue_recover_prepared_without_due( int $post_id ): bool {
@@ -939,10 +1116,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 		$endpoint      = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
 		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
 
-		// Publication ownership outranks structural classification. Enqueue writes
-		// the generation token before identity/readiness metadata; recovery can
-		// observe that legitimate intermediate state. A live publisher must never
-		// be quarantined for metadata that it has not finished writing yet.
 		if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
 			return false;
 		}
@@ -967,10 +1140,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 			return false;
 		}
 
-		// Due visibility must become durable before the fence can promote a
-		// prepared row to pending. If fencing is lost after this write, the normal
-		// due query can still rediscover the row; no pending-but-invisible state is
-		// created by recovery.
 		$due = (string) nvx_supabase_relay_time();
 		if ( ! add_post_meta( $post_id, '_nvx_relay_next_attempt', $due, true ) ) {
 			$current_due = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
@@ -1032,25 +1201,14 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
 		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
 		$dedupe_key    = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
 
-		// A prepared row with a live generation is owned by its publisher. This
-		// invariant is evaluated before readiness/dedupe classification so the
-		// drainer cannot quarantine any legitimate intermediate publish state.
 		if ( $is_prepared && '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
 			return false;
 		}
 
 		if ( $is_prepared && ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
 			$dedupe_valid = 1 === preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key );
-			// A prepared row that carries a valid identity and durable due-visibility
-			// is a structurally complete publication whose only missing write is the
-			// readiness marker (a crash between next_attempt and ready, or a legacy
-			// pre-marker row). While its dedupe claim is still bound to this exact
-			// row or its in-flight claim has expired, recover it through the fence,
-			// which repairs readiness and finalizes it, instead of stranding a
-			// deliverable payload.
 			$has_due_visibility = '' !== (string) get_post_meta( $post_id, '_nvx_relay_next_attempt', true );
-			$claim_recoverable  = '' === $publish_claim
-				|| ! nvx_supabase_relay_queue_publish_claim_live( $publish_claim );
+			$claim_recoverable  = '' === $publish_claim || ! nvx_supabase_relay_queue_publish_claim_live( $publish_claim );
 			if ( $dedupe_valid && $has_due_visibility && $claim_recoverable ) {
 				$next_attempt = absint( get_post_meta( $post_id, '_nvx_relay_next_attempt', true ) );
 				if ( $next_attempt > nvx_supabase_relay_time() ) {
@@ -1191,7 +1349,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			}
 		}
 
-		// A new generation never adopts a prepared row produced by an older generation.
 		for ( $scan = 0; $scan < 20; $scan++ ) {
 			$existing_pending = nvx_supabase_relay_existing_item( $dedupe_key );
 			if ( $existing_pending < 1 ) {
@@ -1253,38 +1410,22 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_publish_claim', $in_flight_value, true ) && $meta_ok;
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_dedupe_key', $dedupe_key, true ) && $meta_ok;
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_next_attempt', (string) $next_attempt, true ) && $meta_ok;
-		// Readiness is written last. A row is never exposed to recovery while it
-		// is being constructed; only the subsequent BUILDING -> PREPARED transition
-		// publishes the completely materialized row to the recovery/drain domain.
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_ready', '1', true ) && $meta_ok;
 		if ( ! $meta_ok ) {
-			wp_delete_post( $post_id, true );
+			if ( nvx_supabase_relay_queue_compare_and_swap_status( $post_id, NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS, 'draft' ) ) {
+				wp_delete_post( $post_id, true );
+			}
 			nvx_supabase_relay_queue_release_claim( $dedupe_key, $in_flight_value );
 			nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'enqueue_metadata_failed' );
 			return 0;
 		}
 
-		$prepared = wp_update_post(
-			array(
-				'ID'          => $post_id,
-				'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
-			),
-			true
-		);
-		$prepared_post = get_post( $post_id );
-		if (
-			is_wp_error( $prepared )
-			|| absint( $prepared ) !== $post_id
-			|| ! $prepared_post instanceof WP_Post
-			|| NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS !== $prepared_post->post_status
-		) {
-			wp_delete_post( $post_id, true );
+		if ( ! nvx_supabase_relay_queue_compare_and_swap_status( $post_id, NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS, NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ) ) {
 			nvx_supabase_relay_queue_release_claim( $dedupe_key, $in_flight_value );
 			nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'enqueue_prepare_transition_failed' );
 			return 0;
 		}
 
-		// Bind claim to published post_id atomically via CAS.
 		$claim_bound = nvx_supabase_relay_compare_and_swap_option( $claim_key, $in_flight_value, (string) $post_id );
 		if ( ! $claim_bound ) {
 			$current_claim = nvx_supabase_relay_queue_fresh_option( $claim_key );
@@ -1464,24 +1605,15 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_clean_terminal_caches' ) ) {
 	}
 }
 
-/**
- * Complete SUCCESS or DEAD under one dedupe ownership boundary.
- *
- * Production uses a row-locked MySQL transaction so duplicate cleanup, the
- * canonical state transition and claim release commit atomically. The
- * deterministic harness has no $wpdb; its fallback uses a live terminal claim
- * that the existing publisher fence already treats as non-stealable.
- */
+/** Complete SUCCESS or DEAD under one dedupe ownership boundary. */
 if ( ! function_exists( 'nvx_supabase_relay_queue_complete_terminal_state' ) ) {
 	function nvx_supabase_relay_queue_complete_terminal_state( int $post_id, string $endpoint, int $status, string $reason, bool $delete_post ): bool {
 		$post_id    = absint( $post_id );
 		$dedupe_key = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
 		$outcome    = $delete_post ? 'DRAINED' : 'DEAD';
-
 		if ( $post_id < 1 ) {
 			return false;
 		}
-
 		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
 			if ( $delete_post ) {
 				wp_delete_post( $post_id, true );
@@ -1494,48 +1626,33 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_complete_terminal_state' ) ) {
 			nvx_supabase_relay_log( $endpoint, $outcome, $status, $reason );
 			return true;
 		}
-
 		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
 		$expected  = (string) $post_id;
 		global $wpdb;
-
-		$has_transaction_owner = isset( $wpdb )
-			&& method_exists( $wpdb, 'query' )
-			&& method_exists( $wpdb, 'prepare' )
-			&& method_exists( $wpdb, 'get_var' )
-			&& isset( $wpdb->options );
-
+		$has_transaction_owner = isset( $wpdb ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) && method_exists( $wpdb, 'get_var' ) && isset( $wpdb->options );
 		if ( $has_transaction_owner ) {
 			$options_table = (string) $wpdb->options;
 			$started       = $wpdb->query( 'START TRANSACTION' );
 			if ( false !== $started ) {
 				try {
-					$locked_claim = (string) $wpdb->get_var(
-						$wpdb->prepare(
-							"SELECT option_value FROM {$options_table} WHERE option_name = %s FOR UPDATE",
-							$claim_key
-						)
-					);
+					$locked_claim = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$options_table} WHERE option_name = %s FOR UPDATE", $claim_key ) );
 					if ( $expected !== $locked_claim ) {
 						$wpdb->query( 'ROLLBACK' );
 						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
 						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_ownership_lost' );
 						return false;
 					}
-
 					if ( ! nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key, $expected ) ) {
 						$wpdb->query( 'ROLLBACK' );
 						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
 						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_cleanup_lost' );
 						return false;
 					}
-
 					if ( $expected !== (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$options_table} WHERE option_name = %s FOR UPDATE", $claim_key ) ) ) {
 						$wpdb->query( 'ROLLBACK' );
 						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
 						return false;
 					}
-
 					if ( $delete_post ) {
 						$transitioned = false !== wp_delete_post( $post_id, true );
 					} else {
@@ -1548,28 +1665,19 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_complete_terminal_state' ) ) {
 						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_transition_failed' );
 						return false;
 					}
-
 					if ( ! nvx_supabase_relay_queue_retire_duplicate_rows( $post_id, $dedupe_key, $expected ) ) {
 						$wpdb->query( 'ROLLBACK' );
 						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
 						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_final_cleanup_lost' );
 						return false;
 					}
-
-					$deleted_claim = $wpdb->query(
-						$wpdb->prepare(
-							"DELETE FROM {$options_table} WHERE option_name = %s AND option_value = %s",
-							$claim_key,
-							$expected
-						)
-					);
+					$deleted_claim = $wpdb->query( $wpdb->prepare( "DELETE FROM {$options_table} WHERE option_name = %s AND option_value = %s", $claim_key, $expected ) );
 					if ( 1 !== $deleted_claim || false === $wpdb->query( 'COMMIT' ) ) {
 						$wpdb->query( 'ROLLBACK' );
 						nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
 						nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_commit_failed' );
 						return false;
 					}
-
 					nvx_supabase_relay_queue_clean_terminal_caches( $post_id, $claim_key );
 					nvx_supabase_relay_log( $endpoint, $outcome, $status, $reason );
 					return true;
@@ -1582,7 +1690,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_complete_terminal_state' ) ) {
 				}
 			}
 		}
-
 		$terminal_claim = nvx_supabase_relay_queue_begin_terminal_lifecycle( $post_id, $dedupe_key );
 		if ( '' === $terminal_claim ) {
 			nvx_supabase_relay_log( $endpoint, 'TRANSPORT', $status, 'terminal_fence_acquire_failed' );
@@ -1630,6 +1737,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 			return;
 		}
 		try {
+			nvx_supabase_relay_queue_recover_building_rows( $limit );
 			nvx_supabase_relay_queue_recover_invisible_prepared( $limit );
 			$now   = time();
 			$query = new WP_Query(
