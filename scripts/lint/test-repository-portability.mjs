@@ -4,6 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const root = process.cwd();
+const selfPath = 'scripts/lint/test-repository-portability.mjs';
 const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
   .split('\0')
   .filter(Boolean)
@@ -44,14 +45,36 @@ const forbiddenDeveloperPaths = [
   { pattern: /\/Users\/[A-Za-z0-9._-]+\//g, label: 'macOS user home' },
   { pattern: /[A-Za-z]:\\Users\\[A-Za-z0-9._-]+\\/g, label: 'Windows user home' },
   { pattern: /file:\/\/\/(?:Users|home)\//g, label: 'local file URL' },
+  { pattern: /\/home\/(?!customer(?:\/|$))[A-Za-z0-9._-]+\//g, label: 'Linux developer home' },
 ];
 
-for (const file of tracked.filter((item) => textExtensions.test(item))) {
-  let source;
-  try { source = fs.readFileSync(path.join(root, file), 'utf8'); } catch { continue; }
+function developerPathViolations(source) {
+  const matches = [];
   for (const { pattern, label } of forbiddenDeveloperPaths) {
     pattern.lastIndex = 0;
-    if (pattern.test(source)) fail('DEVELOPER_LOCAL_PATH', `${file} (${label})`);
+    if (pattern.test(source)) matches.push(label);
+  }
+  return matches;
+}
+
+// Contract fixtures. Developer homes fail; the canonical SiteGround root is
+// explicitly platform-owned and remains accepted.
+if (!developerPathViolations('/home/alice/project/file.php').includes('Linux developer home')) {
+  throw new Error('REPOSITORY_PORTABILITY_FIXTURE=FAIL linux_home');
+}
+if (developerPathViolations('/home/customer/www/nuvanx.com/public_html').length !== 0) {
+  throw new Error('REPOSITORY_PORTABILITY_FIXTURE=FAIL siteground_root');
+}
+if (!developerPathViolations('/Users/alice/project').includes('macOS user home')) {
+  throw new Error('REPOSITORY_PORTABILITY_FIXTURE=FAIL macos_home');
+}
+
+for (const file of tracked.filter((item) => textExtensions.test(item))) {
+  if (file === selfPath) continue; // scanner regex/fixtures are not repository path authorities.
+  let source;
+  try { source = fs.readFileSync(path.join(root, file), 'utf8'); } catch { continue; }
+  for (const label of developerPathViolations(source)) {
+    fail('DEVELOPER_LOCAL_PATH', `${file} (${label})`);
   }
 }
 
@@ -83,5 +106,5 @@ if (failures.length > 0) {
 
 console.log(
   `REPOSITORY_PORTABILITY=PASS markdown=${markdown.length} workflows=${workflows.length}`
-  + ' developer_local_paths=0 inline_html_style=0 seo_one_shots=0'
+  + ' developer_local_paths=0 inline_html_style=0 seo_one_shots=0 fixtures=3'
 );
