@@ -10,6 +10,8 @@ WORKFLOW="$ROOT/.github/workflows/staging.yml"
 readonly TEST_REPOSITORY="${TEST_REPOSITORY:-Arisofia/nuvanx-siteground}"
 readonly TEST_RUN_ID="${TEST_RUN_ID:-42}"
 readonly TEST_TOKEN="${TEST_TOKEN:-test-token}"
+readonly TEST_PR_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+readonly TEST_NEW_PR_SHA="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -83,6 +85,22 @@ case "${1:-}" in
     else
       printf '%s\n' '{"path":".github/workflows/staging.yml","event":"push","status":"in_progress","run_attempt":1,"head_sha":"1111111111111111111111111111111111111111","head_branch":"master"}'
     fi
+    ;;
+  */pulls/1083)
+    case "${TEST_PR_SCENARIO:-open}" in
+      closed)
+        printf '%s\n' '{"state":"closed","merged_at":"2026-09-04T12:00:00Z","head":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"base":{"ref":"master"}}'
+        ;;
+      changed_head)
+        printf '%s\n' '{"state":"open","merged_at":null,"head":{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"base":{"ref":"master"}}'
+        ;;
+      changed_base)
+        printf '%s\n' '{"state":"open","merged_at":null,"head":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"base":{"ref":"release"}}'
+        ;;
+      open|*)
+        printf '%s\n' '{"state":"open","merged_at":null,"head":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"base":{"ref":"master"}}'
+        ;;
+    esac
     ;;
   */actions/runs/*/jobs*)
     # The FIFO must no longer use job materialization as lease authority. This
@@ -200,7 +218,48 @@ env "${common_env[@]}" GITHUB_RUN_ATTEMPT=1 TEST_SCENARIO=nonmutation bash "$SUB
 grep -Fq 'MUTATION_FIFO=PASS' "$nonmutation_log"
 ! grep -Fq 'MUTATION_FIFO_BLOCKER run_id=41' "$nonmutation_log"
 
-echo 'MUTATION_FIFO_CONTRACT_TEST=PASS cases=8 aggregate_status=authoritative job_materialization_gap=blocked api=fail_closed'
+# Case 9: A PR that was merged/closed while waiting loses mutation authority
+# before any git worktree rebuild or remote Staging2 mutation can begin.
+closed_pr_log="$TMP/closed-pr.log"
+set +e
+env "${common_env[@]}" \
+  GITHUB_RUN_ATTEMPT=1 \
+  MUTATION_ROLE=pr-preview \
+  TEST_SCENARIO=pass \
+  TEST_PR_SCENARIO=closed \
+  PR_NUMBER=1083 \
+  PR_SHA="$TEST_PR_SHA" \
+  CANDIDATE_ROOT="$TMP/pr-candidate-closed" \
+  GITHUB_ENV="$TMP/github-env-closed" \
+  bash "$SUBJECT" >"$closed_pr_log" 2>&1
+closed_pr_rc=$?
+set -e
+[[ "$closed_pr_rc" -eq 78 ]]
+grep -Fq 'MUTATION_FIFO=SUPERSEDED role=pr-preview reason=pr_not_open' "$closed_pr_log"
+grep -Fq 'mutation=forbidden' "$closed_pr_log"
+[[ ! -e "$TMP/pr-candidate-closed" ]]
+
+# Case 10: A PR head that advanced while queued also loses mutation authority.
+changed_head_log="$TMP/changed-head.log"
+set +e
+env "${common_env[@]}" \
+  GITHUB_RUN_ATTEMPT=1 \
+  MUTATION_ROLE=pr-preview \
+  TEST_SCENARIO=pass \
+  TEST_PR_SCENARIO=changed_head \
+  PR_NUMBER=1083 \
+  PR_SHA="$TEST_PR_SHA" \
+  CANDIDATE_ROOT="$TMP/pr-candidate-head" \
+  GITHUB_ENV="$TMP/github-env-head" \
+  bash "$SUBJECT" >"$changed_head_log" 2>&1
+changed_head_rc=$?
+set -e
+[[ "$changed_head_rc" -eq 78 ]]
+grep -Fq 'MUTATION_FIFO=SUPERSEDED role=pr-preview reason=pr_head_superseded' "$changed_head_log"
+grep -Fq "actual=$TEST_NEW_PR_SHA" "$changed_head_log"
+[[ ! -e "$TMP/pr-candidate-head" ]]
+
+echo 'MUTATION_FIFO_CONTRACT_TEST=PASS cases=10 aggregate_status=authoritative job_materialization_gap=blocked api=fail_closed pr_preview_liveness=fail_closed'
 
 # A cancellation after a rollback snapshot and mutation arm must restore Staging
 # for both master deployments and labeled PR previews. `failure()` alone does
