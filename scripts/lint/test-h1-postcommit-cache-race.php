@@ -6,6 +6,8 @@ declare(strict_types=1);
 $GLOBALS['nvx_test_durable'] = array();
 $GLOBALS['nvx_test_cache'] = array();
 $GLOBALS['nvx_test_inject_concurrent_change'] = false;
+$GLOBALS['nvx_test_cache_delete_miss'] = false;
+$GLOBALS['nvx_test_runtime_flushes'] = 0;
 
 class WP_Post {}
 
@@ -36,11 +38,22 @@ function sanitize_textarea_field( $value ): string { return (string) $value; }
 function maybe_serialize( $value ) { return $value; }
 function maybe_unserialize( $value ) { return $value; }
 function clean_post_cache( $post_id ): void {
-	unset( $GLOBALS['nvx_test_cache']['posts'][ (int) $post_id ] );
-	unset( $GLOBALS['nvx_test_cache']['post_meta'][ (int) $post_id ] );
+	wp_cache_delete( (int) $post_id, 'posts' );
+	wp_cache_delete( (int) $post_id, 'post_meta' );
 }
 function wp_cache_delete( $key, $group = '' ): bool {
+	if ( 'post_meta' === (string) $group && true === $GLOBALS['nvx_test_cache_delete_miss'] ) {
+		return false;
+	}
 	unset( $GLOBALS['nvx_test_cache'][ (string) $group ][ $key ] );
+	return true;
+}
+function wp_cache_supports( $feature ): bool {
+	return 'flush_runtime' === (string) $feature;
+}
+function wp_cache_flush_runtime(): bool {
+	$GLOBALS['nvx_test_cache'] = array();
+	++$GLOBALS['nvx_test_runtime_flushes'];
 	return true;
 }
 function get_post_meta( $post_id, $meta_key, $single = false ) {
@@ -73,18 +86,24 @@ if ( function_exists( 'nvx_h1_prime_post_meta_cache_from_durable_storage' ) ) {
 $post_id = 42;
 $key = '_nvx_medical_review_status';
 
-// Stable committed state must verify successfully and leave no verifier-owned
-// post_meta cache snapshot behind.
+// A persistent-cache delete miss must not leave a stale in-process snapshot
+// authoritative. The bounded runtime flush clears only this request's memory.
 $GLOBALS['nvx_test_durable'][ $key ] = 'pending';
 $GLOBALS['nvx_test_cache']['post_meta'][ $post_id ][ $key ] = 'stale-before-verification';
+$GLOBALS['nvx_test_cache_delete_miss'] = true;
 nvx_h1_verify_meta_after_commit( $post_id, $key, 'pending' );
 if ( isset( $GLOBALS['nvx_test_cache']['post_meta'][ $post_id ] ) ) {
-	fwrite( STDERR, "Stable verification left post_meta cache populated.\n" );
+	fwrite( STDERR, "Delete-miss verification left post_meta cache populated.\n" );
+	exit( 1 );
+}
+if ( $GLOBALS['nvx_test_runtime_flushes'] < 2 ) {
+	fwrite( STDERR, "Runtime-local cache flush was not enforced around verification.\n" );
 	exit( 1 );
 }
 
 // Concurrent mutation during the runtime read must be detected by the second
-// durable read, while the finally boundary removes the stale lazy snapshot.
+// durable read, while the finally boundary removes the stale lazy snapshot even
+// when the persistent backend reports an exact-key delete miss.
 $GLOBALS['nvx_test_durable'][ $key ] = 'pending';
 $GLOBALS['nvx_test_inject_concurrent_change'] = true;
 $detected = false;
@@ -106,4 +125,4 @@ if ( 'approved' !== $GLOBALS['nvx_test_durable'][ $key ] ) {
 	exit( 1 );
 }
 
-fwrite( STDOUT, "H1_POSTCOMMIT_CACHE_RACE=PASS stable=1 concurrent_change_detected=1 final_invalidation=1 manual_cache_writer=0\n" );
+fwrite( STDOUT, "H1_POSTCOMMIT_CACHE_RACE=PASS stable=1 delete_miss_safe=1 runtime_flush=1 concurrent_change_detected=1 final_invalidation=1 manual_cache_writer=0\n" );
