@@ -65,6 +65,7 @@ fi
 page=1
 max_pages=10
 newer_duplicate=""
+scan_complete=0
 
 while (( page <= max_pages )); do
   preview_runs=""
@@ -174,10 +175,16 @@ while (( page <= max_pages )); do
   }
 
   if [[ "$page_has_older_or_equal" == "true" ]]; then
+    scan_complete=1
     break
   fi
 
   page=$((page + 1))
 done
+
+if (( scan_complete != 1 )); then
+  echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_window_incomplete pr=$PR_NUMBER sha=$PR_SHA pages_scanned=$max_pages stage=$stage mutation=forbidden" >&2
+  exit 1
+fi
 
 echo "PR_PREVIEW_LIVENESS=PASS pr=$PR_NUMBER sha=$PR_SHA base=$api_base_ref run_id=$GITHUB_RUN_ID duplicate_owner=latest stage=$stage"
