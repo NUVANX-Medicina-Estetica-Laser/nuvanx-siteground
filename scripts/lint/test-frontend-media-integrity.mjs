@@ -15,6 +15,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 const registry = read('wp-content/themes/nuvanx-medical/inc/nvx-page-registry.php');
 const bridal = read('wp-content/themes/nuvanx-medical/inc/nvx-bridal-page.php');
 const casesTemplate = read('wp-content/themes/nuvanx-medical/page-casos-de-pacientes.php');
+const treatmentPreview = read('wp-content/themes/nuvanx-medical/inc/nvx-page-render-helpers.php');
 const blogArchive = read('wp-content/themes/nuvanx-medical/template-parts/content/nvx-blog-archive.php');
 const blogSystem = read('wp-content/themes/nuvanx-medical/inc/nvx-blog-system.php');
 const casesData = JSON.parse(read('wp-content/themes/nuvanx-medical/inc/data/patient-cases.json'));
@@ -27,7 +28,10 @@ requireInvariant(registry.includes("'renderer' => 'nvx_bridal_inject_media'"), '
 requireInvariant(!bridal.includes("require_once __DIR__ . '/nvx-page-render-helpers.php'"), 'BRIDAL_NO_LATERAL_HELPER_BOOTSTRAP');
 
 // Clinical case media must be explicit, scoped and fail closed. Consent alone
-// never authorizes a photographic pair.
+// never authorizes a photographic pair. The public catalog is the lowest shared
+// boundary across every renderer: non-approved media rows must not expose any
+// public image path at all, so a secondary renderer cannot bypass quarantine by
+// forgetting to inspect media_status.
 const allowedMediaStates = new Set(['approved', 'quarantined']);
 const pairIds = new Set();
 const approvedPaths = new Map();
@@ -46,7 +50,15 @@ for (const clinicalCase of cases) {
   requireInvariant(!pairIds.has(pairId), `CASE_PAIR_ID_UNIQUE_${id}`);
   pairIds.add(pairId);
 
-  if (clinicalCase.media_status !== 'approved') continue;
+  const publicPaths = [
+    String(clinicalCase.image || ''),
+    String(clinicalCase.image_before || ''),
+    String(clinicalCase.image_after || ''),
+  ];
+  if (clinicalCase.media_status !== 'approved') {
+    requireInvariant(publicPaths.every((value) => value === ''), `QUARANTINED_CASE_HAS_NO_PUBLIC_MEDIA_PATH_${id}`);
+    continue;
+  }
 
   const before = String(clinicalCase.image_before || '');
   const after = String(clinicalCase.image_after || '');
@@ -70,11 +82,26 @@ const case01 = cases.find((entry) => entry.id === 'caso-01-papada-submenton');
 const case03 = cases.find((entry) => entry.id === 'caso-03-abdomen-firmeza');
 requireInvariant(case01?.media_status === 'quarantined', 'PAPADA_PAIR_QUARANTINED_PENDING_VERIFICATION');
 requireInvariant(case03?.media_status === 'quarantined', 'ABDOMEN_PAIR_QUARANTINED_PENDING_VERIFICATION');
+requireInvariant(['image', 'image_before', 'image_after'].every((key) => String(case01?.[key] || '') === ''), 'PAPADA_QUARANTINE_REMOVES_PUBLIC_PATHS');
+requireInvariant(['image', 'image_before', 'image_after'].every((key) => String(case03?.[key] || '') === ''), 'ABDOMEN_QUARANTINE_REMOVES_PUBLIC_PATHS');
 requireInvariant(casesTemplate.includes("'clinical_case' === ( $case['media_scope'] ?? '' )"), 'CASE_TEMPLATE_REQUIRES_MEDIA_SCOPE');
 requireInvariant(casesTemplate.includes("'before_after' === ( $case['media_kind'] ?? '' )"), 'CASE_TEMPLATE_REQUIRES_BEFORE_AFTER_KIND');
 requireInvariant(casesTemplate.includes("'approved' === ( $case['media_status'] ?? '' )"), 'CASE_TEMPLATE_REQUIRES_MEDIA_APPROVAL');
 requireInvariant(casesTemplate.includes('$media_is_approved && ! empty( $case[\'image_before\'] ) && ! empty( $case[\'image_after\'] )'), 'CASE_TEMPLATE_REQUIRES_COMPLETE_APPROVED_PAIR');
 requireInvariant(!casesTemplate.includes("$case['image']"), 'CASE_TEMPLATE_NO_LEGACY_SINGLE_IMAGE_FALLBACK');
+
+// The treatment preview is a separate consumer of the same public catalog. It
+// currently renders only image_before/image_after when both are present. Since
+// quarantine strips those public paths at the data boundary, the disputed rows
+// remain text-only here even if the renderer itself does not duplicate the
+// media-status policy. Lock that dependency so future preview changes cannot
+// silently start using the legacy image field as an alternate authority.
+const previewStart = treatmentPreview.indexOf('function nvx_treatment_cases_preview_markup');
+requireInvariant(previewStart >= 0, 'TREATMENT_CASE_PREVIEW_PRESENT');
+const previewBlock = previewStart >= 0 ? treatmentPreview.slice(previewStart) : '';
+requireInvariant(previewBlock.includes("$case['image_before']"), 'TREATMENT_PREVIEW_USES_BEFORE_PATH');
+requireInvariant(previewBlock.includes("$case['image_after']"), 'TREATMENT_PREVIEW_USES_AFTER_PATH');
+requireInvariant(!previewBlock.includes("$case['image']"), 'TREATMENT_PREVIEW_NO_LEGACY_SINGLE_IMAGE_AUTHORITY');
 
 // Deterministic crash/data-window fixture: an otherwise approved before/after
 // record with one missing pair member must stay text-only even if a legacy image
@@ -119,6 +146,7 @@ if (failures.length > 0) {
 
 console.log(
   `FRONTEND_MEDIA_INTEGRITY=PASS bridal_owner=1 clinical_cases=${cases.length} ` +
-  `approved_media_pairs=${approvedHashes.size / 2} quarantined_pairs=2 incomplete_pair_fallback=blocked ` +
+  `approved_media_pairs=${approvedHashes.size / 2} quarantined_pairs=2 quarantine_public_paths=0 ` +
+  `secondary_preview_legacy_authority=0 incomplete_pair_fallback=blocked ` +
   `journal_featured_authority=0 journal_semantic_threshold=2`
 );
