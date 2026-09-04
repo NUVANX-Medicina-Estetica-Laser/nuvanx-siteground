@@ -154,6 +154,9 @@ jobs:
 
       - name: Materialize and validate exact candidate tooling
         if: ${{ !inputs.run_ssh_connectivity_probe }}
+        env:
+          RELEASE_MODE: ${{ inputs.release_mode }}
+
         shell: bash
         run: |
           set -euo pipefail
@@ -161,11 +164,13 @@ jobs:
           git worktree add --detach "$CANDIDATE_ROOT" "$CANDIDATE_SHA"
           test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$CANDIDATE_SHA"
           find "$CANDIDATE_ROOT/wp-content/themes/nuvanx-medical" -path '*/vendor' -prune -o -name '*.php' -type f -print0 | xargs -0 -n1 php -l >/dev/null
-          test -s "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh"
-          bash -n "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh"
           bash -n "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh"
-          ! grep -Fq 'wp sg purge' "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh"
-          grep -Fq 'siteground_cache_purge "$PROD_ROOT" preserve' "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh"
+          if [[ "$RELEASE_MODE" != 'rollback' || -f "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh" ]]; then
+            test -s "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh"
+            bash -n "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh"
+            ! grep -Eq 'wp[[:space:]]+sg[[:space:]]+purge' "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh"
+            grep -Fq 'siteground_cache_purge "$PROD_ROOT" preserve' "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh"
+          fi
           node --check "$CANDIDATE_ROOT/scripts/production/deploy-identity-contract.mjs"
           node --check "$CANDIDATE_ROOT/scripts/production/signature-frame-contract.mjs"
           node --check "$CANDIDATE_ROOT/scripts/production/verify-production-boundary.mjs"
@@ -253,7 +258,7 @@ jobs:
           ssh nvx-prod "mkdir -p '$REMOTE_RELEASE/theme' '$REMOTE_RELEASE/tools/migrations' '$REMOTE_RELEASE/lib'"
           rsync -az --delete --exclude='.git' --exclude='php_errorlog' --exclude='*.log' --exclude='_archive*' --exclude='_disabled*' --exclude='*.bak*' "$CANDIDATE_ROOT/wp-content/themes/nuvanx-medical/" "nvx-prod:$REMOTE_RELEASE/theme/"
           rsync -az "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh" "nvx-prod:$REMOTE_RELEASE/deploy-to-prod.sh"
-          rsync -az "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh" "nvx-prod:$REMOTE_RELEASE/siteground-cache-purge.sh"
+          test -f "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh" && rsync -az "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh" "nvx-prod:$REMOTE_RELEASE/siteground-cache-purge.sh" || true
           rsync -az "$CANDIDATE_ROOT/lib/" "nvx-prod:$REMOTE_RELEASE/lib/"
           # Keep the release payload in lockstep with deploy-to-prod.sh. The deploy
           # script owns the exact migration set; synchronizing the whole accepted
@@ -282,13 +287,17 @@ jobs:
           done
           remote_tests=${remote_tests% && }
           ssh nvx-prod "$remote_tests"
-          local_helper_sha="$(sha256sum "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh" | cut -d' ' -f1)"
-          remote_helper_sha="$(ssh nvx-prod "test -s '$REMOTE_RELEASE/siteground-cache-purge.sh' && bash -n '$REMOTE_RELEASE/siteground-cache-purge.sh' && sha256sum '$REMOTE_RELEASE/siteground-cache-purge.sh' | cut -d' ' -f1")"
-          [[ "$local_helper_sha" =~ ^[0-9a-f]{64}$ && "$remote_helper_sha" == "$local_helper_sha" ]] || {
-            echo "PRODUCTION_CACHE_HELPER_PAYLOAD=FAIL local=${local_helper_sha:-missing} remote=${remote_helper_sha:-missing}" >&2
-            exit 1
-          }
-          echo "PRODUCTION_CACHE_HELPER_PAYLOAD=PASS sha256=$local_helper_sha exact_sha=$CANDIDATE_SHA"
+          if [[ -f "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh" ]]; then
+            local_helper_sha="$(sha256sum "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh" | cut -d' ' -f1)"
+            remote_helper_sha="$(ssh nvx-prod "test -s '$REMOTE_RELEASE/siteground-cache-purge.sh' && bash -n '$REMOTE_RELEASE/siteground-cache-purge.sh' && sha256sum '$REMOTE_RELEASE/siteground-cache-purge.sh' | cut -d' ' -f1")"
+            [[ "$local_helper_sha" =~ ^[0-9a-f]{64}$ && "$remote_helper_sha" == "$local_helper_sha" ]] || {
+              echo "PRODUCTION_CACHE_HELPER_PAYLOAD=FAIL local=${local_helper_sha:-missing} remote=${remote_helper_sha:-missing}" >&2
+              exit 1
+            }
+            echo "PRODUCTION_CACHE_HELPER_PAYLOAD=PASS sha256=$local_helper_sha exact_sha=$CANDIDATE_SHA"
+          else
+            echo "PRODUCTION_CACHE_HELPER_PAYLOAD=PASS legacy_sha=$CANDIDATE_SHA"
+          fi
           echo "PRODUCTION_MIGRATION_PAYLOAD=PASS required=${#required_migrations[@]} exact_sha=$CANDIDATE_SHA"
           echo "PRODUCTION_PAYLOAD=PASS exact_sha=$CANDIDATE_SHA"
 

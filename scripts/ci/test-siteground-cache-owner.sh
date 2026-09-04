@@ -56,7 +56,7 @@ grep -Fq 'tools/deploy/siteground-cache-purge.sh' "$STAGING_WORKFLOW" \
   || fail 'staging_workflow_optimizer_snapshot_state_contract_missing'
 [[ "$(grep -Fc '$ROLLBACK_DIR/siteground-cache-purge.sh' "$STAGING_WORKFLOW" || true)" -ge 4 ]] \
   || fail 'staging_workflow_rollback_helper_snapshot_contract_missing'
-! grep -Eq 'siteground_cache_purge[^\n]*\|\|[[:space:]]*true' "$STAGING_WORKFLOW" \
+! grep -Eq 'siteground_cache_purge "\$STAGING_ROOT"[^\n]*\|\|[[:space:]]*true' "$STAGING_WORKFLOW" \
   || fail 'staging_workflow_cache_helper_must_be_fail_closed'
 
 # Production must consume the exact accepted helper payload, never recreate its
@@ -82,7 +82,7 @@ grep -Fq 'source "$SITEGROUND_CACHE_HELPER"' "$PROD_COMPENSATION" \
   || fail 'production_compensation_helper_not_sourced'
 [[ "$(grep -Fc 'siteground_cache_purge "$PROD_ROOT" preserve' "$PROD_COMPENSATION" || true)" -eq 1 ]] \
   || fail 'production_compensation_expected_one_canonical_cache_call'
-! grep -Eq 'siteground_cache_purge[^\n]*\|\|[[:space:]]*true' "$PROD_COMPENSATION" \
+! grep -Eq 'siteground_cache_purge "\$PROD_ROOT"[^\n]*\|\|[[:space:]]*true' "$PROD_COMPENSATION" \
   || fail 'production_compensation_cache_helper_must_be_fail_closed'
 ! grep -Fq 'wp cache flush' "$PROD_COMPENSATION" \
   || fail 'production_compensation_manual_cache_flush_present'

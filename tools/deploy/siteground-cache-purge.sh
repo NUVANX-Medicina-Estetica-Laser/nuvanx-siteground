@@ -122,7 +122,9 @@ siteground_cache_purge() {
     # WP-CLI itself can exit 0 even when opcache_reset() returns false. Convert
     # that PHP-level failure into a non-zero process status so release callers
     # cannot report a successful purge with stale opcode cache still present.
-    wp eval 'if (function_exists("opcache_reset") && ! opcache_reset()) { fwrite(STDERR, "opcache_reset failed\n"); exit(1); }' || exit $?
+    # Exclude environments where OPcache is disabled in CLI, preventing false
+    # failure when opcache_get_status() reports false.
+    wp eval 'if (function_exists("opcache_get_status") && opcache_get_status() !== false && function_exists("opcache_reset") && ! opcache_reset()) { fwrite(STDERR, "opcache_reset failed\n"); exit(1); }' || exit $?
 
     case "$final_state" in
       preserve)
