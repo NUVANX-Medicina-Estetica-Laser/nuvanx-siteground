@@ -308,9 +308,7 @@ function scanFlowMapDuplicates(text, label, lineNo) {
       const colon = findYamlSeparator(item, ':');
       if (colon < 0) continue;
       const key = decodeYamlKey(item.slice(0, colon), label, lineNo);
-      if (keys.has(key)) {
-        fail(`${label}:${lineNo}: duplicate YAML flow key '${key}'`);
-      }
+      if (keys.has(key)) fail(`${label}:${lineNo}: duplicate YAML flow key '${key}'`);
       keys.set(key, true);
     }
   }
@@ -324,9 +322,7 @@ function yamlStructuralRows(raw, label) {
 
   for (let index = 0; index < lines.length; index += 1) {
     const original = lines[index];
-    if (/^\t+/.test(original) || /^ +\t/.test(original)) {
-      fail(`${label}:${index + 1}: tabs are forbidden in YAML indentation`);
-    }
+    if (/^\t+/.test(original) || /^ +\t/.test(original)) fail(`${label}:${index + 1}: tabs are forbidden in YAML indentation`);
     const indent = original.match(/^ */)[0].length;
     const trimmed = original.trim();
 
@@ -352,7 +348,6 @@ function yamlStructuralRows(raw, label) {
 function scanYamlDuplicateKeys(raw, label) {
   const rows = yamlStructuralRows(raw, label);
   const scopes = [];
-
   const resetScope = (indent) => {
     while (scopes.length && scopes.at(-1).indent > indent) scopes.pop();
     if (scopes.length && scopes.at(-1).indent === indent) scopes.pop();
@@ -360,19 +355,15 @@ function scanYamlDuplicateKeys(raw, label) {
     scopes.push(scope);
     return scope;
   };
-
   const scopeFor = (indent) => {
     while (scopes.length && scopes.at(-1).indent > indent) scopes.pop();
-    if (!scopes.length || scopes.at(-1).indent < indent) {
-      scopes.push({ indent, keys: new Map() });
-    }
+    if (!scopes.length || scopes.at(-1).indent < indent) scopes.push({ indent, keys: new Map() });
     return scopes.at(-1);
   };
 
   for (const row of rows) {
     let { indent, clean } = row;
     let sequenceItem = false;
-
     if (clean.startsWith('- ')) {
       sequenceItem = true;
       clean = clean.slice(2).trimStart();
@@ -381,13 +372,11 @@ function scanYamlDuplicateKeys(raw, label) {
       resetScope(indent + 2);
       continue;
     }
-
     const mapping = parseLeadingMapping(clean, label, row.lineNo);
     if (!mapping) {
       if (sequenceItem) resetScope(indent);
       continue;
     }
-
     const scope = sequenceItem ? resetScope(indent) : scopeFor(indent);
     if (scope.keys.has(mapping.key)) {
       fail(`${label}:${row.lineNo}: duplicate YAML key '${mapping.key}' (first declared at line ${scope.keys.get(mapping.key)})`);
@@ -396,26 +385,58 @@ function scanYamlDuplicateKeys(raw, label) {
   }
 }
 
-function executableInputReferences(rows, label) {
+function executableInputReferences(raw, label) {
   const refs = new Set();
+  const lines = raw.split(/\r?\n/);
   const addRefs = (expression) => {
     const re = /(?:\binputs|github\.event\.inputs)\.([A-Za-z0-9_.-]+)\b/g;
     let match;
     while ((match = re.exec(expression)) !== null) refs.add(match[1]);
   };
+  const addGithubExpressions = (text) => {
+    const re = /\$\{\{([\s\S]*?)\}\}/g;
+    let match;
+    while ((match = re.exec(text)) !== null) addRefs(match[1]);
+  };
 
-  for (const row of rows) {
-    let clean = row.clean;
+  for (let i = 0; i < lines.length; i += 1) {
+    const original = lines[i];
+    const indent = original.match(/^ */)[0].length;
+    let clean = stripYamlComment(original.slice(indent));
+    if (!clean.trim()) continue;
     if (clean.startsWith('- ')) clean = clean.slice(2).trimStart();
-    const mapping = parseLeadingMapping(clean, label, row.lineNo);
-    if (mapping && mapping.key === 'description') continue;
+    const mapping = parseLeadingMapping(clean, label, i + 1);
 
-    const expressionRe = /\$\{\{([\s\S]*?)\}\}/g;
-    let expressionMatch;
-    while ((expressionMatch = expressionRe.exec(clean)) !== null) addRefs(expressionMatch[1]);
+    if (mapping?.key === 'description') {
+      if (/^[|>][+-]?\d*$/.test(mapping.value)) {
+        while (i + 1 < lines.length) {
+          const next = lines[i + 1];
+          const nextTrimmed = next.trim();
+          const nextIndent = next.match(/^ */)[0].length;
+          if (nextTrimmed && nextIndent <= indent) break;
+          i += 1;
+        }
+      }
+      continue;
+    }
 
-    if (mapping && mapping.key === 'if' && !mapping.value.includes('${{')) {
-      addRefs(mapping.value);
+    addGithubExpressions(clean);
+
+    if (mapping?.key === 'if') {
+      if (/^[|>][+-]?\d*$/.test(mapping.value)) {
+        const body = [];
+        while (i + 1 < lines.length) {
+          const next = lines[i + 1];
+          const nextTrimmed = next.trim();
+          const nextIndent = next.match(/^ */)[0].length;
+          if (nextTrimmed && nextIndent <= indent) break;
+          i += 1;
+          if (nextTrimmed) body.push(stripYamlComment(next.slice(nextIndent)));
+        }
+        addRefs(body.join(' '));
+      } else if (!mapping.value.includes('${{')) {
+        addRefs(mapping.value);
+      }
     }
   }
 
@@ -431,7 +452,6 @@ function workflowDispatchInputs(raw, label) {
   for (const row of rows) {
     const mapping = parseLeadingMapping(row.clean, label, row.lineNo);
     if (!mapping) continue;
-
     if (row.indent === 2 && mapping.key === 'workflow_dispatch') {
       inDispatch = true;
       inInputs = false;
@@ -445,17 +465,14 @@ function workflowDispatchInputs(raw, label) {
       inInputs = true;
       continue;
     }
-    if (inInputs && row.indent <= 4) {
-      inInputs = false;
-    }
+    if (inInputs && row.indent <= 4) inInputs = false;
     if (inInputs && row.indent === 6) names.push(mapping.key);
   }
 
-  const refs = executableInputReferences(rows, label);
+  const refs = executableInputReferences(raw, label);
   for (const name of names) {
     if (!refs.has(name)) fail(`${label}: workflow_dispatch input '${name}' has no executable caller`);
   }
-
   return names;
 }
 
@@ -487,18 +504,11 @@ function workflowJobs(raw, label) {
 
   const jobNames = new Set(jobs.map((job) => job.name));
   const dependencies = new Map(jobs.map((job) => [job.name, []]));
-
   const validateRef = (jobName, ref, lineNo) => {
     const normalized = normalizeNeedRef(ref);
-    if (!/^[A-Za-z0-9_-]+$/.test(normalized)) {
-      fail(`${label}:${lineNo}: unsupported dynamic needs expression '${normalized}'`);
-    }
-    if (!jobNames.has(normalized)) {
-      fail(`${label}:${lineNo}: job '${jobName}' needs missing job '${normalized}'`);
-    }
-    if (normalized === jobName) {
-      fail(`${label}:${lineNo}: job '${jobName}' cannot need itself`);
-    }
+    if (!/^[A-Za-z0-9_-]+$/.test(normalized)) fail(`${label}:${lineNo}: unsupported dynamic needs expression '${normalized}'`);
+    if (!jobNames.has(normalized)) fail(`${label}:${lineNo}: job '${jobName}' needs missing job '${normalized}'`);
+    if (normalized === jobName) fail(`${label}:${lineNo}: job '${jobName}' cannot need itself`);
     dependencies.get(jobName).push(normalized);
   };
 
@@ -510,18 +520,12 @@ function workflowJobs(raw, label) {
       if (row.indent !== 4) continue;
       const mapping = parseLeadingMapping(row.clean, label, row.lineNo);
       if (!mapping || mapping.key !== 'needs') continue;
-
       if (mapping.value) {
         if (mapping.value.startsWith('[') && mapping.value.endsWith(']')) {
-          for (const ref of splitFlowItems(mapping.value.slice(1, -1))) {
-            validateRef(jobs[j].name, ref, row.lineNo);
-          }
-        } else {
-          validateRef(jobs[j].name, mapping.value, row.lineNo);
-        }
+          for (const ref of splitFlowItems(mapping.value.slice(1, -1))) validateRef(jobs[j].name, ref, row.lineNo);
+        } else validateRef(jobs[j].name, mapping.value, row.lineNo);
         continue;
       }
-
       let foundBlockRef = false;
       for (let k = i + 1; k < end; k += 1) {
         const child = rows[k];
@@ -547,7 +551,6 @@ function workflowJobs(raw, label) {
     visited.add(job);
   };
   for (const job of jobNames) visit(job);
-
   return jobs.map((job) => job.name);
 }
 
@@ -597,6 +600,22 @@ function runSelfTests() {
   ].join('\n');
   workflowDispatchInputs(validInputs, 'selftest-valid-input');
 
+  const validMultilineInput = [
+    'on:',
+    '  workflow_dispatch:',
+    '    inputs:',
+    '      live:',
+    '        description: Live input',
+    'jobs:',
+    '  a:',
+    '    if: >-',
+    '      always() &&',
+    '      inputs.live &&',
+    '      true',
+    '    runs-on: ubuntu-latest',
+  ].join('\n');
+  workflowDispatchInputs(validMultilineInput, 'selftest-valid-multiline-input');
+
   const deadInput = [
     'on:',
     '  workflow_dispatch:',
@@ -631,13 +650,7 @@ function runSelfTests() {
   );
   expectFailure(
     () => workflowJobs(
-      [
-        'jobs:',
-        '  build:',
-        '    needs:',
-        '      - missing',
-        '    runs-on: ubuntu-latest',
-      ].join('\n'),
+      ['jobs:', '  build:', '    needs:', '      - missing', '    runs-on: ubuntu-latest'].join('\n'),
       'selftest-block-needs',
     ),
     /needs missing job 'missing'/,
@@ -645,16 +658,7 @@ function runSelfTests() {
   );
   expectFailure(
     () => workflowJobs(
-      [
-        'jobs:',
-        '  a:',
-        '    needs: b',
-        '    runs-on: ubuntu-latest',
-        '  b:',
-        '    needs:',
-        '      - a',
-        '    runs-on: ubuntu-latest',
-      ].join('\n'),
+      ['jobs:', '  a:', '    needs: b', '    runs-on: ubuntu-latest', '  b:', '    needs:', '      - a', '    runs-on: ubuntu-latest'].join('\n'),
       'selftest-cycle-needs',
     ),
     /cyclic job needs graph/,
@@ -664,22 +668,14 @@ function runSelfTests() {
 
 runSelfTests();
 
-const tracked = execFileSync('git', ['ls-files', '-z'], {
-  cwd: repoRoot,
-  encoding: 'utf8',
-}).split('\0').filter(Boolean);
+const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' }).split('\0').filter(Boolean);
 const jsonFiles = tracked.filter((file) => file.endsWith('.json'));
-const workflowFiles = tracked
-  .filter((file) => /^\.github\/workflows\/.*\.ya?ml$/i.test(file))
-  .sort();
+const workflowFiles = tracked.filter((file) => /^\.github\/workflows\/.*\.ya?ml$/i.test(file)).sort();
 
 if (workflowFiles.join(' ') !== '.github/workflows/production.yml .github/workflows/staging.yml') {
   fail(`Canonical workflow ownership drift: ${workflowFiles.join(' ') || '(none)'}`);
 }
-
-for (const file of jsonFiles) {
-  scanJsonRaw(fs.readFileSync(path.join(repoRoot, file), 'utf8'), file);
-}
+for (const file of jsonFiles) scanJsonRaw(fs.readFileSync(path.join(repoRoot, file), 'utf8'), file);
 
 let inputCount = 0;
 let jobCount = 0;
@@ -690,6 +686,4 @@ for (const file of workflowFiles) {
   jobCount += workflowJobs(raw, file).length;
 }
 
-console.log(
-  `CONFIG_WORKFLOW_RAW_SOURCE_AUDIT=PASS json=${jsonFiles.length} workflows=${workflowFiles.length} inputs=${inputCount} jobs=${jobCount}`,
-);
+console.log(`CONFIG_WORKFLOW_RAW_SOURCE_AUDIT=PASS json=${jsonFiles.length} workflows=${workflowFiles.length} inputs=${inputCount} jobs=${jobCount}`);
