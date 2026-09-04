@@ -89,7 +89,10 @@ siteground_cache_purge() {
     rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-* || exit $?
     rm -rf wp-content/cache/sgo-cache/* || exit $?
     rm -rf wp-content/cache/* || exit $?
-    wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); }' || exit $?
+    # WP-CLI itself can exit 0 even when opcache_reset() returns false. Convert
+    # that PHP-level failure into a non-zero process status so release callers
+    # cannot report a successful purge with stale opcode cache still present.
+    wp eval 'if (function_exists("opcache_reset") && ! opcache_reset()) { fwrite(STDERR, "opcache_reset failed\n"); exit(1); }' || exit $?
 
     case "$final_state" in
       preserve)
