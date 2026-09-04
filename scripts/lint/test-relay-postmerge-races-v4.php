@@ -3,20 +3,19 @@
  * Outbox v4 post-merge race regressions.
  *
  * Extends the canonical v2 harness with defects found after #1077:
- * - a newly inserted publication must remain outside the recovery/drain domain
- *   until all publication metadata is durable;
+ * - BUILDING rows must have a bounded recovery owner, not become permanent
+ *   stranded state after an interrupted publisher;
+ * - recovery and publisher must arbitrate BUILDING transitions through the same
+ *   compare-and-swap status boundary so neither can resurrect/erase the other;
+ * - a newly inserted publication must remain outside the prepared recovery/drain
+ *   domain until all publication metadata is durable;
  * - enqueue must fail closed when the final prepared->pending transition fails;
  * - a prepared row with any live publication generation must not be quarantined,
  *   including the interval after the publish claim is written but before dedupe
  *   identity has been persisted;
  * - recovery must make the due marker durable before attempting the publication
  *   fence, so interruption cannot turn a row pending while still invisible;
- * - quarantine telemetry may report DEAD only after a confirmed draft
- *   transition; failed wp_update_post() remains non-terminal.
- *
- * The normal SUCCESS lifecycle is intentionally not given a terminal marker:
- * complete_terminal_state(..., true) hard-deletes the delivered row before
- * releasing its claim, so there is no completed ready row to republish.
+ * - quarantine telemetry may report DEAD only after a confirmed state transition.
  *
  * @package nuvanx-medical
  */
@@ -37,10 +36,6 @@ $queue_path   = dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/n
 $queue_source = file_get_contents( $queue_path );
 $queue_source = is_string( $queue_source ) ? $queue_source : '';
 
-// ── Regression -2: BUILDING_ROWS_ARE_NOT_RECOVERY_VISIBLE ──────────────────
-// The publisher must construct an item in a status that is absent from every
-// recovery/drain query. Only after all durable metadata (including readiness)
-// exists may the row transition to PREPARED and enter that domain.
 $enqueue_start = strpos( $queue_source, 'function nvx_supabase_relay_queue_enqueue' );
 $enqueue_end   = false !== $enqueue_start
 	? strpos( $queue_source, 'function nvx_supabase_relay_queue_send', $enqueue_start )
@@ -48,19 +43,167 @@ $enqueue_end   = false !== $enqueue_start
 $enqueue_body  = false !== $enqueue_start && false !== $enqueue_end
 	? substr( $queue_source, $enqueue_start, $enqueue_end - $enqueue_start )
 	: '';
+
+// ── Regression -3: BUILDING_HAS_BOUNDED_RECOVERY_OWNER ──────────────────────
+$building_recovery_available = function_exists( 'nvx_supabase_relay_queue_recover_building_item' );
+$require_v4( $building_recovery_available, 'BUILDING_RECOVERY_FUNCTION_PRESENT' );
+$require_v4(
+	str_contains( $queue_source, 'nvx_supabase_relay_queue_recover_building_rows' )
+	&& str_contains( $queue_source, 'NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS' )
+	&& str_contains( $queue_source, "'post_status'            => array( NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS )" ),
+	'BUILDING_RECOVERY_DISCOVERY_OWNER_PRESENT'
+);
+$require_v4(
+	str_contains( $queue_source, 'function nvx_supabase_relay_queue_compare_and_swap_status' )
+	&& str_contains( $queue_source, 'AND post_status = %s' )
+	&& str_contains( $enqueue_body, 'nvx_supabase_relay_queue_compare_and_swap_status(' ),
+	'BUILDING_PUBLISHER_RECOVERY_SHARE_STATUS_CAS'
+);
+$drain_start = strpos( $queue_source, 'function nvx_supabase_relay_queue_drain' );
+$drain_end   = false !== $drain_start
+	? strpos( $queue_source, "add_action( NVX_SUPABASE_RELAY_QUEUE_CRON", $drain_start )
+	: false;
+$drain_body  = false !== $drain_start && false !== $drain_end
+	? substr( $queue_source, $drain_start, $drain_end - $drain_start )
+	: '';
+$building_recovery_offset = strpos( $drain_body, 'nvx_supabase_relay_queue_recover_building_rows( $limit )' );
+$prepared_recovery_offset = strpos( $drain_body, 'nvx_supabase_relay_queue_recover_invisible_prepared( $limit )' );
+$require_v4(
+	false !== $building_recovery_offset
+	&& false !== $prepared_recovery_offset
+	&& $building_recovery_offset < $prepared_recovery_offset,
+	'BUILDING_RECOVERY_RUNS_BEFORE_PREPARED_RECOVERY'
+);
+
+if ( $building_recovery_available ) {
+	// Crash immediately after INSERT: the row is fresh and therefore still owned
+	// by the publisher construction window; recovery must not classify it.
+	$fresh_building_id = wp_insert_post(
+		array(
+			'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+			'post_status'  => NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS,
+			'post_content' => wp_slash( '{"submission_id":"v4-building-fresh"}' ),
+		),
+		true
+	);
+	$fresh_building_id = absint( $fresh_building_id );
+	$fresh_building    = get_post( $fresh_building_id );
+	if ( $fresh_building instanceof WP_Post ) {
+		$fresh_building->post_date_gmt = gmdate( 'Y-m-d H:i:s', $GLOBALS['nvx_mock_time'] );
+	}
+	$require_v4(
+		false === nvx_supabase_relay_queue_recover_building_item( $fresh_building_id ),
+		'FRESH_BUILDING_PUBLISHER_PRESERVED'
+	);
+	$require_v4(
+		get_post( $fresh_building_id ) instanceof WP_Post
+		&& NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS === get_post( $fresh_building_id )->post_status,
+		'FRESH_BUILDING_REMAINS_BUILDING'
+	);
+
+	// Crash during metadata: after the bounded construction lease, an incomplete
+	// row is quarantined through the BUILDING CAS. A simulated stale publisher
+	// attempting BUILDING->PREPARED from the draft hook must lose that CAS.
+	$partial_building_id = wp_insert_post(
+		array(
+			'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+			'post_status'  => NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS,
+			'post_content' => wp_slash( '{"submission_id":"v4-building-partial"}' ),
+		),
+		true
+	);
+	$partial_building_id = absint( $partial_building_id );
+	$partial_building    = get_post( $partial_building_id );
+	if ( $partial_building instanceof WP_Post ) {
+		$partial_building->post_date_gmt = gmdate(
+			'Y-m-d H:i:s',
+			$GLOBALS['nvx_mock_time'] - NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS - 1
+		);
+	}
+	add_post_meta( $partial_building_id, '_nvx_relay_endpoint', 'lead_captured', true );
+	$GLOBALS['nvx_mock_stale_building_resurrection'] = null;
+	$GLOBALS['nvx_mock_hook_on_status_draft'] = static function ( int $post_id ) use ( $partial_building_id ): void {
+		if ( $post_id === $partial_building_id ) {
+			$GLOBALS['nvx_mock_stale_building_resurrection'] = nvx_supabase_relay_queue_compare_and_swap_status(
+				$post_id,
+				NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS,
+				NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS
+			);
+		}
+	};
+	$require_v4(
+		false === nvx_supabase_relay_queue_recover_building_item( $partial_building_id ),
+		'PARTIAL_BUILDING_NOT_PROMOTED'
+	);
+	unset( $GLOBALS['nvx_mock_hook_on_status_draft'] );
+	$require_v4(
+		false === $GLOBALS['nvx_mock_stale_building_resurrection'],
+		'PARTIAL_BUILDING_STALE_PUBLISHER_CANNOT_RESURRECT'
+	);
+	$require_v4(
+		get_post( $partial_building_id ) instanceof WP_Post
+		&& 'draft' === get_post( $partial_building_id )->post_status,
+		'PARTIAL_BUILDING_QUARANTINED'
+	);
+
+	// Crash after all metadata is durable but before BUILDING->PREPARED: recovery
+	// promotes the exact row and routes it through the existing publication fence.
+	$body_complete_building   = '{"submission_id":"v4-building-complete"}';
+	$dedupe_complete_building = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_complete_building, '' );
+	$claim_complete_building  = nvx_supabase_relay_queue_claim_key( $dedupe_complete_building );
+	$expired_complete_claim   = ( $GLOBALS['nvx_mock_time'] - 1 ) . '|complete_building_generation';
+	$complete_building_id     = wp_insert_post(
+		array(
+			'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+			'post_status'  => NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS,
+			'post_content' => wp_slash( $body_complete_building ),
+		),
+		true
+	);
+	$complete_building_id = absint( $complete_building_id );
+	$complete_building    = get_post( $complete_building_id );
+	if ( $complete_building instanceof WP_Post ) {
+		$complete_building->post_date_gmt = gmdate(
+			'Y-m-d H:i:s',
+			$GLOBALS['nvx_mock_time'] - NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS - 1
+		);
+	}
+	add_post_meta( $complete_building_id, '_nvx_relay_endpoint', 'lead_captured', true );
+	add_post_meta( $complete_building_id, '_nvx_relay_attempts', '1', true );
+	add_post_meta( $complete_building_id, '_nvx_relay_publish_claim', $expired_complete_claim, true );
+	add_post_meta( $complete_building_id, '_nvx_relay_dedupe_key', $dedupe_complete_building, true );
+	add_post_meta( $complete_building_id, '_nvx_relay_next_attempt', (string) ( $GLOBALS['nvx_mock_time'] - 1 ), true );
+	add_post_meta( $complete_building_id, '_nvx_relay_ready', '1', true );
+	$GLOBALS['nvx_mock_options'][ $claim_complete_building ] = $expired_complete_claim;
+	$require_v4(
+		nvx_supabase_relay_queue_recover_building_item( $complete_building_id ),
+		'COMPLETE_BUILDING_RECOVERED'
+	);
+	$require_v4(
+		get_post( $complete_building_id ) instanceof WP_Post
+		&& 'pending' === get_post( $complete_building_id )->post_status,
+		'COMPLETE_BUILDING_PROMOTED_PENDING'
+	);
+	$require_v4(
+		(string) $complete_building_id === (string) get_option( $claim_complete_building, '' ),
+		'COMPLETE_BUILDING_BINDS_NUMERIC_FENCE'
+	);
+}
+
+// ── Regression -2: BUILDING_ROWS_ARE_NOT_PREPARED_RECOVERY_VISIBLE ─────────
 $building_offset = strpos( $enqueue_body, "'post_status'  => NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS" );
 $ready_offset    = strpos( $enqueue_body, "add_post_meta( \$post_id, '_nvx_relay_ready', '1', true )" );
-$prepared_offset = strpos( $enqueue_body, "'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS" );
+$status_cas_offset = strpos( $enqueue_body, 'nvx_supabase_relay_queue_compare_and_swap_status(' );
 $bind_offset     = strpos( $enqueue_body, 'nvx_supabase_relay_compare_and_swap_option( $claim_key, $in_flight_value, (string) $post_id )' );
 $require_v4( str_contains( $queue_source, 'NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS' ), 'BUILDING_STATUS_DEFINED' );
 $require_v4(
 	false !== $building_offset
 	&& false !== $ready_offset
-	&& false !== $prepared_offset
+	&& false !== $status_cas_offset
 	&& false !== $bind_offset
 	&& $building_offset < $ready_offset
-	&& $ready_offset < $prepared_offset
-	&& $prepared_offset < $bind_offset,
+	&& $ready_offset < $status_cas_offset
+	&& $status_cas_offset < $bind_offset,
 	'BUILDING_METADATA_PRECEDES_PUBLICATION_VISIBILITY'
 );
 
@@ -75,7 +218,7 @@ $building_post_id = wp_insert_post(
 $building_post_id = absint( $building_post_id );
 $require_v4(
 	false === nvx_supabase_relay_queue_recover_prepared_without_due( $building_post_id ),
-	'BUILDING_ROW_NOT_RECOVERED'
+	'BUILDING_ROW_NOT_PREPARED_RECOVERED'
 );
 $require_v4(
 	false === nvx_supabase_relay_queue_item_due( $building_post_id, 'unused-lock', 60 ),
@@ -85,17 +228,10 @@ $building_post = get_post( $building_post_id );
 $require_v4(
 	$building_post instanceof WP_Post
 	&& NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS === $building_post->post_status,
-	'BUILDING_ROW_NOT_QUARANTINED'
-);
-$require_v4(
-	! in_array( $building_post_id, $GLOBALS['nvx_mock_deleted_posts'], true ),
-	'BUILDING_ROW_NOT_DELETED'
+	'BUILDING_ROW_NOT_PREPARED_QUARANTINED'
 );
 
 // ── Regression -1: ENQUEUE_FINALIZATION_FAILURE_IS_NOT_SUCCESS ──────────────
-// BUILDING->PREPARED is allowed to succeed; PREPARED->PENDING is forced to
-// fail. The publisher must return 0, retain a recoverable PREPARED row under
-// its numeric fence and never treat the failed publication as queued success.
 $body_finalize_fail       = '{"submission_id":"v4-enqueue-finalize-fail"}';
 $dedupe_finalize_fail     = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_finalize_fail, '' );
 $claim_key_finalize_fail  = nvx_supabase_relay_queue_claim_key( $dedupe_finalize_fail );
@@ -123,8 +259,6 @@ $require_v4(
 );
 
 // ── Regression 0: LIVE_CLAIM_PRECEDES_IDENTITY_AND_MUST_BE_PRESERVED ────────
-// Legacy/interrupted PREPARED rows can still exist from an older runtime. When
-// they carry a live generation, recovery must defer structural classification.
 $preidentity_generation = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|publisher_before_identity';
 $preidentity_post_id     = wp_insert_post(
 	array(
@@ -138,7 +272,6 @@ $preidentity_post_id = absint( $preidentity_post_id );
 add_post_meta( $preidentity_post_id, '_nvx_relay_publish_claim', $preidentity_generation, true );
 add_post_meta( $preidentity_post_id, '_nvx_relay_endpoint', 'lead_captured', true );
 add_post_meta( $preidentity_post_id, '_nvx_relay_attempts', '1', true );
-
 $require_v4(
 	false === nvx_supabase_relay_queue_recover_prepared_without_due( $preidentity_post_id ),
 	'PREIDENTITY_LIVE_RECOVERY_DEFERS'
@@ -148,10 +281,6 @@ $require_v4(
 	$preidentity_post instanceof WP_Post
 	&& NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS === $preidentity_post->post_status,
 	'PREIDENTITY_LIVE_NOT_QUARANTINED'
-);
-$require_v4(
-	! in_array( $preidentity_post_id, $GLOBALS['nvx_mock_deleted_posts'], true ),
-	'PREIDENTITY_LIVE_NOT_DELETED'
 );
 
 // ── Regression 1: ANY_LIVE_PUBLISHER_IS_PRESERVED ──────────────────────────
@@ -175,7 +304,6 @@ add_post_meta( $live_mismatch_post_id, '_nvx_relay_endpoint', 'lead_captured', t
 add_post_meta( $live_mismatch_post_id, '_nvx_relay_attempts', '1', true );
 add_post_meta( $live_mismatch_post_id, '_nvx_relay_next_attempt', (string) ( $GLOBALS['nvx_mock_time'] - 1 ), true );
 $GLOBALS['nvx_mock_options'][ $claim_key_live_mismatch ] = $other_owner;
-
 $require_v4(
 	false === nvx_supabase_relay_queue_item_due( $live_mismatch_post_id, 'unused-lock', 60 ),
 	'LIVE_MISMATCH_NOT_DRAINABLE'
@@ -185,10 +313,6 @@ $require_v4(
 	$live_mismatch_post instanceof WP_Post
 	&& NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS === $live_mismatch_post->post_status,
 	'LIVE_MISMATCH_NOT_QUARANTINED'
-);
-$require_v4(
-	! in_array( $live_mismatch_post_id, $GLOBALS['nvx_mock_deleted_posts'], true ),
-	'LIVE_MISMATCH_NOT_DELETED'
 );
 
 // ── Regression 2: DUE_VISIBILITY_PRECEDES_RECOVERY_FENCE ───────────────────
@@ -206,8 +330,6 @@ $require_v4(
 	'RECOVERY_WRITES_DUE_BEFORE_FENCE'
 );
 
-// Runtime side of the same contract: when a successor prevents fencing, the
-// recovered row must still carry a due marker and remain discoverable.
 $body_recovery        = '{"submission_id":"v4-recovery-order"}';
 $dedupe_recovery      = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_recovery, '' );
 $claim_key_recovery   = nvx_supabase_relay_queue_claim_key( $dedupe_recovery );
@@ -228,7 +350,6 @@ add_post_meta( $recovery_post_id, '_nvx_relay_endpoint', 'lead_captured', true )
 add_post_meta( $recovery_post_id, '_nvx_relay_attempts', '1', true );
 add_post_meta( $recovery_post_id, '_nvx_relay_ready', '1', true );
 $GLOBALS['nvx_mock_options'][ $claim_key_recovery ] = $successor_generation;
-
 $require_v4(
 	false === nvx_supabase_relay_queue_recover_prepared_without_due( $recovery_post_id ),
 	'RECOVERY_SUCCESSOR_FENCE_REJECTED'
@@ -250,7 +371,6 @@ $log_file           = tempnam( sys_get_temp_dir(), 'nvx-relay-v4-' );
 if ( false !== $log_file ) {
 	ini_set( 'error_log', $log_file );
 }
-
 $read_new_log = static function () use ( $log_file ): string {
 	if ( false === $log_file || ! is_file( $log_file ) ) {
 		return '';
@@ -259,7 +379,6 @@ $read_new_log = static function () use ( $log_file ): string {
 	return is_string( $content ) ? $content : '';
 };
 
-// Invalid dedupe quarantine fails its draft transition.
 $invalid_post_id = wp_insert_post(
 	array(
 		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
@@ -287,7 +406,6 @@ $require_v4(
 	'INVALID_DEDUPE_FAILED_QUARANTINE_NO_FALSE_DEAD'
 );
 
-// Incomplete publication quarantine fails its draft transition.
 $body_incomplete    = '{"submission_id":"v4-incomplete"}';
 $dedupe_incomplete  = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_incomplete, '' );
 $incomplete_post_id = wp_insert_post(
@@ -328,4 +446,4 @@ if ( $failures_v4 ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_POSTMERGE_RACES_V4=PASS building_hidden=1 finalize_fail_closed=1 preidentity_live_safe=1 live_claim_safe=1 due_before_fence=1 failed_quarantine_nonterminal=1 success_hard_delete_contract=1\n";
+echo "OUTBOX_POSTMERGE_RACES_V4=PASS building_recovery=1 building_status_cas=1 crash_after_insert_safe=1 crash_mid_metadata_quarantined=1 crash_after_metadata_recovered=1 building_hidden=1 finalize_fail_closed=1 preidentity_live_safe=1 live_claim_safe=1 due_before_fence=1 failed_quarantine_nonterminal=1\n";
