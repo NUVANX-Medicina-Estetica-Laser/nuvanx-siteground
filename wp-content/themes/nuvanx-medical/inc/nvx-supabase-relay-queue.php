@@ -984,7 +984,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_building_expired' ) ) {
 	}
 }
 
-/** Whether a BUILDING row already contains a complete recoverable publication. */
+/** Whether a BUILDING row already contains a structurally recoverable publication. */
 if ( ! function_exists( 'nvx_supabase_relay_queue_building_complete' ) ) {
 	function nvx_supabase_relay_queue_building_complete( int $post_id ): bool {
 		$post_id = absint( $post_id );
@@ -1014,7 +1014,12 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_building_complete' ) ) {
 		if ( 1 !== preg_match( '/\A[0-9]+\|.+\z/', $claim ) || '' === $due || 1 !== preg_match( '/\A[0-9]+\z/', $due ) || $attempts < 1 ) {
 			return false;
 		}
-		return nvx_supabase_relay_queue_item_ready( $post_id );
+
+		// Readiness is intentionally not part of structural completeness. The only
+		// recoverable missing-final-write window is next_attempt -> ready. Recovery
+		// first wins BUILDING -> PREPARED, then the existing publication finalizer
+		// repairs _nvx_relay_ready under the publication fence.
+		return true;
 	}
 }
 
