@@ -93,6 +93,7 @@ get_header();
 					<?php foreach ( $cases_list as $case ) : ?>
 						<?php
 						$media_is_approved = 'clinical_case' === ( $case['media_scope'] ?? '' )
+							&& 'before_after' === ( $case['media_kind'] ?? '' )
 							&& 'approved' === ( $case['media_status'] ?? '' );
 						?>
 						<li class="nvx-case-card" id="<?php echo esc_attr( $case['id'] ?? '' ); ?>">
@@ -120,21 +121,6 @@ get_header();
 											<img src="<?php echo esc_url( $after_src ); ?>" alt="<?php echo esc_attr( $title . ' — Resultado y evolución' ); ?>" class="nvx-case-card__img" loading="lazy" decoding="async">
 										</figure>
 									</div>
-									<div class="nvx-case-card__visual-caption">
-										<span class="nvx-case-card__visual-badge"><?php esc_html_e( 'Registro clínico estandarizado', 'nuvanx-medical' ); ?></span>
-										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $consent_states[ $case['consent_status'] ] ?? $case['consent_status'] ?? '' ); ?></span>
-									</div>
-								</div>
-							<?php elseif ( $media_is_approved && ! empty( $case['image'] ) ) : ?>
-								<?php
-								$img_relative = '/' . ltrim( (string) $case['image'], '/' );
-								$img_src      = get_template_directory_uri() . $img_relative;
-								$img_alt      = $case['image_alt'] ?? $case['title'] ?? 'Evolución clínica documentada';
-								?>
-								<div class="nvx-case-card__visual">
-									<figure class="nvx-case-card__media">
-										<img src="<?php echo esc_url( $img_src ); ?>" alt="<?php echo esc_attr( $img_alt ); ?>" class="nvx-case-card__img" loading="lazy" decoding="async">
-									</figure>
 									<div class="nvx-case-card__visual-caption">
 										<span class="nvx-case-card__visual-badge"><?php esc_html_e( 'Registro clínico estandarizado', 'nuvanx-medical' ); ?></span>
 										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $consent_states[ $case['consent_status'] ] ?? $case['consent_status'] ?? '' ); ?></span>
