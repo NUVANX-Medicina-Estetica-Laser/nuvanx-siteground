@@ -49,6 +49,10 @@ if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS' ) ) {
 	define( 'NVX_SUPABASE_RELAY_QUEUE_CLAIM_LEASE_SECONDS', 60 );
 }
 
+if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS' ) ) {
+	define( 'NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS', 'nvx_relay_building' );
+}
+
 if ( ! defined( 'NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS' ) ) {
 	define( 'NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS', 'nvx_relay_prepared' );
 }
@@ -120,6 +124,18 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_endpoints' ) ) {
 /** Register private outbox CPT. */
 if ( ! function_exists( 'nvx_supabase_relay_queue_register_cpt' ) ) {
 	function nvx_supabase_relay_queue_register_cpt(): void {
+		register_post_status(
+			NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS,
+			array(
+				'label'                     => 'Building Supabase relay item',
+				'public'                    => false,
+				'internal'                  => true,
+				'exclude_from_search'       => true,
+				'show_in_admin_all_list'    => false,
+				'show_in_admin_status_list' => false,
+			)
+		);
+
 		register_post_status(
 			NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
 			array(
@@ -1216,7 +1232,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		$post_id      = wp_insert_post(
 			array(
 				'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
-				'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+				'post_status'  => NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS,
 				'post_title'   => sanitize_text_field( $endpoint . ' ' . gmdate( 'Y-m-d H:i:s' ) ),
 				'post_content' => wp_slash( $body ),
 			),
@@ -1237,14 +1253,34 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_publish_claim', $in_flight_value, true ) && $meta_ok;
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_dedupe_key', $dedupe_key, true ) && $meta_ok;
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_next_attempt', (string) $next_attempt, true ) && $meta_ok;
-		// Readiness is written last. A row is never ready without due-visibility, so
-		// an interrupted publication can never leave a ready-but-invisible row, and
-		// the drainer still fails closed on any prepared row that is not yet ready.
+		// Readiness is written last. A row is never exposed to recovery while it
+		// is being constructed; only the subsequent BUILDING -> PREPARED transition
+		// publishes the completely materialized row to the recovery/drain domain.
 		$meta_ok = add_post_meta( $post_id, '_nvx_relay_ready', '1', true ) && $meta_ok;
 		if ( ! $meta_ok ) {
 			wp_delete_post( $post_id, true );
 			nvx_supabase_relay_queue_release_claim( $dedupe_key, $in_flight_value );
 			nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'enqueue_metadata_failed' );
+			return 0;
+		}
+
+		$prepared = wp_update_post(
+			array(
+				'ID'          => $post_id,
+				'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+			),
+			true
+		);
+		$prepared_post = get_post( $post_id );
+		if (
+			is_wp_error( $prepared )
+			|| absint( $prepared ) !== $post_id
+			|| ! $prepared_post instanceof WP_Post
+			|| NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS !== $prepared_post->post_status
+		) {
+			wp_delete_post( $post_id, true );
+			nvx_supabase_relay_queue_release_claim( $dedupe_key, $in_flight_value );
+			nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'enqueue_prepare_transition_failed' );
 			return 0;
 		}
 
@@ -1257,7 +1293,10 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 				if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) || nvx_supabase_relay_queue_is_valid_prepared_item( $existing_post_id, $dedupe_key ) ) {
 					if ( $existing_post_id === $post_id ) {
 						$GLOBALS['nvx_supabase_relay_queue_dirty'] = true;
-						nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
+						if ( ! nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key ) ) {
+							nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'successor_adopted_finalize_failed' );
+							return 0;
+						}
 						nvx_supabase_relay_log( $endpoint, 'QUEUED', 0, 'successor_adopted_prepared_row' );
 						return $post_id;
 					}
@@ -1274,7 +1313,11 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 			nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'claim_lost_during_publish' );
 			return 0;
 		}
-		nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key );
+		if ( ! nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key ) ) {
+			$GLOBALS['nvx_supabase_relay_queue_dirty'] = true;
+			nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'publication_finalize_failed' );
+			return 0;
+		}
 		$GLOBALS['nvx_supabase_relay_queue_dirty'] = true;
 		nvx_supabase_relay_log( $endpoint, 'QUEUED' );
 		return $post_id;

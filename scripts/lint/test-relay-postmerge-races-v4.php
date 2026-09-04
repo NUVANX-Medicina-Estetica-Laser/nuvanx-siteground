@@ -3,6 +3,9 @@
  * Outbox v4 post-merge race regressions.
  *
  * Extends the canonical v2 harness with defects found after #1077:
+ * - a newly inserted publication must remain outside the recovery/drain domain
+ *   until all publication metadata is durable;
+ * - enqueue must fail closed when the final prepared->pending transition fails;
  * - a prepared row with any live publication generation must not be quarantined,
  *   including the interval after the publish claim is written but before dedupe
  *   identity has been persisted;
@@ -34,10 +37,94 @@ $queue_path   = dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/n
 $queue_source = file_get_contents( $queue_path );
 $queue_source = is_string( $queue_source ) ? $queue_source : '';
 
+// ── Regression -2: BUILDING_ROWS_ARE_NOT_RECOVERY_VISIBLE ──────────────────
+// The publisher must construct an item in a status that is absent from every
+// recovery/drain query. Only after all durable metadata (including readiness)
+// exists may the row transition to PREPARED and enter that domain.
+$enqueue_start = strpos( $queue_source, 'function nvx_supabase_relay_queue_enqueue' );
+$enqueue_end   = false !== $enqueue_start
+	? strpos( $queue_source, 'function nvx_supabase_relay_queue_send', $enqueue_start )
+	: false;
+$enqueue_body  = false !== $enqueue_start && false !== $enqueue_end
+	? substr( $queue_source, $enqueue_start, $enqueue_end - $enqueue_start )
+	: '';
+$building_offset = strpos( $enqueue_body, "'post_status'  => NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS" );
+$ready_offset    = strpos( $enqueue_body, "add_post_meta( \$post_id, '_nvx_relay_ready', '1', true )" );
+$prepared_offset = strpos( $enqueue_body, "'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS" );
+$bind_offset     = strpos( $enqueue_body, 'nvx_supabase_relay_compare_and_swap_option( $claim_key, $in_flight_value, (string) $post_id )' );
+$require_v4( str_contains( $queue_source, 'NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS' ), 'BUILDING_STATUS_DEFINED' );
+$require_v4(
+	false !== $building_offset
+	&& false !== $ready_offset
+	&& false !== $prepared_offset
+	&& false !== $bind_offset
+	&& $building_offset < $ready_offset
+	&& $ready_offset < $prepared_offset
+	&& $prepared_offset < $bind_offset,
+	'BUILDING_METADATA_PRECEDES_PUBLICATION_VISIBILITY'
+);
+
+$building_post_id = wp_insert_post(
+	array(
+		'post_type'    => NVX_SUPABASE_RELAY_QUEUE_CPT,
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS,
+		'post_content' => wp_slash( '{"submission_id":"v4-building-hidden"}' ),
+	),
+	true
+);
+$building_post_id = absint( $building_post_id );
+$require_v4(
+	false === nvx_supabase_relay_queue_recover_prepared_without_due( $building_post_id ),
+	'BUILDING_ROW_NOT_RECOVERED'
+);
+$require_v4(
+	false === nvx_supabase_relay_queue_item_due( $building_post_id, 'unused-lock', 60 ),
+	'BUILDING_ROW_NOT_DRAINABLE'
+);
+$building_post = get_post( $building_post_id );
+$require_v4(
+	$building_post instanceof WP_Post
+	&& NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS === $building_post->post_status,
+	'BUILDING_ROW_NOT_QUARANTINED'
+);
+$require_v4(
+	! in_array( $building_post_id, $GLOBALS['nvx_mock_deleted_posts'], true ),
+	'BUILDING_ROW_NOT_DELETED'
+);
+
+// ── Regression -1: ENQUEUE_FINALIZATION_FAILURE_IS_NOT_SUCCESS ──────────────
+// BUILDING->PREPARED is allowed to succeed; PREPARED->PENDING is forced to
+// fail. The publisher must return 0, retain a recoverable PREPARED row under
+// its numeric fence and never treat the failed publication as queued success.
+$body_finalize_fail       = '{"submission_id":"v4-enqueue-finalize-fail"}';
+$dedupe_finalize_fail     = nvx_supabase_relay_dedupe_key( 'lead_captured', $body_finalize_fail, '' );
+$claim_key_finalize_fail  = nvx_supabase_relay_queue_claim_key( $dedupe_finalize_fail );
+$expected_finalize_post   = $GLOBALS['nvx_mock_next_post_id'] + 1;
+$GLOBALS['nvx_mock_update_failure_on_post'] = $expected_finalize_post;
+$GLOBALS['nvx_mock_update_failure_status']  = 'pending';
+$finalize_fail_result = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body_finalize_fail, array(), 1 );
+$GLOBALS['nvx_mock_update_failure_on_post'] = 0;
+$GLOBALS['nvx_mock_update_failure_status']  = '';
+$require_v4( 0 === $finalize_fail_result, 'ENQUEUE_FINALIZE_FAILURE_RETURNS_ZERO' );
+$finalize_failed_post = get_post( $expected_finalize_post );
+$require_v4(
+	$finalize_failed_post instanceof WP_Post
+	&& NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS === $finalize_failed_post->post_status,
+	'ENQUEUE_FINALIZE_FAILURE_REMAINS_PREPARED'
+);
+$require_v4(
+	(string) $expected_finalize_post === (string) get_option( $claim_key_finalize_fail, '' ),
+	'ENQUEUE_FINALIZE_FAILURE_RETAINS_NUMERIC_FENCE'
+);
+$require_v4(
+	str_contains( $enqueue_body, 'if ( ! nvx_supabase_relay_queue_finalize_publication( $post_id, $dedupe_key ) )' )
+	&& str_contains( $enqueue_body, "'publication_finalize_failed'" ),
+	'ENQUEUE_FINALIZATION_FAIL_CLOSED_SOURCE'
+);
+
 // ── Regression 0: LIVE_CLAIM_PRECEDES_IDENTITY_AND_MUST_BE_PRESERVED ────────
-// Enqueue publishes its generation claim before the dedupe identity. Recovery
-// is allowed to classify metadata only after proving no live publisher owns the
-// row; otherwise a normal in-flight publication can be quarantined as corrupt.
+// Legacy/interrupted PREPARED rows can still exist from an older runtime. When
+// they carry a live generation, recovery must defer structural classification.
 $preidentity_generation = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|publisher_before_identity';
 $preidentity_post_id     = wp_insert_post(
 	array(
@@ -241,4 +328,4 @@ if ( $failures_v4 ) {
 	exit( 1 );
 }
 
-echo "OUTBOX_POSTMERGE_RACES_V4=PASS preidentity_live_safe=1 live_claim_safe=1 due_before_fence=1 failed_quarantine_nonterminal=1 success_hard_delete_contract=1\n";
+echo "OUTBOX_POSTMERGE_RACES_V4=PASS building_hidden=1 finalize_fail_closed=1 preidentity_live_safe=1 live_claim_safe=1 due_before_fence=1 failed_quarantine_nonterminal=1 success_hard_delete_contract=1\n";
