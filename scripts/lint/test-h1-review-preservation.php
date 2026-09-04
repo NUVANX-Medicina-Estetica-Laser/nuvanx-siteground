@@ -129,6 +129,21 @@ if ( 1 !== count( $repairs ) || 'fixture' !== ( $repairs[0]['payload']['key'] ??
 	exit( 1 );
 }
 
+// Canonically valid durable provenance remains valid after bounded normalization.
+$GLOBALS['nvx_h1_test_durable'][ $post_id ]['_nvx_medical_review_status'] = array( ' APPROVED ' );
+$GLOBALS['nvx_h1_test_durable'][ $post_id ]['_nvx_medical_reviewer']      = array( ' RIVERA ' );
+$GLOBALS['nvx_h1_test_durable'][ $post_id ]['_nvx_medical_review_date']   = array( ' 2026-08-01 ' );
+$normalized_review = nvx_h1_durable_aesthetic_review_state( $post_id );
+if (
+	! (bool) $normalized_review['approved']
+	|| 'approved' !== $normalized_review['status']
+	|| 'rivera' !== $normalized_review['reviewer']
+	|| '2026-08-01' !== $normalized_review['date']
+) {
+	fwrite( STDERR, "H1_REVIEW_PRESERVATION=FAIL reason=durable_approval_normalization\n" );
+	exit( 1 );
+}
+
 // Conflicting durable duplicates are not a valid source of truth and must fail closed.
 $GLOBALS['nvx_h1_test_durable'][ $post_id ]['_nvx_aesthetic_treatment_key'] = array( 'fixture', 'conflict' );
 $conflict_detected = false;
@@ -142,4 +157,4 @@ if ( ! $conflict_detected ) {
 	exit( 1 );
 }
 
-echo "H1_REVIEW_PRESERVATION=PASS approved=preserved unapproved=pending preplan_authority=durable stale_cache_bypass=blocked duplicate_conflict=fail_closed\n";
+echo "H1_REVIEW_PRESERVATION=PASS approved=preserved unapproved=pending preplan_authority=durable stale_cache_bypass=blocked approval_normalization=bounded duplicate_conflict=fail_closed\n";
