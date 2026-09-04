@@ -34,6 +34,44 @@ const RETIRED_STATIC_INLINE_SYMBOLS = [
   'nvx_theme_drop_inlined_file_links',
   'nvx-critical-inline',
 ];
+const AUTHENTIC_GRID_GEOMETRY_RULES = [
+  {
+    selector: '.nvx-authentic-photo-grid__grid',
+    declaration: /grid-template-columns\s*:\s*repeat\(\s*12\s*,/u,
+    fixtureDeclaration: 'grid-template-columns: repeat(12, minmax(0, 1fr));',
+    label: 'desktop grid uses 12 columns',
+  },
+  {
+    selector: '.nvx-authentic-photo-grid__item:first-child:nth-last-child(2)',
+    declaration: /grid-column\s*:\s*span\s+7\b/u,
+    fixtureDeclaration: 'grid-column: span 7;',
+    label: 'two-photo lead spans 7 columns',
+  },
+  {
+    selector: '.nvx-authentic-photo-grid__item:nth-child(2):last-child',
+    declaration: /grid-column\s*:\s*span\s+5\b/u,
+    fixtureDeclaration: 'grid-column: span 5;',
+    label: 'two-photo support spans 5 columns',
+  },
+  {
+    selector: '.nvx-authentic-photo-grid__item:nth-child(n + 3)',
+    declaration: /grid-column\s*:\s*span\s+6\b/u,
+    fixtureDeclaration: 'grid-column: span 6;',
+    label: 'subsequent photos span 6 columns',
+  },
+  {
+    selector: '.nvx-authentic-photo-grid__image',
+    declaration: /aspect-ratio\s*:\s*4\s*\/\s*3\b/u,
+    fixtureDeclaration: 'aspect-ratio: 4 / 3;',
+    label: 'supporting images use 4:3 ratio',
+  },
+  {
+    selector: '.nvx-authentic-photo-grid__item:first-child .nvx-authentic-photo-grid__image',
+    declaration: /aspect-ratio\s*:\s*3\s*\/\s*2\b/u,
+    fixtureDeclaration: 'aspect-ratio: 3 / 2;',
+    label: 'lead image uses 3:2 ratio',
+  },
+];
 
 async function walk(dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -128,6 +166,43 @@ function fontSizeDeclarations(source) {
   }));
 }
 
+function cssRuleBlocks(source) {
+  const code = maskCssComments(source);
+  return [...code.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].map((match) => ({
+    selectors: match[1]
+      .split(',')
+      .map((selector) => selector.trim())
+      .filter(Boolean),
+    declarations: match[2],
+  }));
+}
+
+function geometryRuleViolations(source, requirements = AUTHENTIC_GRID_GEOMETRY_RULES) {
+  const rules = cssRuleBlocks(source);
+  return requirements
+    .filter((requirement) => !rules.some(
+      (rule) => rule.selectors.includes(requirement.selector) && requirement.declaration.test(rule.declarations)
+    ))
+    .map((requirement) => requirement.label);
+}
+
+function geometryMatcherFixtureViolations() {
+  const violations = [];
+  AUTHENTIC_GRID_GEOMETRY_RULES.forEach((requirement, index) => {
+    const decoy = `.nvx-geometry-decoy-${index}`;
+    const negativeFixture = `${requirement.selector} { display: block; }\n${decoy} { ${requirement.fixtureDeclaration} }`;
+    if (geometryRuleViolations(negativeFixture, [requirement]).length === 0) {
+      violations.push(`negative fixture ${index + 1} crossed a CSS rule boundary`);
+    }
+
+    const positiveFixture = `${requirement.selector} { ${requirement.fixtureDeclaration} }\n${decoy} { display: block; }`;
+    if (geometryRuleViolations(positiveFixture, [requirement]).length !== 0) {
+      violations.push(`positive fixture ${index + 1} rejected the owning CSS rule`);
+    }
+  });
+  return violations;
+}
+
 async function main() {
   const violations = [];
   const themeFiles = await walk(THEME_DIR);
@@ -201,18 +276,19 @@ async function main() {
   }
 
   const editorial = await fs.readFile(EDITORIAL_OWNER, 'utf8');
-  const geometryMarkers = [
-    /grid-template-columns:\s*repeat\(12,/u,
-    /first-child:nth-last-child\(2\)[\s\S]*?grid-column:\s*span 7/u,
-    /nth-child\(2\):last-child[\s\S]*?grid-column:\s*span 5/u,
-    /nth-child\(n \+ 3\)[\s\S]*?grid-column:\s*span 6/u,
-    /aspect-ratio:\s*4 \/ 3/u,
-    /first-child \.nvx-authentic-photo-grid__image[\s\S]*?aspect-ratio:\s*3 \/ 2/u,
+  geometryRuleViolations(editorial).forEach((label) => {
+    violations.push(`authentic photo grid canonical geometry missing in owning rule: ${label}`);
+  });
+  geometryMatcherFixtureViolations().forEach((failure) => {
+    violations.push(`authentic photo grid geometry matcher fixture failed: ${failure}`);
+  });
+
+  const responsiveMarkers = [
     /@media \(min-width:\s*768px\) and \(max-width:\s*1239px\)/u,
     /@media \(max-width:\s*767px\)/u,
   ];
-  geometryMarkers.forEach((marker, index) => {
-    if (!marker.test(editorial)) violations.push(`authentic photo grid canonical geometry marker ${index + 1} missing`);
+  responsiveMarkers.forEach((marker, index) => {
+    if (!marker.test(editorial)) violations.push(`authentic photo grid responsive geometry marker ${index + 1} missing`);
   });
 
   for (const [name, owners] of keyframeOwners.entries()) {
@@ -242,7 +318,7 @@ async function main() {
 
   console.log(
     `CSS_OWNERSHIP_CONTRACT=PASS css_sources=${cssFiles.length} keyframes=${keyframeOwners.size} ` +
-    'static_delivery=linked dynamic_inline_owners=1 authentic_grid_owner=editorial typography_spacing_crossovers=0'
+    'static_delivery=linked dynamic_inline_owners=1 authentic_grid_owner=editorial typography_spacing_crossovers=0 geometry_rules=block_bounded'
   );
 }
 
