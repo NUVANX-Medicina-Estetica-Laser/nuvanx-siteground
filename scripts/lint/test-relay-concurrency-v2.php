@@ -1,103 +1,92 @@
 <?php
 /**
- * Deterministic concurrency harness for the Supabase relay outbox.
+ * Behavioral contract for Supabase relay outbox — atomic-claim design.
  *
- * Exercises claim acquisition, idempotency, publication fencing, partial
- * metadata failure, orphan recovery, monotonic attempt accumulation, active
- * publisher contention, terminal claim release, rollout adoption and post-
- * insert interleavings without requiring a live WordPress runtime.
+ * Ownership is acquired via add_option() with an in-flight lease/token ($expiry|$token).
+ *
+ * Invariants tested:
+ *   1. CLAIM_ACQUIRED          — first enqueue wins the add_option claim.
+ *   2. CLAIM_IDEMPOTENT        — second enqueue for same body routes to existing item.
+ *   3. CLAIM_BOUND_TO_POST_ID  — after publish, claim option value equals post_id.
+ *   4. PUBLICATION_FENCE       — pending status is not drain authority without the bound claim.
+ *   5. METADATA_FAIL_RELEASES  — meta failure deletes post and releases claim option.
+ *   6. ORPHAN_RECOVERY         — enqueue with expired in-flight claim takes over via CAS.
+ *   7. ATTEMPTS_MONOTONIC      — record_existing_attempt never decreases _nvx_relay_attempts.
+ *   8. INTERLEAVED_OWNER_SAFE  — active owner lease is never stolen or deleted by contender.
+ *   9. LIFECYCLE_RELEASE       — completed/dead relays release claim so future retries succeed.
+ *  10. ROLLOUT_ADOPTION        — legacy pending posts without claim option are safely adopted.
+ *  11. SOURCE_INTEGRITY        — atomic primitives, release helpers, and publication fence in source.
+ *  12. EXPIRED_PUBLISHER       — lease expiry produces exactly one fenced, drainable retry.
  *
  * @package nuvanx-medical
  */
 
 declare(strict_types=1);
 
-class WP_Error {
-	private string $code;
-	public function __construct( string $code = '', string $message = '' ) { $this->code = $code; unset( $message ); }
-	public function get_error_code(): string { return $this->code; }
-}
-class WP_Post {
-	public int $ID = 0;
-	public string $post_status = '';
-	public string $post_content = '';
-}
-class WP_Query {
-	public array $posts = array();
-	public function __construct( array $args = array() ) {
-		$this->posts = array();
-		$statuses    = (array) ( $args['post_status'] ?? array() );
-		$meta_query  = $args['meta_query'] ?? array();
-		foreach ( $GLOBALS['nvx_mock_posts'] as $id => $post ) {
-			if ( ! in_array( (string) ( $post->post_status ?? '' ), $statuses, true ) ) { continue; }
-			$match = true;
-			foreach ( $meta_query as $mq ) {
-				$key     = (string) ( $mq['key'] ?? '' );
-				$compare = strtoupper( (string) ( $mq['compare'] ?? '=' ) );
-				$exists  = array_key_exists( $key, $GLOBALS['nvx_mock_post_meta'][ $id ] ?? array() );
-				$found   = $GLOBALS['nvx_mock_post_meta'][ $id ][ $key ] ?? '';
-				if ( 'NOT EXISTS' === $compare ) {
-					if ( $exists && '' !== (string) $found ) { $match = false; break; }
-					continue;
-				}
-				$value = (string) ( $mq['value'] ?? '' );
-				if ( '<=' === $compare ) {
-					if ( (int) $found > (int) $value ) { $match = false; break; }
-					continue;
-				}
-				if ( (string) $found !== $value ) { $match = false; break; }
-			}
-			if ( $match ) { $this->posts[] = $post; }
-		}
+define( 'ABSPATH', __DIR__ );
+define( 'MINUTE_IN_SECONDS', 60 );
+define( 'NVX_SUPABASE_RELAY_QUEUE_LOCK_TTL', 60 );
+define( 'NVX_SUPABASE_RELAY_QUEUE_CAS_MAX_ATTEMPTS', 4 );
+
+if ( ! class_exists( 'WP_Post' ) ) {
+	class WP_Post {
+		public $ID           = 0;
+		public $post_status  = 'pending';
+		public $post_content = '';
 	}
 }
 
-if ( ! defined( 'ABSPATH' ) ) { define( 'ABSPATH', __DIR__ . '/' ); }
-if ( ! defined( 'MINUTE_IN_SECONDS' ) ) { define( 'MINUTE_IN_SECONDS', 60 ); }
+if ( ! class_exists( 'WP_Error' ) ) {
+	final class WP_Error {
+		public function __construct(
+			private string $code    = '',
+			private string $message = ''
+		) {}
+		public function get_error_code(): string { return $this->code; }
+	}
+}
 
-$GLOBALS['nvx_mock_options']                    = array();
-$GLOBALS['nvx_mock_posts']                      = array();
-$GLOBALS['nvx_mock_post_meta']                  = array();
-$GLOBALS['nvx_mock_deleted_posts']              = array();
-$GLOBALS['nvx_mock_deleted_options']            = array();
-$GLOBALS['nvx_mock_next_post_id']               = 1000;
-$GLOBALS['nvx_mock_time']                       = 1700000000;
-$GLOBALS['nvx_mock_meta_failure_on_post']       = 0;
-$GLOBALS['nvx_mock_update_failure_on_post']     = 0;
-$GLOBALS['nvx_mock_insert_failure']             = false;
-$GLOBALS['nvx_mock_adopt_inserted_post']        = false;
-$GLOBALS['nvx_mock_meta_permanent_fail_keys']   = array();
-$GLOBALS['nvx_mock_option_cas_conflict_values'] = array();
-$GLOBALS['nvx_mock_hook_after_insert']          = null;
-$GLOBALS['nvx_mock_hook_on_status_draft']       = null;
-
-function add_action( ...$args ): void {}
-function add_filter( ...$args ): void {}
-function register_post_type( ...$args ): void {}
-function register_post_status( ...$args ): void {}
-function wp_next_scheduled( ...$args ) { return false; }
-function wp_schedule_event( ...$args ): bool { return true; }
-function wp_clear_scheduled_hook( ...$args ): int { return 0; }
-function sanitize_key( $value ): string { return strtolower( preg_replace( '/[^a-z0-9_-]/i', '', (string) $value ) ?? '' ); }
+// WordPress stubs
+function add_action( ...$args ): void { unset( $args ); }
+function add_filter( ...$args ): void { unset( $args ); }
+function register_post_type( ...$args ): void { unset( $args ); }
+function wp_next_scheduled( ...$args ) { unset( $args ); return false; }
+function wp_schedule_event( ...$args ): bool { unset( $args ); return true; }
+function wp_clear_scheduled_hook( ...$args ): int { unset( $args ); return 1; }
+function sanitize_key( $value ): string { return preg_replace( '/[^a-z0-9_-]/i', '', (string) $value ) ?? ''; }
 function sanitize_text_field( $value ): string { return trim( (string) $value ); }
-function sanitize_url( $value ): string { return (string) $value; }
-function wp_parse_url( $url, $component = -1 ) { return parse_url( (string) $url, $component ); }
-function wp_slash( $value ) { return addslashes( (string) $value ); }
-function wp_generate_uuid4(): string { static $i = 0; return '00000000-0000-4000-8000-' . str_pad( (string) ++$i, 12, '0', STR_PAD_LEFT ); }
+function wp_slash( $value ): string { return addslashes( (string) $value ); }
 function absint( $value ): int { return abs( (int) $value ); }
 function is_wp_error( $value ): bool { return $value instanceof WP_Error; }
-function wp_remote_retrieve_response_code( $response ): int { return is_array( $response ) ? (int) ( $response['response']['code'] ?? 0 ) : 0; }
-function wp_remote_post( ...$args ) { return array( 'response' => array( 'code' => 503 ) ); }
-function home_url( $path = '' ): string { return 'https://nuvanx.com' . (string) $path; }
+function nvx_lead_captured_endpoint(): string { return 'https://collector.example.test/functions/v1/web-lead-captured'; }
 
-function add_option( string $key, $value, string $deprecated = '', bool $autoload = true ): bool {
-	unset( $deprecated, $autoload );
+// Mock state
+$GLOBALS['nvx_mock_time']                     = 1000000;
+$GLOBALS['nvx_mock_options']                  = array();
+$GLOBALS['nvx_mock_post_meta']                = array();
+$GLOBALS['nvx_mock_meta_permanent_fail_keys'] = array();
+$GLOBALS['nvx_mock_posts']                    = array();
+$GLOBALS['nvx_mock_next_post_id']             = 100;
+$GLOBALS['nvx_mock_deleted_options']          = array();
+$GLOBALS['nvx_mock_deleted_posts']            = array();
+$GLOBALS['nvx_mock_insert_failure']           = false;
+$GLOBALS['nvx_mock_meta_failure_on_post']     = 0;
+$GLOBALS['nvx_mock_adopt_inserted_post']      = false;
+$GLOBALS['nvx_mock_update_failure_on_post']   = 0;
+
+// Option mocks
+function get_option( string $key, $default = false ) {
+	return $GLOBALS['nvx_mock_options'][ $key ] ?? $default;
+}
+function add_option( string $key, $value, $deprecated = '', $autoload = 'yes' ): bool {
 	if ( array_key_exists( $key, $GLOBALS['nvx_mock_options'] ) ) { return false; }
 	$GLOBALS['nvx_mock_options'][ $key ] = (string) $value;
 	return true;
 }
-function get_option( string $key, $default = '' ) { return $GLOBALS['nvx_mock_options'][ $key ] ?? $default; }
-function update_option( string $key, $value ): bool { $GLOBALS['nvx_mock_options'][ $key ] = (string) $value; return true; }
+function update_option( string $key, $value, $autoload = null ): bool {
+	$GLOBALS['nvx_mock_options'][ $key ] = (string) $value;
+	return true;
+}
 function delete_option( string $key ): bool {
 	$GLOBALS['nvx_mock_deleted_options'][] = $key;
 	unset( $GLOBALS['nvx_mock_options'][ $key ] );
@@ -168,9 +157,6 @@ function wp_insert_post( $postarr = array(), $wp_error = false ) {
 	$o->post_status                   = (string) ( $postarr['post_status'] ?? 'pending' );
 	$o->post_content                  = stripslashes( (string) ( $postarr['post_content'] ?? '' ) );
 	$GLOBALS['nvx_mock_posts'][ $id ] = $o;
-	if ( isset( $GLOBALS['nvx_mock_hook_after_insert'] ) && is_callable( $GLOBALS['nvx_mock_hook_after_insert'] ) ) {
-		( $GLOBALS['nvx_mock_hook_after_insert'] )( $id, $postarr );
-	}
 	return $id;
 }
 function wp_update_post( $postarr = array(), $wp_error = false ) {
@@ -374,14 +360,210 @@ $require( (string) get_option( $claim_key10, '' ) === (string) $legacy_post_id, 
 $body12       = '{"submission_id":"inv12-expired-publish"}';
 $dedupe_key12 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body12, '' );
 $claim_key12  = nvx_supabase_relay_queue_claim_key( $dedupe_key12 );
-$GLOBALS['nvx_mock_adopt_inserted_post'] = true;
-$post12 = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body12, array(), 1 );
-$require( $post12 > 0, 'EXPIRED_PUBLISH_LOST_BIND_RETURNS_WINNER' );
-$require( (string) $post12 === (string) get_option( $claim_key12, '' ), 'EXPIRED_PUBLISH_CLAIM_POINTS_TO_WINNER' );
 
-if ( $failures ) {
-	fwrite( STDERR, 'OUTBOX_CONCURRENCY_V2=FAIL count=' . count( $failures ) . "\n" );
+// Seed contender's valid pending post
+$contender_post_id = ++$GLOBALS['nvx_mock_next_post_id'];
+$contender_post    = new WP_Post();
+$contender_post->ID          = $contender_post_id;
+$contender_post->post_status = 'pending';
+$GLOBALS['nvx_mock_posts'][ $contender_post_id ] = $contender_post;
+$GLOBALS['nvx_mock_post_meta'][ $contender_post_id ]['_nvx_relay_dedupe_key'] = $dedupe_key12;
+$GLOBALS['nvx_mock_post_meta'][ $contender_post_id ]['_nvx_relay_attempts']   = '1';
+
+// When original publisher attempts to CAS bind the claim to its post_id,
+// simulate a contender having taken over the option with $contender_post_id.
+$GLOBALS['nvx_mock_option_cas_conflict_values'][ $claim_key12 ] = (string) $contender_post_id;
+
+$posts_before = count( $GLOBALS['nvx_mock_posts'] );
+$returned_id  = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body12, array(), 1 );
+
+$require( $returned_id === $contender_post_id, 'EXPIRED_PUBLISHER_ROUTES_TO_CONTENDER' );
+$require( count( $GLOBALS['nvx_mock_posts'] ) === $posts_before, 'REDUNDANT_POST_DELETED_ON_FAILED_BIND' );
+
+$pending_for_dedupe = 0;
+foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
+	if ( 'pending' === ( $p_obj->post_status ?? '' ) && ( $GLOBALS['nvx_mock_post_meta'][ $p_id ]['_nvx_relay_dedupe_key'] ?? '' ) === $dedupe_key12 ) {
+		$pending_for_dedupe++;
+	}
+}
+$require( 1 === $pending_for_dedupe, 'NO_DUPLICATE_PENDING_DELIVERIES_ON_EXPIRED_PUBLISHER' );
+
+// ── Invariant 13: EXPIRED_PUBLISHER_SUCCESSOR_ADOPTS_SAME_POST ───────────────
+// Interleave publication_duration > lease: after metadata exists, successor B
+// takes over and binds A's exact pending row. A's failed bind must preserve it.
+$body13       = '{"submission_id":"inv13-expired-adopted"}';
+$dedupe_key13 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body13, '' );
+$claim_key13  = nvx_supabase_relay_queue_claim_key( $dedupe_key13 );
+$GLOBALS['nvx_mock_adopt_inserted_post'] = true;
+
+$posts_before13 = count( $GLOBALS['nvx_mock_posts'] );
+$adopted13      = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body13, array(), 1 );
+
+$require( $adopted13 > 0, 'EXPIRED_SUCCESSOR_ADOPTION_RETURNS_POST' );
+$require( isset( $GLOBALS['nvx_mock_posts'][ $adopted13 ] ), 'ADOPTED_POST_NOT_DELETED_BY_EXPIRED_OWNER' );
+$require( (string) $adopted13 === (string) get_option( $claim_key13, '' ), 'ADOPTED_POST_OWNS_DURABLE_FENCE' );
+$require( count( $GLOBALS['nvx_mock_posts'] ) === $posts_before13 + 1, 'EXPIRED_ADOPTION_PRESERVES_EXACTLY_ONE_ROW' );
+
+$drainable13 = 0;
+foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
+	if (
+		'pending' === ( $p_obj->post_status ?? '' )
+		&& ( $GLOBALS['nvx_mock_post_meta'][ $p_id ]['_nvx_relay_dedupe_key'] ?? '' ) === $dedupe_key13
+		&& (string) get_option( $claim_key13, '' ) === (string) $p_id
+	) {
+		$drainable13++;
+	}
+}
+$require( 1 === $drainable13, 'PUBLICATION_DURATION_GT_LEASE_HAS_ONE_DRAINABLE_PENDING' );
+
+// A live successor token makes a pending row non-drainable; after expiry the
+// drainer can atomically recover that same row without creating a second copy.
+$body14       = '{"submission_id":"inv14-fence-recovery"}';
+$dedupe_key14 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body14, '' );
+$claim_key14  = nvx_supabase_relay_queue_claim_key( $dedupe_key14 );
+$post14       = wp_insert_post( array( 'post_status' => 'pending', 'post_content' => $body14 ) );
+add_post_meta( $post14, '_nvx_relay_dedupe_key', $dedupe_key14, true );
+$GLOBALS['nvx_mock_options'][ $claim_key14 ] = ( $GLOBALS['nvx_mock_time'] + 10 ) . '|successor-live';
+$require( ! nvx_supabase_relay_queue_acquire_publication_fence( $post14, $dedupe_key14 ), 'LIVE_SUCCESSOR_PREVENTS_DRAIN' );
+$GLOBALS['nvx_mock_time'] += 11;
+$require( nvx_supabase_relay_queue_acquire_publication_fence( $post14, $dedupe_key14 ), 'EXPIRED_SUCCESSOR_RECOVERED_BY_DRAINER' );
+$require( (string) $post14 === (string) get_option( $claim_key14, '' ), 'RECOVERY_BINDS_EXACT_POST_FENCE' );
+
+// A complete oldest-first batch of structurally incomplete prepared rows must
+// be quarantined so the valid due row behind it can acquire its fence.
+$invalid_batch = array();
+for ( $index = 0; $index < NVX_SUPABASE_RELAY_QUEUE_BATCH; $index++ ) {
+	$invalid_id = wp_insert_post(
+		array(
+			'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+			'post_content' => '{}',
+		)
+	);
+	add_post_meta( $invalid_id, '_nvx_relay_next_attempt', '0', true );
+	$invalid_batch[] = $invalid_id;
+}
+
+$drain_lock = 'invalid-batch-recovery-lock';
+$GLOBALS['nvx_mock_options']['nvx_supabase_relay_drain_lock_v1'] = ( $GLOBALS['nvx_mock_time'] + 60 ) . '|' . $drain_lock;
+foreach ( $invalid_batch as $invalid_id ) {
+	$require( ! nvx_supabase_relay_queue_item_due( $invalid_id, $drain_lock, 60 ), 'INCOMPLETE_PREPARED_NOT_DUE_' . $invalid_id );
+	$require( 'draft' === get_post( $invalid_id )->post_status, 'INCOMPLETE_PREPARED_QUARANTINED_' . $invalid_id );
+}
+
+$valid_body15   = '{"submission_id":"inv15-after-invalid-batch"}';
+$valid_dedupe15 = nvx_supabase_relay_dedupe_key( 'lead_captured', $valid_body15, '' );
+$valid_post15   = wp_insert_post( array( 'post_status' => 'pending', 'post_content' => $valid_body15 ) );
+add_post_meta( $valid_post15, '_nvx_relay_dedupe_key', $valid_dedupe15, true );
+add_post_meta( $valid_post15, '_nvx_relay_next_attempt', '0', true );
+$require( nvx_supabase_relay_queue_item_due( $valid_post15, $drain_lock, 60 ), 'VALID_ROW_AFTER_INVALID_BATCH_IS_DUE' );
+$require( (string) $valid_post15 === (string) get_option( nvx_supabase_relay_queue_claim_key( $valid_dedupe15 ), '' ), 'VALID_ROW_AFTER_BATCH_OWNS_FENCE' );
+
+// If a successor misses an earlier private row before its readiness marker,
+// the eventual claim winner must retire that row before becoming drainable.
+$body16       = '{"submission_id":"inv16-superseded-prepared"}';
+$dedupe_key16 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body16, '' );
+$claim_key16  = nvx_supabase_relay_queue_claim_key( $dedupe_key16 );
+$loser16      = wp_insert_post( array( 'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS, 'post_content' => $body16 ) );
+add_post_meta( $loser16, '_nvx_relay_dedupe_key', $dedupe_key16, true );
+$winner16 = wp_insert_post( array( 'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS, 'post_content' => $body16 ) );
+add_post_meta( $winner16, '_nvx_relay_dedupe_key', $dedupe_key16, true );
+$GLOBALS['nvx_mock_options'][ $claim_key16 ] = (string) $winner16;
+
+$require( nvx_supabase_relay_queue_finalize_publication( $winner16, $dedupe_key16 ), 'WINNER_FINALIZES_AFTER_MISSED_LOOKUP' );
+$require( ! isset( $GLOBALS['nvx_mock_posts'][ $loser16 ] ), 'SUPERSEDED_PREPARED_ROW_RETIRED' );
+$require( isset( $GLOBALS['nvx_mock_posts'][ $winner16 ] ) && 'pending' === $GLOBALS['nvx_mock_posts'][ $winner16 ]->post_status, 'ONLY_WINNER_BECOMES_PENDING' );
+
+$remaining16 = 0;
+foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
+	if (
+		in_array( ( $p_obj->post_status ?? '' ), array( 'pending', NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS ), true )
+		&& ( $GLOBALS['nvx_mock_post_meta'][ $p_id ]['_nvx_relay_dedupe_key'] ?? '' ) === $dedupe_key16
+	) {
+		$remaining16++;
+	}
+}
+$require( 1 === $remaining16, 'WINNER_RETIRES_ALL_OTHER_READY_ROWS' );
+
+$late_non_owner16 = wp_insert_post( array( 'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS, 'post_content' => $body16 ) );
+add_post_meta( $late_non_owner16, '_nvx_relay_dedupe_key', $dedupe_key16, true );
+$require( ! nvx_supabase_relay_queue_acquire_publication_fence( $late_non_owner16, $dedupe_key16 ), 'LATE_NON_OWNER_CANNOT_ACQUIRE_FENCE' );
+$require( ! isset( $GLOBALS['nvx_mock_posts'][ $late_non_owner16 ] ), 'LATE_NON_OWNER_RETIRES_ON_CANONICAL_FENCE' );
+
+$pre_drain_duplicate16 = wp_insert_post( array( 'post_status' => 'pending', 'post_content' => $body16 ) );
+add_post_meta( $pre_drain_duplicate16, '_nvx_relay_dedupe_key', $dedupe_key16, true );
+nvx_supabase_relay_queue_retire_duplicate_rows( $winner16, $dedupe_key16 );
+$require( ! isset( $GLOBALS['nvx_mock_posts'][ $pre_drain_duplicate16 ] ), 'DRAIN_COMPLETION_RETIRES_LATE_DUPLICATE' );
+wp_delete_post( $winner16, true );
+nvx_supabase_relay_queue_release_claim( $dedupe_key16, (string) $winner16 );
+
+$after_drain16 = 0;
+foreach ( $GLOBALS['nvx_mock_posts'] as $p_id => $p_obj ) {
+	if ( ( $GLOBALS['nvx_mock_post_meta'][ $p_id ]['_nvx_relay_dedupe_key'] ?? '' ) === $dedupe_key16 ) {
+		$after_drain16++;
+	}
+}
+$require( 0 === $after_drain16, 'NO_DUPLICATE_SURVIVES_CANONICAL_DRAIN' );
+
+// A claimed prepared row retains attempt accounting when its idempotent
+// prepared→pending transition fails temporarily.
+$body17       = '{"submission_id":"inv17-finalize-failure"}';
+$dedupe_key17 = nvx_supabase_relay_dedupe_key( 'lead_captured', $body17, '' );
+$claim_key17  = nvx_supabase_relay_queue_claim_key( $dedupe_key17 );
+$prepared17   = wp_insert_post( array( 'post_status' => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS, 'post_content' => $body17 ) );
+add_post_meta( $prepared17, '_nvx_relay_attempts', '1', true );
+add_post_meta( $prepared17, '_nvx_relay_next_attempt', '0', true );
+add_post_meta( $prepared17, '_nvx_relay_dedupe_key', $dedupe_key17, true );
+$GLOBALS['nvx_mock_options'][ $claim_key17 ] = (string) $prepared17;
+$GLOBALS['nvx_mock_update_failure_on_post'] = $prepared17;
+$failed_finalize17 = nvx_supabase_relay_queue_enqueue( 'lead_captured', $body17, array(), 2 );
+$GLOBALS['nvx_mock_update_failure_on_post'] = 0;
+
+$require( $prepared17 === $failed_finalize17, 'FAILED_FINALIZATION_RETURNS_CANONICAL_PREPARED' );
+$require( '3' === (string) get_post_meta( $prepared17, '_nvx_relay_attempts', true ), 'FAILED_FINALIZATION_PRESERVES_ATTEMPTS' );
+$require( NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS === get_post( $prepared17 )->post_status, 'FAILED_FINALIZATION_REMAINS_RECOVERABLE' );
+
+// An abandoned prepared row whose claim was released (claim option is empty)
+// must be retired by the fence and never adopted as a legacy row.
+$body18         = '{"submission_id":"inv18-empty-claim-retired"}';
+$dedupe_key18   = nvx_supabase_relay_dedupe_key( 'lead_captured', $body18, '' );
+$claim_key18    = nvx_supabase_relay_queue_claim_key( $dedupe_key18 );
+$abandoned_post = wp_insert_post(
+	array(
+		'post_status'  => NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS,
+		'post_content' => $body18,
+	)
+);
+add_post_meta( $abandoned_post, '_nvx_relay_dedupe_key', $dedupe_key18, true );
+unset( $GLOBALS['nvx_mock_options'][ $claim_key18 ] );
+
+$require( ! nvx_supabase_relay_queue_acquire_publication_fence( $abandoned_post, $dedupe_key18 ), 'ABANDONED_PREPARED_NOT_ADOPTED_WHEN_CLAIM_EMPTY' );
+$require( ! isset( $GLOBALS['nvx_mock_posts'][ $abandoned_post ] ), 'ABANDONED_PREPARED_DELETED_ON_EMPTY_CLAIM' );
+
+// ── Invariant 11: SOURCE_INTEGRITY ───────────────────────────────────────────
+$src = (string) file_get_contents( $queue_path );
+$require( false !== strpos( $src, 'nvx_relay_claim_' ), 'CLAIM_KEY_PREFIX_IN_SOURCE' );
+$require( false !== strpos( $src, 'add_option( $claim_key' ), 'ATOMIC_ACQUISITION_IN_SOURCE' );
+$require( false !== strpos( $src, 'nvx_supabase_relay_queue_release_claim' ), 'RELEASE_CLAIM_HELPER_IN_SOURCE' );
+$require( false !== strpos( $src, 'nvx_supabase_relay_queue_is_valid_pending_item' ), 'VALID_PENDING_HELPER_IN_SOURCE' );
+$require( false !== strpos( $src, 'nvx_supabase_relay_queue_acquire_publication_fence' ), 'PUBLICATION_FENCE_IN_SOURCE' );
+$require( false !== strpos( $src, 'NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS' ), 'PRIVATE_PREPARED_STATUS_IN_SOURCE' );
+$require( false !== strpos( $src, 'nvx_supabase_relay_queue_retire_duplicate_rows' ), 'SUPERSEDED_ROW_RETIREMENT_IN_SOURCE' );
+$require( false !== strpos( $src, 'claim_lost_during_publish' ), 'CLAIM_LOST_HANDLED_IN_SOURCE' );
+
+$enqueue_fn_pos = strpos( $src, 'function nvx_supabase_relay_queue_enqueue' );
+$post_id_return = strrpos( $src, 'return $post_id;' );
+$enqueue_body   = ( false !== $enqueue_fn_pos && false !== $post_id_return )
+	? substr( $src, (int) $enqueue_fn_pos, (int) $post_id_return - (int) $enqueue_fn_pos )
+	: '';
+$require( false === strpos( $enqueue_body, "'post_status' => 'draft'" ), 'NO_DRAFT_STATUS_IN_ENQUEUE' );
+
+// Results
+if ( ! empty( $failures ) ) {
+	fwrite(
+		STDERR,
+		'OUTBOX_CONCURRENCY_V2=FAIL failures=' . implode( ',', $failures ) . "\n"
+	);
 	exit( 1 );
 }
 
-echo 'OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 two_phase_fence=1 private_prepare=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 expired_bind_cleanup=1 adopted_retry_preserved=1 drainable_exactly_one=1 incomplete_batch_quarantined=1 superseded_rows_retired=1 source_integrity=1' . "\n";
+echo "OUTBOX_CONCURRENCY_V2=PASS atomic_claim=1 idempotent=1 two_phase_fence=1 private_prepare=1 orphan_recovery=1 meta_fail_safe=1 attempts_monotonic=1 interleaved_safe=1 lifecycle_release=1 rollout_adoption=1 expired_bind_cleanup=1 adopted_retry_preserved=1 drainable_exactly_one=1 incomplete_batch_quarantined=1 superseded_rows_retired=1 source_integrity=1\n";
