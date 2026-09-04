@@ -99,7 +99,9 @@ jobs:
           bash -n scripts/ci/wait-for-environment-mutation-turn.sh
           bash -n scripts/ci/verify-staging-acceptance.sh
           bash -n scripts/ci/test-mutation-fifo-contract.sh
+          bash -n scripts/ci/test-siteground-cache-owner.sh
           bash scripts/ci/test-mutation-fifo-contract.sh
+          bash scripts/ci/test-siteground-cache-owner.sh
           node scripts/production/test-deploy-identity-contract.mjs
           mapfile -t workflows < <(find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -printf '%f\n' | sort)
           [[ "${workflows[*]}" == 'production.yml staging.yml' ]] || { printf 'Expected exactly two canonical workflows; found: %s\n' "${workflows[*]}" >&2; exit 1; }
@@ -109,7 +111,7 @@ jobs:
           bash -n scripts/production/test-configure-siteground-ssh.sh
           bash scripts/production/test-configure-siteground-ssh.sh
           grep -Fq 'PRODUCTION_COMPENSATING_ROLLBACK=PASS' scripts/production/compensating-rollback.sh
-          echo 'PRODUCTION_CONTROL_PLANE=PASS workflows=2 compensating_rollback=enforced identity_contract=pass'
+          echo 'PRODUCTION_CONTROL_PLANE=PASS workflows=2 compensating_rollback=enforced cache_owner=canonical identity_contract=pass'
 
       - name: Resolve immutable requested candidate
         id: candidate
@@ -159,7 +161,11 @@ jobs:
           git worktree add --detach "$CANDIDATE_ROOT" "$CANDIDATE_SHA"
           test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$CANDIDATE_SHA"
           find "$CANDIDATE_ROOT/wp-content/themes/nuvanx-medical" -path '*/vendor' -prune -o -name '*.php' -type f -print0 | xargs -0 -n1 php -l >/dev/null
+          test -s "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh"
+          bash -n "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh"
           bash -n "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh"
+          ! grep -Fq 'wp sg purge' "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh"
+          grep -Fq 'siteground_cache_purge "$PROD_ROOT" preserve' "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh"
           node --check "$CANDIDATE_ROOT/scripts/production/deploy-identity-contract.mjs"
           node --check "$CANDIDATE_ROOT/scripts/production/signature-frame-contract.mjs"
           node --check "$CANDIDATE_ROOT/scripts/production/verify-production-boundary.mjs"
@@ -179,7 +185,7 @@ jobs:
           echo "CANDIDATE_ROOT=$CANDIDATE_ROOT" >> "$GITHUB_ENV"
           echo "AUDIT_ROOT=$CANDIDATE_ROOT" >> "$GITHUB_ENV"
           echo "CANONICAL_AUDIT_SHA=$CANDIDATE_SHA" >> "$GITHUB_ENV"
-          echo "PRODUCTION_EXACT_TOOLING=PASS sha=$CANDIDATE_SHA compensating_rollback=enforced identity_contract=pass"
+          echo "PRODUCTION_EXACT_TOOLING=PASS sha=$CANDIDATE_SHA compensating_rollback=enforced cache_owner=canonical identity_contract=pass"
 
       - name: Wait for FIFO environment mutation turn
         if: ${{ !inputs.run_ssh_connectivity_probe }}
@@ -247,6 +253,7 @@ jobs:
           ssh nvx-prod "mkdir -p '$REMOTE_RELEASE/theme' '$REMOTE_RELEASE/tools/migrations' '$REMOTE_RELEASE/lib'"
           rsync -az --delete --exclude='.git' --exclude='php_errorlog' --exclude='*.log' --exclude='_archive*' --exclude='_disabled*' --exclude='*.bak*' "$CANDIDATE_ROOT/wp-content/themes/nuvanx-medical/" "nvx-prod:$REMOTE_RELEASE/theme/"
           rsync -az "$CANDIDATE_ROOT/tools/deploy/deploy-to-prod.sh" "nvx-prod:$REMOTE_RELEASE/deploy-to-prod.sh"
+          rsync -az "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh" "nvx-prod:$REMOTE_RELEASE/siteground-cache-purge.sh"
           rsync -az "$CANDIDATE_ROOT/lib/" "nvx-prod:$REMOTE_RELEASE/lib/"
           # Keep the release payload in lockstep with deploy-to-prod.sh. The deploy
           # script owns the exact migration set; synchronizing the whole accepted
@@ -275,6 +282,13 @@ jobs:
           done
           remote_tests=${remote_tests% && }
           ssh nvx-prod "$remote_tests"
+          local_helper_sha="$(sha256sum "$CANDIDATE_ROOT/tools/deploy/siteground-cache-purge.sh" | cut -d' ' -f1)"
+          remote_helper_sha="$(ssh nvx-prod "test -s '$REMOTE_RELEASE/siteground-cache-purge.sh' && bash -n '$REMOTE_RELEASE/siteground-cache-purge.sh' && sha256sum '$REMOTE_RELEASE/siteground-cache-purge.sh' | cut -d' ' -f1")"
+          [[ "$local_helper_sha" =~ ^[0-9a-f]{64}$ && "$remote_helper_sha" == "$local_helper_sha" ]] || {
+            echo "PRODUCTION_CACHE_HELPER_PAYLOAD=FAIL local=${local_helper_sha:-missing} remote=${remote_helper_sha:-missing}" >&2
+            exit 1
+          }
+          echo "PRODUCTION_CACHE_HELPER_PAYLOAD=PASS sha256=$local_helper_sha exact_sha=$CANDIDATE_SHA"
           echo "PRODUCTION_MIGRATION_PAYLOAD=PASS required=${#required_migrations[@]} exact_sha=$CANDIDATE_SHA"
           echo "PRODUCTION_PAYLOAD=PASS exact_sha=$CANDIDATE_SHA"
 
@@ -374,9 +388,11 @@ jobs:
           mkdir -p scripts/production/artifacts
           test -f "$HOME/.ssh/config"
           test -n "${CANDIDATE_ROOT:-}"
-          ssh nvx-prod "PROD_ROOT='$PROD_ROOT' BASE_URL='$BASE_URL' bash -s" < "$CANDIDATE_ROOT/scripts/production/compensating-rollback.sh" | tee scripts/production/artifacts/compensating-rollback.log
+          test -n "${REMOTE_RELEASE:-}"
+          ssh nvx-prod "PROD_ROOT='$PROD_ROOT' BASE_URL='$BASE_URL' SITEGROUND_CACHE_HELPER='$REMOTE_RELEASE/siteground-cache-purge.sh' bash -s" < "$CANDIDATE_ROOT/scripts/production/compensating-rollback.sh" | tee scripts/production/artifacts/compensating-rollback.log
+          grep -Fq 'PRODUCTION_COMPENSATING_CACHE=PASS' scripts/production/artifacts/compensating-rollback.log
           grep -Fq 'PRODUCTION_COMPENSATING_ROLLBACK=PASS' scripts/production/artifacts/compensating-rollback.log
-          echo 'PRODUCTION_POST_CUTOVER_COMPENSATION=PASS'
+          echo 'PRODUCTION_POST_CUTOVER_COMPENSATION=PASS cache_owner=canonical'
 
       - name: Upload production boundary evidence
         if: always()
@@ -424,6 +440,7 @@ jobs:
             echo "- Deploy/audit tooling SHA: \`$CANONICAL_AUDIT_SHA\`"
             echo '- FIFO lease prevented newer Staging/Production mutations from overtaking this release.'
             echo '- Atomic production cutover + rollback contract: PASS.'
+            echo '- Canonical SiteGround cache owner + exact helper lineage: PASS.'
             echo '- Four-field production identity: PASS.'
             echo '- Post-cutover boundary/origin/identity failure compensation: enforced.'
           } >> "$GITHUB_STEP_SUMMARY"
@@ -769,7 +786,7 @@ jobs:
                     continue
                   fi
                 fi
-                
+
                 if "$LH" "${URLS[$page]}" --output=json --output-path="$out" --only-categories=performance --quiet --chrome-flags='--headless --disable-dev-shm-usage' "${extra[@]}"; then success=1; break; fi
                 sleep $((attempt * 5))
               done
