@@ -34,11 +34,6 @@ on:
         required: true
         default: true
         type: boolean
-      deep_quality:
-        description: Also run PHPCS and PHPStan.
-        required: true
-        default: false
-        type: boolean
       run_performance:
         description: Run the exact-SHA Staging Lighthouse performance gate after acceptance.
         required: true
