@@ -71,8 +71,28 @@ const case03 = cases.find((entry) => entry.id === 'caso-03-abdomen-firmeza');
 requireInvariant(case01?.media_status === 'quarantined', 'PAPADA_PAIR_QUARANTINED_PENDING_VERIFICATION');
 requireInvariant(case03?.media_status === 'quarantined', 'ABDOMEN_PAIR_QUARANTINED_PENDING_VERIFICATION');
 requireInvariant(casesTemplate.includes("'clinical_case' === ( $case['media_scope'] ?? '' )"), 'CASE_TEMPLATE_REQUIRES_MEDIA_SCOPE');
+requireInvariant(casesTemplate.includes("'before_after' === ( $case['media_kind'] ?? '' )"), 'CASE_TEMPLATE_REQUIRES_BEFORE_AFTER_KIND');
 requireInvariant(casesTemplate.includes("'approved' === ( $case['media_status'] ?? '' )"), 'CASE_TEMPLATE_REQUIRES_MEDIA_APPROVAL');
-requireInvariant(casesTemplate.includes('$media_is_approved && ! empty( $case[\'image_before\'] )'), 'CASE_TEMPLATE_FAILS_CLOSED_BEFORE_AFTER');
+requireInvariant(casesTemplate.includes('$media_is_approved && ! empty( $case[\'image_before\'] ) && ! empty( $case[\'image_after\'] )'), 'CASE_TEMPLATE_REQUIRES_COMPLETE_APPROVED_PAIR');
+requireInvariant(!casesTemplate.includes("$case['image']"), 'CASE_TEMPLATE_NO_LEGACY_SINGLE_IMAGE_FALLBACK');
+
+// Deterministic crash/data-window fixture: an otherwise approved before/after
+// record with one missing pair member must stay text-only even if a legacy image
+// field exists. This mirrors the template's complete-pair publication contract.
+const incompleteApprovedPair = {
+  media_scope: 'clinical_case',
+  media_kind: 'before_after',
+  media_status: 'approved',
+  image_before: 'assets/images/cases/fixture-before.webp',
+  image_after: '',
+  image: 'assets/images/legacy-unreviewed.webp',
+};
+const pairWouldRender = incompleteApprovedPair.media_scope === 'clinical_case'
+  && incompleteApprovedPair.media_kind === 'before_after'
+  && incompleteApprovedPair.media_status === 'approved'
+  && String(incompleteApprovedPair.image_before || '') !== ''
+  && String(incompleteApprovedPair.image_after || '') !== '';
+requireInvariant(!pairWouldRender, 'INCOMPLETE_APPROVED_PAIR_FAILS_CLOSED_TEXT_ONLY');
 
 // Journal archive cannot inherit arbitrary WP featured media. Only the governed
 // named catalog may supply an image, with a positive semantic threshold and
@@ -99,5 +119,6 @@ if (failures.length > 0) {
 
 console.log(
   `FRONTEND_MEDIA_INTEGRITY=PASS bridal_owner=1 clinical_cases=${cases.length} ` +
-  `approved_media_pairs=${approvedHashes.size / 2} quarantined_pairs=2 journal_featured_authority=0 journal_semantic_threshold=2`
+  `approved_media_pairs=${approvedHashes.size / 2} quarantined_pairs=2 incomplete_pair_fallback=blocked ` +
+  `journal_featured_authority=0 journal_semantic_threshold=2`
 );
