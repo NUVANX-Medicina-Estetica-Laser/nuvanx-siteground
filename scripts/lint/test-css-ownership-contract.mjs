@@ -7,6 +7,7 @@
  * - wp_add_inline_style() only in the canonical compiled-bundle transport or
  *   explicitly classified runtime dynamic-style owners;
  * - no duplicate global @keyframes names across source stylesheets;
+ * - component families with explicit owners cannot leak into other CSS sources;
  * - every !important declaration is explicitly classified as an approved
  *   accessibility, third-party containment, or print-policy exception;
  * - no hard-coded immutable dist CSS filenames outside dist/manifest.json.
@@ -25,6 +26,19 @@ const RUNTIME_INLINE_STYLE_OWNERS = new Map([
   // Dynamic featured-image URL only. Permanent CSS remains source/dist-owned.
   [path.resolve(THEME_DIR, 'inc/nvx-hero-and-forms.php'), 1],
 ]);
+const COMPONENT_FAMILY_OWNERS = new Map([
+  ['.nvx-authentic-photo-grid', path.resolve(CSS_DIR, 'nvx-patterns-editorial.css')],
+]);
+const AUTHENTIC_GRID_CANONICAL_MARKERS = [
+  'grid-template-columns: repeat(12, minmax(0, 1fr));',
+  'grid-column: span 7;',
+  'grid-column: span 5;',
+  'grid-column: span 6;',
+  'aspect-ratio: 3 / 2;',
+  'aspect-ratio: 4 / 3;',
+  '@media (min-width: 768px) and (max-width: 1239px)',
+  '@media (max-width: 767px)',
+];
 const IGNORED_DIRECTORIES = new Set(['.git', 'node_modules', 'vendor', 'dist']);
 
 async function walk(dir) {
@@ -179,9 +193,19 @@ async function main() {
     .sort();
 
   const keyframeOwners = new Map();
+  const componentOwners = new Map([...COMPONENT_FAMILY_OWNERS.keys()].map((family) => [family, []]));
+  const cssContentByFile = new Map();
+
   for (const file of cssFiles) {
     const content = await fs.readFile(file, 'utf8');
     const scannableContent = maskCssComments(content);
+    cssContentByFile.set(path.resolve(file), { content, scannableContent });
+
+    for (const family of COMPONENT_FAMILY_OWNERS.keys()) {
+      if (scannableContent.includes(family)) {
+        componentOwners.get(family).push(path.resolve(file));
+      }
+    }
 
     for (const match of scannableContent.matchAll(/@(?:-webkit-)?keyframes\s+([A-Za-z0-9_-]+)/g)) {
       const name = match[1];
@@ -201,6 +225,24 @@ async function main() {
         violations.push(`${rel(file)}:${index + 1} unclassified !important: ${sourceLine.trim()}`);
       }
     });
+  }
+
+  for (const [family, expectedOwner] of COMPONENT_FAMILY_OWNERS.entries()) {
+    const owners = componentOwners.get(family) ?? [];
+    if (owners.length !== 1 || owners[0] !== expectedOwner) {
+      violations.push(
+        `component family ${family} must be owned only by ${rel(expectedOwner)}; found ` +
+        (owners.length > 0 ? owners.map(rel).join(', ') : 'no CSS owner')
+      );
+    }
+  }
+
+  const editorialOwner = path.resolve(CSS_DIR, 'nvx-patterns-editorial.css');
+  const editorialContent = cssContentByFile.get(editorialOwner)?.scannableContent ?? '';
+  for (const marker of AUTHENTIC_GRID_CANONICAL_MARKERS) {
+    if (!editorialContent.includes(marker)) {
+      violations.push(`authentic photo grid canonical geometry missing marker: ${marker}`);
+    }
   }
 
   for (const [name, owners] of keyframeOwners.entries()) {
@@ -235,7 +277,8 @@ async function main() {
 
   console.log(
     `CSS_OWNERSHIP_CONTRACT=PASS css_sources=${cssFiles.length} ` +
-    `keyframes=${keyframeOwners.size} inline_owner=canonical important_policy=classified`
+    `keyframes=${keyframeOwners.size} inline_owner=canonical important_policy=classified ` +
+    `component_families=${COMPONENT_FAMILY_OWNERS.size}`
   );
 }
 
