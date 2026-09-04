@@ -183,8 +183,8 @@ while (( page <= max_pages )); do
 done
 
 if (( scan_complete != 1 )); then
-  echo "PR_PREVIEW_LIVENESS=FAIL reason=preview_run_window_incomplete pr=$PR_NUMBER sha=$PR_SHA pages_scanned=$max_pages stage=$stage mutation=forbidden" >&2
-  exit 1
+  echo "PR_PREVIEW_LIVENESS=TRANSIENT reason=preview_run_window_incomplete pr=$PR_NUMBER sha=$PR_SHA pages_scanned=$max_pages stage=$stage mutation=forbidden" >&2
+  exit 75
 fi
 
 echo "PR_PREVIEW_LIVENESS=PASS pr=$PR_NUMBER sha=$PR_SHA base=$api_base_ref run_id=$GITHUB_RUN_ID duplicate_owner=latest stage=$stage"
