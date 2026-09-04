@@ -176,6 +176,13 @@ cancel_superseded_staging_pushes() {
   done <<< "$targets"
 }
 
+validate_pr_preview_liveness() {
+  if [[ "$ROLE" != 'pr-preview' ]]; then
+    return 0
+  fi
+  bash scripts/ci/validate-pr-preview-liveness.sh "${1:-unspecified}"
+}
+
 # A PR preview can wait behind an older mutation for several minutes. Rebuild
 # its synthetic master+PR tree only after the FIFO is positively clear so the
 # deployed preview always includes the latest master visible at mutation time.
@@ -190,14 +197,16 @@ rebuild_pr_preview_after_fifo() {
   : "${GITHUB_ENV:?Missing GITHUB_ENV for pr-preview}"
   [[ "$PR_NUMBER" =~ ^[0-9]+$ && "$PR_SHA" =~ ^[0-9a-f]{40}$ ]]
 
+  validate_pr_preview_liveness post-fifo
+
   git fetch --no-tags origin master
   git fetch --no-tags origin "pull/${PR_NUMBER}/head:refs/remotes/origin/nvx-pr-preview"
   local resolved_pr_sha
   resolved_pr_sha="$(git rev-parse refs/remotes/origin/nvx-pr-preview)"
-  [[ "$resolved_pr_sha" == "$PR_SHA" ]] || {
-    echo "MUTATION_FIFO=FAIL reason=pr_head_mismatch expected=$PR_SHA actual=$resolved_pr_sha" >&2
-    exit 1
-  }
+  if [[ "$resolved_pr_sha" != "$PR_SHA" ]]; then
+    echo "MUTATION_FIFO=SUPERSEDED role=pr-preview reason=pr_head_ref_superseded pr=$PR_NUMBER expected=$PR_SHA actual=$resolved_pr_sha stage=post-fifo mutation=forbidden" >&2
+    exit "$EX_SUPERSEDED"
+  fi
 
   if git worktree list --porcelain | grep -Fqx "worktree $CANDIDATE_ROOT"; then
     git worktree remove --force "$CANDIDATE_ROOT"
@@ -228,6 +237,10 @@ rebuild_pr_preview_after_fifo() {
   ! git -C "$CANDIDATE_ROOT" ls-tree -r "$pr_preview_sha" wp-content/themes/nuvanx-medical/ | awk '$1 == "120000" { found=1 } END { exit(found ? 0 : 1) }'
   find "$CANDIDATE_ROOT/wp-content/themes/nuvanx-medical" -path '*/vendor' -prune -o -name '*.php' -type f -print0 | xargs -0 -n1 php -l >/dev/null
   find "$CANDIDATE_ROOT/wp-content/themes/nuvanx-medical" -name '*.js' -type f -print0 | xargs -0 -r -n1 node --check >/dev/null
+
+  # Re-check after rebuilding the synthetic tree. This narrows the head/state
+  # race between FIFO release and the workflow's first remote mutation.
+  validate_pr_preview_liveness post-rebuild
 
   echo "CANDIDATE_ROOT=$CANDIDATE_ROOT" >> "$GITHUB_ENV"
   echo "PR_PREVIEW_SHA=$pr_preview_sha" >> "$GITHUB_ENV"
