@@ -1018,8 +1018,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_building_complete' ) ) {
 		// Readiness is intentionally not part of structural completeness. The only
 		// recoverable missing-final-write window is next_attempt -> ready. Recovery
 		// first wins BUILDING -> PREPARED, then the existing publication finalizer
-		// repairs _nvx_relay_ready under the publication fence.
-		return true;
+		// repairs a missing _nvx_relay_ready under the publication fence.
+		$ready = (string) get_post_meta( $post_id, '_nvx_relay_ready', true );
+		return '' === $ready || '1' === $ready;
 	}
 }
 
