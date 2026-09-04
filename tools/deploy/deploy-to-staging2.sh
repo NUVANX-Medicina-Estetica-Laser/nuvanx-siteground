@@ -129,6 +129,7 @@ verify_pr_preview_authority_if_applicable() {
   local pr_json=''
   local run_event=''
   local run_head_sha=''
+  local run_pr_head_sha=''
   local api_run_attempt=''
   local run_pr_matches=''
   local pr_state=''
@@ -165,11 +166,13 @@ verify_pr_preview_authority_if_applicable() {
   run_head_sha="$(printf '%s' "$run_json" | jq -r '.head_sha // ""')"
   api_run_attempt="$(printf '%s' "$run_json" | jq -r '(.run_attempt // 0) | tostring')"
   run_pr_matches="$(printf '%s' "$run_json" | jq -r --argjson pr "$pr_number" '[.pull_requests[]? | select(.number == $pr)] | length')"
+  run_pr_head_sha="$(printf '%s' "$run_json" | jq -r --argjson pr "$pr_number" '[.pull_requests[]? | select(.number == $pr) | .head.sha // empty] | if length == 1 then .[0] else "" end')"
 
   [[ "$run_event" == 'pull_request_target' ]] || superseded_pr_preview 'unexpected_run_event'
   [[ "$run_head_sha" =~ ^[0-9a-f]{40}$ ]] || transient_pr_preview_authority 'github_run_head_missing'
   [[ "$api_run_attempt" == "$run_attempt" ]] || superseded_pr_preview 'run_attempt_mismatch'
   [[ "$run_pr_matches" == '1' ]] || superseded_pr_preview 'run_pr_binding_mismatch'
+  [[ "$run_pr_head_sha" =~ ^[0-9a-f]{40}$ ]] || transient_pr_preview_authority 'github_run_pr_head_missing'
 
   pr_json="$(github_public_json "$api_base/pulls/$pr_number" 'pr')"
   if ! printf '%s' "$pr_json" | jq -e 'type == "object"' >/dev/null 2>&1; then
@@ -184,6 +187,7 @@ verify_pr_preview_authority_if_applicable() {
   [[ "$pr_state" == 'open' && -z "$merged_at" ]] || superseded_pr_preview 'pr_not_open'
   [[ "$base_ref" == 'master' ]] || superseded_pr_preview 'pr_base_changed'
   [[ "$current_pr_sha" == "$run_head_sha" ]] || superseded_pr_preview 'pr_head_superseded'
+  [[ "$run_pr_head_sha" == "$run_head_sha" ]] || superseded_pr_preview 'pr_head_superseded'
 
   echo "PR_PREVIEW_AUTHORITY=PASS pr=$pr_number pr_sha=$run_head_sha preview_sha=$preview_sha run_id=$run_id run_attempt=$run_attempt stage=deploy-boundary"
 }
