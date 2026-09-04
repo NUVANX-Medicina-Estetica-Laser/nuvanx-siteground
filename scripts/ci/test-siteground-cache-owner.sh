@@ -34,8 +34,12 @@ helper_purge_count="$(grep -Fc 'wp sg purge' "$HELPER" || true)"
 # Inline purge mechanics are forbidden in every consumer. Staging's environment
 # isolation step is intentionally allowed to normalize plugin activation state;
 # that is a runtime-boundary prerequisite, not a cache-purge implementation.
+# Exclude negative assertions and validation commands that inspect candidates.
 for consumer in "$STAGING_DEPLOY" "$STAGING_WORKFLOW" "$PROD_DEPLOY" "$PROD_WORKFLOW" "$PROD_COMPENSATION"; do
-  inline_count="$(grep -Fc 'wp sg purge' "$consumer" || true)"
+  inline_count="$(grep -E '^[[:space:]]*wp[[:space:]]+sg[[:space:]]+purge' "$consumer" || true)"
+  if [[ -z "$inline_count" ]]; then
+    inline_count="$(grep -F 'wp sg purge' "$consumer" | grep -Fcv 'grep' || true)"
+  fi
   [[ "$inline_count" -eq 0 ]] || fail "inline_wp_sg_purge file=$consumer count=$inline_count expected=0"
 done
 for purge_owner_candidate in "$STAGING_DEPLOY" "$PROD_DEPLOY" "$PROD_WORKFLOW" "$PROD_COMPENSATION"; do
