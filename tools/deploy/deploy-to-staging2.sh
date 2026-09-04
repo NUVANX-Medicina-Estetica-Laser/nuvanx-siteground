@@ -232,7 +232,7 @@ SOURCE_REQUIRED_FILES=(
   style.css
   functions.php
   header.php
-  tools/verify-theme-css.php
+  tools/compile-theme-css.php
   assets/css/nvx-fonts.css
   assets/css/nvx-tokens.css
   assets/css/nvx-base.css
@@ -262,9 +262,10 @@ for required_file in "${SOURCE_REQUIRED_FILES[@]}"; do
   [[ -f "$SOURCE_THEME/$required_file" ]] || fail "source theme is missing $required_file"
 done
 
-echo '== Verify exact-SHA release CSS sources =='
-php "$SOURCE_THEME/tools/verify-theme-css.php"
-echo 'STAGING_CSS_RELEASE=PASS source=exact-release runtime=linked-static'
+echo '== Materialize exact release CSS distribution =='
+SOURCE_DATE_EPOCH=0 php "$SOURCE_THEME/tools/compile-theme-css.php"
+[[ -s "$SOURCE_THEME/dist/manifest.json" ]] || fail 'compiled CSS manifest is missing from immutable staging payload'
+echo 'STAGING_CSS_RELEASE=PASS source=exact-release runtime=compiled-dist'
 
 LIVE_THEME="$WP_ROOT/$THEME_REL"
 [[ -d "$LIVE_THEME" ]] || fail "live staging2 theme does not exist: $LIVE_THEME"
@@ -376,14 +377,16 @@ rsync -a --delete \
   "$SOURCE_THEME/" \
   "$LIVE_THEME/"
 
+find "$LIVE_THEME/assets/css" -maxdepth 1 -type f -name 'nvx-*.min.css' -delete
 printf '%s\n' "$DEPLOY_SHA" > "$LIVE_THEME/.nvx-deploy-sha"
 
 echo '== Verify deployed files and marker =='
 for required_file in "${SOURCE_REQUIRED_FILES[@]}"; do
   [[ -f "$LIVE_THEME/$required_file" ]] || fail "deployed theme is missing $required_file"
 done
-php "$LIVE_THEME/tools/verify-theme-css.php"
-echo 'STAGING_CSS_RUNTIME=PASS source=deployed-theme runtime=linked-static generated_dist=absent'
+[[ -s "$LIVE_THEME/dist/manifest.json" ]] || fail 'deployed theme is missing compiled CSS manifest'
+php "$LIVE_THEME/tools/compile-theme-css.php" --verify-only
+echo 'STAGING_CSS_RUNTIME=PASS source=deployed-theme runtime=compiled-dist fallback=not-required'
 [[ "$(tr -d '\r\n' < "$LIVE_THEME/.nvx-deploy-sha")" == "$DEPLOY_SHA" ]] || fail 'deployed SHA marker does not match'
 grep -Fq 'nvx-patterns-editorial.css' "$LIVE_THEME/functions.php" || fail 'functions.php does not enqueue the canonical editorial stylesheet'
 if grep -Fq 'nvx-theme-bootstrap.php' "$LIVE_THEME/functions.php"; then
