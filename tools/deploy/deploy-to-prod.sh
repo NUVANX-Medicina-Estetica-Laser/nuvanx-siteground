@@ -11,7 +11,7 @@
 # - exact .nvx-deploy-sha marker is part of the staged release
 # - shared content migration + divergence audit run inside the same transaction
 # - any post-cutover failure restores the previous live theme AND database
-# - SiteGround dynamic-cache purge restores the original Speed Optimizer state
+# - SiteGround dynamic-cache purge is owned exclusively by the canonical helper
 set -Eeuo pipefail
 
 PROD_ROOT=""
@@ -67,6 +67,18 @@ DEPLOY_RUN_ID="${GITHUB_RUN_ID:-}"
 }
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
+SITEGROUND_CACHE_HELPER="$SCRIPT_DIR/siteground-cache-purge.sh"
+[[ -s "$SITEGROUND_CACHE_HELPER" ]] || {
+  echo "ERROR: canonical SiteGround cache helper missing at $SITEGROUND_CACHE_HELPER" >&2
+  exit 1
+}
+# shellcheck source=siteground-cache-purge.sh
+source "$SITEGROUND_CACHE_HELPER"
+[[ "$(type -t siteground_cache_purge || true)" == 'function' ]] || {
+  echo 'ERROR: canonical SiteGround cache helper did not define siteground_cache_purge' >&2
+  exit 1
+}
+
 MIGRATION_SCRIPT=""
 AUDIT_SCRIPT=""
 BLOG_HYGIENE_SCRIPT=""
@@ -140,59 +152,6 @@ cleanup_uncommitted_release() {
   fi
 }
 trap cleanup_uncommitted_release EXIT
-
-purge_siteground_dynamic_cache() {
-  local plugin='sg-cachepress'
-  local activated_temporarily=0
-  local purge_rc=0
-  local restore_rc=0
-
-  cd "$PROD_ROOT"
-
-  if wp help sg >/dev/null 2>&1; then
-    wp sg purge
-    echo 'SITEGROUND_DYNAMIC_PURGE=PASS mode=existing-command'
-    return 0
-  fi
-
-  if ! wp plugin is-installed "$plugin" >/dev/null 2>&1; then
-    echo 'SITEGROUND_DYNAMIC_PURGE=SKIPPED reason=sg-command-and-plugin-unavailable'
-    return 0
-  fi
-
-  if ! wp plugin is-active "$plugin" >/dev/null 2>&1; then
-    wp plugin activate "$plugin" --quiet
-    activated_temporarily=1
-  fi
-
-  if wp help sg >/dev/null 2>&1; then
-    wp sg purge || purge_rc=$?
-  else
-    echo "ERROR: SiteGround command unavailable after transient Speed Optimizer activation" >&2
-    purge_rc=1
-  fi
-
-  if [[ "$activated_temporarily" -eq 1 ]]; then
-    wp plugin deactivate "$plugin" --quiet || restore_rc=$?
-    if wp plugin is-active "$plugin" >/dev/null 2>&1; then
-      echo "ERROR: Speed Optimizer remained active after transient cache purge" >&2
-      restore_rc=10
-    fi
-  fi
-
-  if [[ "$restore_rc" -ne 0 ]]; then
-    return "$restore_rc"
-  fi
-  if [[ "$purge_rc" -ne 0 ]]; then
-    return "$purge_rc"
-  fi
-
-  if [[ "$activated_temporarily" -eq 1 ]]; then
-    echo 'SITEGROUND_DYNAMIC_PURGE=PASS mode=transient-plugin-activation restored=inactive'
-  else
-    echo 'SITEGROUND_DYNAMIC_PURGE=PASS mode=plugin-already-active'
-  fi
-}
 
 echo "== Guard production identity =="
 (
@@ -394,14 +353,13 @@ rollback_after_swap() {
       echo "ROLLBACK_DB=SKIPPED reason=no-write-marker-db-not-modified-or-migration-not-started" >&2
     fi
 
-    (
-      cd "$PROD_ROOT" || exit 1
-      wp cache flush || true
-      purge_siteground_dynamic_cache || true
-      rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-* 2>/dev/null || true
-      rm -rf wp-content/cache/sgo-cache/* wp-content/cache/* 2>/dev/null || true
-      wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); }' || true
-    )
+    if siteground_cache_purge "$PROD_ROOT" preserve; then
+      echo 'ROLLBACK_CACHE=PASS owner=tools/deploy/siteground-cache-purge.sh' >&2
+    else
+      cache_rc=$?
+      echo "ERROR: canonical SiteGround cache purge failed during rollback rc=$cache_rc" >&2
+      rollback_ok=0
+    fi
 
     restored="$(cat "$BACKUP_DIR/previous-sha.txt" 2>/dev/null || true)"
     if [[ -z "$restored" ]]; then
@@ -433,10 +391,10 @@ rollback_after_swap() {
     [[ "$identity_rc" -eq 0 ]] || rollback_ok=0
 
     if [[ "$rollback_ok" -eq 1 ]]; then
-      echo "ROLLBACK_PRODUCTION=PASS scope=theme+db" >&2
+      echo "ROLLBACK_PRODUCTION=PASS scope=theme+db+cache" >&2
       ROLLBACK_OK=1
     else
-      echo "ROLLBACK_PRODUCTION=FAIL scope=theme+db" >&2
+      echo "ROLLBACK_PRODUCTION=FAIL scope=theme+db+cache" >&2
       ROLLBACK_OK=0
     fi
   fi
@@ -513,25 +471,16 @@ echo 'PRODUCTION_ROBOTS_RECONCILIATION=PASS'
 
 trap - ERR INT TERM HUP
 
-echo "== Purge production caches =="
-purge_rc=0
-(
-  trap - ERR
-  cd "$PROD_ROOT"
-  inner_rc=0
-  wp cache flush || inner_rc=$?
-  purge_siteground_dynamic_cache || inner_rc=$?
-  rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-* 2>/dev/null || inner_rc=$?
-  rm -rf wp-content/cache/sgo-cache/* wp-content/cache/* 2>/dev/null || inner_rc=$?
-  wp eval 'if (function_exists("opcache_reset")) { if ( ! opcache_reset() ) { echo "opcache_reset failed\n"; exit(1); } echo "opcache=ok\n"; }' || inner_rc=$?
-  exit "$inner_rc"
-) || purge_rc=$?
-
-if [[ "$purge_rc" -eq 10 ]]; then
-  echo "ERROR: Speed Optimizer plugin restoration failed - this changes production state" >&2
-  exit 1
+echo "== Purge production caches via canonical owner =="
+set +e
+siteground_cache_purge "$PROD_ROOT" preserve
+purge_rc=$?
+set -e
+if [[ "$purge_rc" -ne 0 ]]; then
+  echo "ERROR: canonical SiteGround cache purge failed after cutover rc=$purge_rc; rolling back release" >&2
+  rollback_after_swap "$purge_rc"
 fi
-[[ "$purge_rc" -eq 0 ]] || echo "WARN: production cache purge reported a non-fatal error rc=$purge_rc" >&2
+echo 'PRODUCTION_CACHE_PURGE=PASS owner=tools/deploy/siteground-cache-purge.sh fail_closed=true'
 
 trap - ERR INT TERM HUP
 rm -f "$MIGRATION_WRITE_MARKER" 2>/dev/null || true
