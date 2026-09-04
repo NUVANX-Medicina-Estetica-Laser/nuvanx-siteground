@@ -1,6 +1,6 @@
 {
   "schema": "nuvanx-patient-cases",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "consent_states": {
     "approved": "Consentimiento informado documentado y firmado para registro clínico y difusión médica",
     "withdrawn": "Consentimiento revocado por el paciente",
@@ -31,9 +31,9 @@
       "media_status": "quarantined",
       "media_pair_id": "papada-submenton-01",
       "media_review_note": "Retirado de publicación hasta verificar que Antes y Después corresponden a tomas clínicas distintas, comparables y del mismo caso.",
-      "image": "assets/images/cases/caso-01-papada-submenton.webp",
-      "image_before": "assets/images/cases/nvx-caso-endolift-papada-antes.webp",
-      "image_after": "assets/images/cases/nvx-caso-endolift-papada-despues.webp",
+      "image": "",
+      "image_before": "",
+      "image_after": "",
       "image_alt": "Evolución clínica documentada: Endolift® papada y ángulo mandibular a 3 meses"
     },
     {
@@ -78,9 +78,9 @@
       "media_status": "quarantined",
       "media_pair_id": "abdomen-03",
       "media_review_note": "Retirado de publicación: la imagen señalada como Antes debe verificarse como registro clínico del mismo caso y no como fotografía contextual de embarazo/posgestación.",
-      "image": "assets/images/cases/caso-03-abdomen-firmeza.webp",
-      "image_before": "assets/images/cases/nvx-caso-endolaser-abdomen-antes.webp",
-      "image_after": "assets/images/cases/nvx-caso-endolaser-abdomen-despues.webp",
+      "image": "",
+      "image_before": "",
+      "image_after": "",
       "image_alt": "Evolución clínica documentada: Endoláser corporal en abdomen a 3 meses"
     },
     {
