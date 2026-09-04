@@ -79,13 +79,14 @@ foreach ( $case_rows as $case ) {
 	$consent = trim( (string) ( $case['consent_status'] ?? '' ) );
 	$media   = trim( (string) ( $case['media_status'] ?? '' ) );
 	$scope   = trim( (string) ( $case['media_scope'] ?? '' ) );
+	$kind    = trim( (string) ( $case['media_kind'] ?? '' ) );
 
 	if ( '' === $id || ! in_array( $consent, $valid_consents, true ) ) {
 		fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=invalid_consent_status case={$id} consent={$consent}\n" );
 		exit( 1 );
 	}
-	if ( 'clinical_case' !== $scope || ! in_array( $media, $valid_media, true ) ) {
-		fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=invalid_media_authority case={$id} media={$media} scope={$scope}\n" );
+	if ( 'clinical_case' !== $scope || 'before_after' !== $kind || ! in_array( $media, $valid_media, true ) ) {
+		fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=invalid_media_authority case={$id} media={$media} scope={$scope} kind={$kind}\n" );
 		exit( 1 );
 	}
 }
@@ -116,7 +117,9 @@ $required_template_literals = array(
 	"nvx_catalog_json_load( 'patient-cases.json' )",
 	'<?php foreach ( $cases_list as $case ) : ?>',
 	"'clinical_case' === ( \$case['media_scope'] ?? '' )",
+	"'before_after' === ( \$case['media_kind'] ?? '' )",
 	"'approved' === ( \$case['media_status'] ?? '' )",
+	"\$media_is_approved && ! empty( \$case['image_before'] ) && ! empty( \$case['image_after'] )",
 	'get_header();',
 	'get_footer();',
 );
@@ -127,17 +130,22 @@ foreach ( $required_template_literals as $marker ) {
 	}
 }
 
+if ( false !== strpos( $template, "\$case['image']" ) ) {
+	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=legacy_single_image_fallback_reintroduced\n" );
+	exit( 1 );
+}
+
 if ( 1 !== preg_match( '/\$cases_list\s*=\s*\$cases_data\s*\[\s*[\'\"]cases[\'\"]\s*\]\s*\?\?\s*array\s*\(\s*\)\s*;/', $template ) ) {
 	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=cases_catalog_assignment_missing\n" );
 	exit( 1 );
 }
 
-if ( 1 !== preg_match( '/\$media_is_approved\s*=\s*[\s\S]*?media_scope[\s\S]*?media_status[\s\S]*?;/', $template ) ) {
+if ( 1 !== preg_match( '/\$media_is_approved\s*=\s*[\s\S]*?media_scope[\s\S]*?media_kind[\s\S]*?media_status[\s\S]*?;/', $template ) ) {
 	fwrite( STDERR, "CASES_PUBLICATION_POLICY=FAIL reason=media_publication_gate_missing\n" );
 	exit( 1 );
 }
 
 fwrite(
 	STDOUT,
-	'CASES_PUBLICATION_POLICY=PASS status=publish robots=index,follow runtime_safeguard=removed repository_cases=' . count( $case_rows ) . " consent_authority=explicit media_authority=explicit\n"
+	'CASES_PUBLICATION_POLICY=PASS status=publish robots=index,follow runtime_safeguard=removed repository_cases=' . count( $case_rows ) . " consent_authority=explicit media_authority=explicit incomplete_pair_fallback=blocked\n"
 );
