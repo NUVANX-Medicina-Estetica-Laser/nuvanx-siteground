@@ -3,6 +3,8 @@
 
 declare(strict_types=1);
 
+define( 'OBJECT', 'OBJECT' );
+
 $GLOBALS['nvx_h1_test_durable'] = array();
 $GLOBALS['nvx_h1_test_cached']  = array();
 
@@ -74,7 +76,7 @@ function nvx_medical_reviewers(): array {
 function nvx_medical_review_valid_date( string $date ): bool { return '2026-08-01' === $date; }
 function nvx_medical_review_reviewer_complete( array $reviewer ): bool {
 	foreach ( array( 'name', 'license', 'url', 'id', 'title' ) as $field ) {
-		if ( '' === trim( (string) ( $reviewer[ $field ] ?? '' ) ) ) {
+		if ( '' === trim( (string) ( $reviewer[ $field ] ?? '' ) ) {
 			return false;
 		}
 	}
