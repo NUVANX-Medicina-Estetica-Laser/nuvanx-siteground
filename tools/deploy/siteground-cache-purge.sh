@@ -7,7 +7,9 @@ siteground_cache_purge() {
   local wp_root="${1:-}"
   local final_state="${2:-preserve}"
   local plugin_slug='sg-cachepress'
-  local initial_state='inactive'
+  local plugin_installed=0
+  local initial_state='uninstalled'
+  local sg_command_available=0
 
   [[ -n "$wp_root" && -d "$wp_root" ]] || { echo "SITEGROUND_CACHE_PURGE=FAIL reason=invalid_wp_root root=${wp_root:-missing}" >&2; return 1; }
   [[ "$final_state" == 'preserve' || "$final_state" == 'active' || "$final_state" == 'inactive' ]] \
@@ -23,11 +25,29 @@ siteground_cache_purge() {
     cd "$wp_root" || exit $?
     command -v wp >/dev/null 2>&1 \
       || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=wp_cli_missing' >&2; exit 1; }
-    wp plugin is-installed "$plugin_slug" >/dev/null 2>&1 \
-      || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_not_installed' >&2; exit 1; }
 
-    if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-      initial_state='active'
+    if wp plugin is-installed "$plugin_slug" >/dev/null 2>&1; then
+      plugin_installed=1
+      initial_state='inactive'
+      if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
+        initial_state='active'
+      fi
+    fi
+
+    # SiteGround can expose `wp sg` as a host capability even when WP-CLI does
+    # not report sg-cachepress as installed. Preserve that supported command-first
+    # path. Explicit active/inactive final states still require a real plugin whose
+    # state can be verified and restored.
+    if wp help sg >/dev/null 2>&1; then
+      sg_command_available=1
+    fi
+    if [[ "$plugin_installed" -eq 0 && "$final_state" != 'preserve' ]]; then
+      echo "SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_not_installed_for_requested_state state=$final_state" >&2
+      exit 1
+    fi
+    if [[ "$plugin_installed" -eq 0 && "$sg_command_available" -eq 0 ]]; then
+      echo 'SITEGROUND_CACHE_PURGE=FAIL reason=no_siteground_purge_capability' >&2
+      exit 1
     fi
 
     restore_requested_state_on_failure() {
@@ -43,7 +63,12 @@ siteground_cache_purge() {
 
       if [[ "$rc" -ne 0 ]]; then
         set +e
-        if [[ "$expected_state" == 'active' ]]; then
+        if [[ "$plugin_installed" -eq 0 ]]; then
+          # The command-only path never installs or mutates plugin state.
+          if wp plugin is-installed "$plugin_slug" >/dev/null 2>&1; then
+            restore_rc=10
+          fi
+        elif [[ "$expected_state" == 'active' ]]; then
           if ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
             wp plugin activate "$plugin_slug" --quiet
             restore_rc=$?
@@ -76,33 +101,52 @@ siteground_cache_purge() {
 
     wp cache flush || exit $?
 
-    if [[ "$initial_state" != 'active' ]]; then
-      wp plugin activate "$plugin_slug" --quiet || exit $?
-    fi
-    wp plugin is-active "$plugin_slug" >/dev/null 2>&1 \
-      || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_activation_failed' >&2; exit 1; }
+    if [[ "$sg_command_available" -eq 0 ]]; then
+      if [[ "$initial_state" != 'active' ]]; then
+        wp plugin activate "$plugin_slug" --quiet || exit $?
+      fi
+      wp plugin is-active "$plugin_slug" >/dev/null 2>&1 \
+        || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_activation_failed' >&2; exit 1; }
 
-    # A fresh WP-CLI process is required after activation so the plugin can
-    # register the `sg` command. This invocation is deliberately fail-closed.
+      # Plugin activation occurs in a different WP-CLI process; check again so
+      # the newly registered SiteGround command is authoritative before purge.
+      wp help sg >/dev/null 2>&1 \
+        || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=sg_command_missing_after_activation' >&2; exit 1; }
+    fi
+
     wp sg purge || exit $?
 
     rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-* || exit $?
     rm -rf wp-content/cache/sgo-cache/* || exit $?
     rm -rf wp-content/cache/* || exit $?
-    wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); }' || exit $?
+    # WP-CLI itself can exit 0 even when opcache_reset() returns false. Convert
+    # that PHP-level failure into a non-zero process status so release callers
+    # cannot report a successful purge with stale opcode cache still present.
+    # Exclude environments where OPcache is disabled in CLI, preventing false
+    # failure when opcache_get_status() reports false.
+    wp eval 'if (function_exists("opcache_get_status") && opcache_get_status() !== false && function_exists("opcache_reset") && ! opcache_reset()) { fwrite(STDERR, "opcache_reset failed\n"); exit(1); }' || exit $?
 
     case "$final_state" in
       preserve)
-        if [[ "$initial_state" == 'active' ]]; then
+        if [[ "$plugin_installed" -eq 0 ]]; then
+          if wp plugin is-installed "$plugin_slug" >/dev/null 2>&1; then
+            exit 1
+          fi
+        elif [[ "$initial_state" == 'active' ]]; then
           wp plugin is-active "$plugin_slug" >/dev/null 2>&1 || exit $?
         else
-          wp plugin deactivate "$plugin_slug" --quiet || exit $?
+          if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
+            wp plugin deactivate "$plugin_slug" --quiet || exit $?
+          fi
           if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
             exit 1
           fi
         fi
         ;;
       active)
+        if ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
+          wp plugin activate "$plugin_slug" --quiet || exit $?
+        fi
         wp plugin is-active "$plugin_slug" >/dev/null 2>&1 || exit $?
         ;;
       inactive)
@@ -116,7 +160,9 @@ siteground_cache_purge() {
     esac
 
     trap - EXIT
-    echo "SITEGROUND_CACHE_PURGE=PASS initial=$initial_state final=$final_state capability=wp-sg-purge"
+    mode='plugin-assisted'
+    [[ "$sg_command_available" -eq 1 ]] && mode='command-first'
+    echo "SITEGROUND_CACHE_PURGE=PASS initial=$initial_state final=$final_state capability=wp-sg-purge mode=$mode"
   )
 }
 
