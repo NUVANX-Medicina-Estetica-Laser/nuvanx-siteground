@@ -13,7 +13,40 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Immutable request snapshot for redirect/hygiene decisions.
+ *
+ * The theme bootstrap captures browser-owned request values before peer modules
+ * can mutate globals. Page hygiene must consume that single authority and must
+ * never re-read REQUEST_URI later in the WordPress lifecycle.
+ *
+ * @return array<string,mixed>
+ */
+function nvx_page_hygiene_request_context(): array {
+	return function_exists( 'nvx_theme_request_context' )
+		? nvx_theme_request_context()
+		: array();
+}
 
+/** Canonical request path, decoded for exact human-readable alias matching. */
+function nvx_page_hygiene_request_path(): string {
+	$context = nvx_page_hygiene_request_context();
+	$path    = isset( $context['path'] ) && is_string( $context['path'] ) ? $context['path'] : '';
+	if ( '' === $path ) {
+		return '';
+	}
+
+	$path = rawurldecode( $path );
+	return '/' . trim( $path, '/' ) . '/';
+}
+
+/** Sanitized query arguments owned by the immutable request context. */
+function nvx_page_hygiene_query_args(): array {
+	$context = nvx_page_hygiene_request_context();
+	return isset( $context['query_args'] ) && is_array( $context['query_args'] )
+		? $context['query_args']
+		: array();
+}
 
 /**
  * Redirect superseded cookie documents to the Complianz EU statement (page 577).
@@ -24,8 +57,7 @@ function nvx_redirect_superseded_legal_pages(): void {
 	}
 
 	$page_id = is_page() ? (int) get_queried_object_id() : 0;
-	$uri     = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-	$path    = trim( (string) wp_parse_url( $uri, PHP_URL_PATH ), '/' );
+	$path    = trim( nvx_page_hygiene_request_path(), '/' );
 
 	if ( in_array( $page_id, array( 18, 31 ), true ) || in_array( $path, array( 'politica-de-cookies', 'mas-informacion-sobre-las-cookies' ), true ) ) {
 		$target = function_exists( 'get_permalink' ) ? get_permalink( 577 ) : '';
@@ -52,9 +84,7 @@ function nvx_redirect_valoracion_aliases(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
-	$path = '/' . trim( rawurldecode( $path ), '/' ) . '/';
+	$path = nvx_page_hygiene_request_path();
 	$path = function_exists( 'mb_strtolower' ) ? mb_strtolower( $path, 'UTF-8' ) : strtolower( $path );
 
 	$aliases = array(
@@ -75,9 +105,8 @@ function nvx_redirect_valoracion_aliases(): void {
 		return;
 	}
 
-	// Preserve query strings (gclid, UTM, etc.) securely using the request context.
-	$context    = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : null;
-	$query_args = is_array( $context ) ? $context['query_args'] : array();
+	// Preserve bounded/sanitized tracking query arguments from the immutable request snapshot.
+	$query_args = nvx_page_hygiene_query_args();
 	$target     = home_url( '/madrid/valoracion/' );
 	if ( ! empty( $query_args ) ) {
 		$target = add_query_arg( $query_args, $target );
@@ -96,9 +125,7 @@ function nvx_redirect_goya_alias(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
-	$path = '/' . trim( rawurldecode( $path ), '/' ) . '/';
+	$path = nvx_page_hygiene_request_path();
 
 	// Exact match for the short alias only.
 	if ( '/medicina-estetica-goya/' !== $path ) {
@@ -111,15 +138,8 @@ function nvx_redirect_goya_alias(): void {
 		return;
 	}
 
-	// Preserve query strings (gclid, UTM, etc.) - parse and reconstruct.
-	$parsed_uri   = wp_parse_url( $uri );
-	$query_params = array();
-
-	if ( isset( $parsed_uri['query'] ) && '' !== $parsed_uri['query'] ) {
-		parse_str( $parsed_uri['query'], $query_params );
-	}
-
-	$target = home_url( $canonical_path );
+	$query_params = nvx_page_hygiene_query_args();
+	$target       = home_url( $canonical_path );
 
 	if ( ! empty( $query_params ) ) {
 		$target = add_query_arg( $query_params, $target );
@@ -182,17 +202,15 @@ function nvx_redirect_unpublished_public_routes(): void {
 		return;
 	}
 
-	$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
-	$slug = sanitize_title( trim( rawurldecode( $path ), '/' ) );
+	$path = nvx_page_hygiene_request_path();
+	$slug = sanitize_title( trim( $path, '/' ) );
 	$map  = nvx_unpublished_public_route_redirects();
 
 	if ( ! isset( $map[ $slug ] ) || nvx_published_singular_exists_for_slug( $slug ) ) {
 		return;
 	}
 
-	$context    = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context() : null;
-	$query_args = is_array( $context ) ? $context['query_args'] : array();
+	$query_args = nvx_page_hygiene_query_args();
 	$target     = home_url( $map[ $slug ] );
 	if ( ! empty( $query_args ) ) {
 		$target = add_query_arg( $query_args, $target );
@@ -283,8 +301,6 @@ function nvx_quarantined_comparison_post_ids(): array {
 
 	return $ids = array_values( array_map( 'intval', (array) $query->posts ) );
 }
-
-
 
 /**
  * Keep pending comparison content out of public post collections.
@@ -387,8 +403,6 @@ function nvx_noindex_page_ids() {
 	 */
 	return array_values( array_unique( array_map( 'intval', apply_filters( 'nvx_noindex_page_ids', $ids ) ) ) );
 }
-
-
 
 /**
  * Exclude sensitive pages from the Yoast XML sitemap by post ID list.
@@ -555,7 +569,6 @@ function nvx_legal_framework_note_markup(): string {
 		. esc_html__( 'Marco normativo.', 'nuvanx-medical' )
 		. '</strong> ' . esc_html( $message ) . '</p></aside>';
 }
-
 
 /**
  * Resolve a published page ID by slug (environment-safe; no hard-coded IDs).
