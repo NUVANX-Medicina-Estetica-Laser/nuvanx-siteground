@@ -120,7 +120,7 @@ for (const token of [
   "{ key: 'chamberi', path: '/medicina-estetica-chamberi/', expectedGalleryCount: 4 }",
   "{ key: 'goya', path: '/clinicas-de-medicina-estetica-nuvanx/medicina-estetica-goya-barrio-salamanca/', expectedGalleryCount: 2 }",
   'initial.gallery.imageCount !== clinic.expectedGalleryCount',
-  'images.length !== clinic.expectedGalleryCount',
+  'await galleryImages.count() !== clinic.expectedGalleryCount',
 ]) {
   if (!runtime.includes(token)) fail(`runtime_acceptance_contract_missing:${token}`);
 }

@@ -18,11 +18,13 @@ $cases_data    = function_exists( 'nvx_catalog_json_load' ) ? nvx_catalog_json_l
 $consent_states = $cases_data['consent_states'] ?? array();
 $cases_list     = $cases_data['cases'] ?? array();
 
-// Filter to only show cases with affirmative consent (approved state).
+// Case publication requires affirmative consent. Media publication is governed
+// independently below so a valid clinical record can remain public while a
+// disputed or incomplete photographic pair fails closed.
 $cases_list = array_filter(
 	$cases_list,
-	function ( $case ) {
-		return ( $case['consent_status'] ?? '' ) === 'approved';
+	static function ( $case ): bool {
+		return is_array( $case ) && 'approved' === ( $case['consent_status'] ?? '' );
 	}
 );
 
@@ -35,12 +37,14 @@ if ( is_readable( $css_path ) ) {
 		? nvx_asset_version( $css_relative )
 		: (string) filemtime( $css_path );
 
-	wp_enqueue_style(
-		'nvx-cases',
-		get_template_directory_uri() . $css_relative,
-		array( 'nvx-components', 'nvx-patterns' ),
-		$version
-	);
+	if ( ! function_exists( 'nvx_theme_public_delivers_inline_styles' ) || ! nvx_theme_public_delivers_inline_styles() ) {
+		wp_enqueue_style(
+			'nvx-cases',
+			get_template_directory_uri() . $css_relative,
+			array( 'nvx-components', 'nvx-patterns' ),
+			$version
+		);
+	}
 }
 
 get_header();
@@ -87,13 +91,18 @@ get_header();
 			<?php if ( ! empty( $cases_list ) ) : ?>
 				<ul class="nvx-cases-list">
 					<?php foreach ( $cases_list as $case ) : ?>
+						<?php
+						$media_is_approved = 'clinical_case' === ( $case['media_scope'] ?? '' )
+							&& 'before_after' === ( $case['media_kind'] ?? '' )
+							&& 'approved' === ( $case['media_status'] ?? '' );
+						?>
 						<li class="nvx-case-card" id="<?php echo esc_attr( $case['id'] ?? '' ); ?>">
 							<div class="nvx-case-card__header">
 								<span class="nvx-case-card__badge"><?php echo esc_html( $case['category_label'] ?? '' ); ?></span>
 								<h3 class="nvx-case-card__title"><?php echo esc_html( $case['title'] ?? '' ); ?></h3>
 							</div>
 
-							<?php if ( ! empty( $case['image_before'] ) && ! empty( $case['image_after'] ) ) : ?>
+							<?php if ( $media_is_approved && ! empty( $case['image_before'] ) && ! empty( $case['image_after'] ) ) : ?>
 								<?php
 								$before_relative = '/' . ltrim( (string) $case['image_before'], '/' );
 								$after_relative  = '/' . ltrim( (string) $case['image_after'], '/' );
@@ -112,21 +121,6 @@ get_header();
 											<img src="<?php echo esc_url( $after_src ); ?>" alt="<?php echo esc_attr( $title . ' — Resultado y evolución' ); ?>" class="nvx-case-card__img" loading="lazy" decoding="async">
 										</figure>
 									</div>
-									<div class="nvx-case-card__visual-caption">
-										<span class="nvx-case-card__visual-badge"><?php esc_html_e( 'Registro clínico estandarizado', 'nuvanx-medical' ); ?></span>
-										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $consent_states[ $case['consent_status'] ] ?? $case['consent_status'] ?? '' ); ?></span>
-									</div>
-								</div>
-							<?php elseif ( ! empty( $case['image'] ) ) : ?>
-								<?php
-								$img_relative = '/' . ltrim( (string) $case['image'], '/' );
-								$img_src      = get_template_directory_uri() . $img_relative;
-								$img_alt      = $case['image_alt'] ?? $case['title'] ?? 'Evolución clínica documentada';
-								?>
-								<div class="nvx-case-card__visual">
-									<figure class="nvx-case-card__media">
-										<img src="<?php echo esc_url( $img_src ); ?>" alt="<?php echo esc_attr( $img_alt ); ?>" class="nvx-case-card__img" loading="lazy" decoding="async">
-									</figure>
 									<div class="nvx-case-card__visual-caption">
 										<span class="nvx-case-card__visual-badge"><?php esc_html_e( 'Registro clínico estandarizado', 'nuvanx-medical' ); ?></span>
 										<span class="nvx-case-card__visual-consent"><?php echo esc_html( $consent_states[ $case['consent_status'] ] ?? $case['consent_status'] ?? '' ); ?></span>

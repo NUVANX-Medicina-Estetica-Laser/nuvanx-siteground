@@ -72,9 +72,9 @@ function nvx_profhilo_process_icon( string $name ): string {
 /**
  * Builds the Profhilo hero copy markup.
  *
- * Medical review provenance is deliberately not emitted here. The single
- * approval-gated owner is nvx-medical-review.php, which injects a byline only
- * when the page has a complete approved reviewer record.
+ * This renderer never interprets medical-review metadata or emits review
+ * provenance. The sole validator/renderer for review provenance is
+ * nvx-medical-review.php on pages inside its governed perimeter.
  *
  * @return string The escaped hero copy HTML.
  */
@@ -87,18 +87,6 @@ function nvx_profhilo_hero_copy_markup(): string {
 	$html  = '<div class="nvx-brand-hero__copy">';
 	$html .= '<p class="nvx-brand-kicker">' . esc_html( $data['kicker'] ?? '' ) . '</p>';
 	$html .= '<h1 class="nvx-brand-hero__title" id="nvx-profhilo-h1">' . esc_html( $data['h1'] ?? '' ) . '</h1>';
-
-	$post_id       = (int) get_queried_object_id();
-	$review_status = ( $post_id > 0 && function_exists( 'get_post_meta' ) )
-		? (string) get_post_meta( $post_id, '_nvx_medical_review_status', true )
-		: '';
-	if ( 'approved' === $review_status ) {
-		$html .= '<div class="nvx-medical-byline" data-nvx-medical-review="approved">';
-		$html .= '<div class="nvx-medical-byline__text">';
-		$html .= '<strong>' . esc_html__( 'Dr. José Javier Rivera Tejeda', 'nuvanx-medical' ) . '</strong><br>';
-		$html .= '<span class="nvx-medical-byline__title">' . esc_html__( 'Director Médico · Colegiado ICOMEM Nº ', 'nuvanx-medical' ) . esc_html( $colegiado ) . '</span>';
-		$html .= '</div></div>';
-	}
 	$html .= '<p class="nvx-brand-hero__lead">' . esc_html( $data['lead'] ?? '' ) . '</p>';
 	$html .= '<p class="nvx-brand-hero__description">' . esc_html(
 		sprintf(

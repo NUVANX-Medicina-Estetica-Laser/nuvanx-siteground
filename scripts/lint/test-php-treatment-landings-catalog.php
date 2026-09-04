@@ -18,10 +18,14 @@ $root = dirname( __DIR__, 2 );
 $profhilo = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-profhilo-page.php' );
 $medical  = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-medical-review.php' );
 
-// Profhilo must not own a second visible medical-review contract.
+// Profhilo is not a canonical published treatment route. Its renderer therefore
+// must never author review provenance from local post-meta state. The canonical
+// medical-review module remains the only validator/renderer on governed pages.
 nvx_block7_assert( false === strpos( $profhilo, 'nvx-profhilo-reviewed' ), 'NO_PROFHILO_SECONDARY_REVIEW_BLOCK' );
 nvx_block7_assert( false === strpos( $profhilo, "\$data['byline_author']" ), 'NO_PROFHILO_EDITORIAL_BYLINE_OWNER' );
 nvx_block7_assert( false === strpos( $profhilo, "\$data['byline_title']" ), 'NO_PROFHILO_EDITORIAL_REVIEW_DATE_OWNER' );
+nvx_block7_assert( false === strpos( $profhilo, "'_nvx_medical_review_status'" ), 'NO_PROFHILO_LOCAL_REVIEW_STATUS_AUTHORITY' );
+nvx_block7_assert( false === strpos( $profhilo, 'nvx-medical-byline' ), 'NO_PROFHILO_LOCAL_REVIEW_RENDERER' );
 nvx_block7_assert( false !== strpos( $medical, 'data-nvx-medical-review="approved"' ), 'CANONICAL_APPROVAL_GATED_REVIEW_OWNER_PRESENT' );
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -90,29 +94,31 @@ require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-page-render-helpers.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-profhilo-page.php';
 
-// Exercise renderers with representative unapproved data: assert returned HTML contains
-// neither secondary review markup nor unapproved editorial byline/date output.
+// The renderer must never emit review provenance, whether review metadata is
+// absent or contains only the legacy status flag.
 $GLOBALS['nvx_test_post_meta'] = array();
 $rendered_hero = nvx_profhilo_hero_copy_markup();
 nvx_block7_assert( false === strpos( $rendered_hero, 'nvx-profhilo-reviewed' ), 'RENDERED_HERO_NO_SECONDARY_REVIEW_BLOCK' );
-nvx_block7_assert( false === strpos( $rendered_hero, 'nvx-medical-byline' ), 'RENDERED_HERO_NO_UNAPPROVED_EDITORIAL_BYLINE' );
+nvx_block7_assert( false === strpos( $rendered_hero, 'nvx-medical-byline' ), 'RENDERED_HERO_NO_LOCAL_REVIEW_BYLINE' );
 
 $rendered_body = nvx_profhilo_editorial_body_markup();
 nvx_block7_assert( false === strpos( $rendered_body, 'nvx-profhilo-reviewed' ), 'RENDERED_BODY_NO_SECONDARY_REVIEW_BLOCK' );
-nvx_block7_assert( false === strpos( $rendered_body, 'nvx-medical-byline' ), 'RENDERED_BODY_NO_UNAPPROVED_EDITORIAL_BYLINE' );
+nvx_block7_assert( false === strpos( $rendered_body, 'nvx-medical-byline' ), 'RENDERED_BODY_NO_LOCAL_REVIEW_BYLINE' );
 
-// Exercise renderers with approved post meta: assert returned HTML renders canonical byline.
 $GLOBALS['nvx_test_post_meta'] = array( '_nvx_medical_review_status' => 'approved' );
-$approved_hero = nvx_profhilo_hero_copy_markup();
-nvx_block7_assert( false !== strpos( $approved_hero, 'data-nvx-medical-review="approved"' ), 'APPROVED_PROFHILO_HERO_RENDERS_CANONICAL_BYLINE' );
-nvx_block7_assert( false !== strpos( $approved_hero, 'Dr. José Javier Rivera Tejeda' ), 'APPROVED_PROFHILO_HERO_CONTAINS_DIRECTOR_NAME' );
+$approved_status_only_hero = nvx_profhilo_hero_copy_markup();
+nvx_block7_assert( false === strpos( $approved_status_only_hero, 'nvx-medical-byline' ), 'APPROVED_STATUS_ALONE_DOES_NOT_AUTHOR_PROFHILO_BYLINE' );
+nvx_block7_assert( false === strpos( $approved_status_only_hero, 'data-nvx-medical-review="approved"' ), 'PROFHILO_RENDERER_NEVER_OWNS_REVIEW_PROVENANCE' );
 
-// Inventory every landing in this block and ensure the canonical helper owner
-// precedes them in the root bootstrap, and assert that landings do not directly
-// re-require page-render-helpers laterally.
+// Inventory landing/editorial consumers and ensure the canonical helper owner
+// precedes them in bootstrap. All ordinary consumers must not load the helper
+// laterally. Endolaser remains an explicit protected residual: any emitter byte
+// change requires a complete bound clinical approval record and is not bypassed
+// merely to satisfy this ownership cleanup.
 $bootstrap = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php' );
 $helpers   = strpos( $bootstrap, "'inc/nvx-page-render-helpers.php'" );
 $landings  = array(
+	'nvx-bridal-page.php',
 	'nvx-solutions-page.php',
 	'nvx-endolift-page.php',
 	'nvx-exion-page.php',
@@ -120,6 +126,7 @@ $landings  = array(
 	'nvx-endolaser-page.php',
 	'nvx-co2-page.php',
 	'nvx-btl-detail-pages.php',
+	'nvx-aesthetic-medicine-page.php',
 );
 nvx_block7_assert( false !== $helpers, 'PAGE_HELPER_OWNER_PRESENT' );
 foreach ( $landings as $file ) {
@@ -131,8 +138,14 @@ foreach ( $landings as $file ) {
 	}
 }
 
-// The current tariff contract mismatch is deliberately visible to the final
-// consolidation: never silently change the catalog shape without updating the hydrator.
+$endolaser = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-endolaser-page.php' );
+nvx_block7_assert(
+	false !== strpos( $endolaser, "require_once __DIR__ . '/nvx-page-render-helpers.php'" ),
+	'ENDOLASER_PAGE_HELPER_RESIDUAL_REMAINS_APPROVAL_GATED'
+);
+
+// The current tariff contract is already identity-safe: canonical lips hydration
+// exists, the retired composite key does not, and Bioestimulation is card n=05.
 $tariffs = json_decode(
 	(string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/data/tariff-catalog.json' ),
 	true
@@ -148,4 +161,4 @@ $aesthetic_catalog = json_decode(
 nvx_block7_assert( is_array( $aesthetic_catalog ) && isset( $aesthetic_catalog['treatments'][4] ), 'AESTHETIC_TREATMENT_INDEX_4_EXISTS' );
 nvx_block7_assert( false !== strpos( (string) $aesthetic_catalog['treatments'][4]['title'], 'Bioestimulación' ), 'BIOSTIMULATION_IS_INDEX_4' );
 
-echo 'PHP_TREATMENT_LANDINGS_CATALOG=PASS profhilo_review=single_owner landing_inventory=covered tariff_drift=guarded' . PHP_EOL;
+echo 'PHP_TREATMENT_LANDINGS_CATALOG=PASS profhilo_review=renderer_has_no_owner landing_inventory=expanded endolaser_helper_residual=approval_gated tariff_contract=identity_safe' . PHP_EOL;

@@ -76,10 +76,12 @@ foreach ( $signature_json as $key => $record ) {
 }
 
 // Regression fixture: a phase-missing record must be silently dropped by the runtime
-// validator before renderers can reach it.  nvx_catalog_filter_records() is the gate.
+// validator before renderers can reach it. The loader `_error` sentinel is metadata,
+// never an editorial record, so it must also be removed before record validation.
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php';
 $fixture_catalog = array(
+	'_error'      => false,
 	'good-record' => array(
 		'phase' => 1, 'slug' => 'test', 'title' => 'T', 'kicker' => 'K', 'lead' => 'L',
 		'intro' => 'I', 'assessment' => array(), 'technology' => array(), 'limits' => array(),
@@ -94,6 +96,7 @@ $fixture_catalog = array(
 $valid = nvx_catalog_filter_records( $fixture_catalog, $required, 'nvx-signature-phase-catalog.json' );
 nvx_block5_assert( array_key_exists( 'good-record', $valid ), 'PHASE_PRESENT_RECORD_PASSES' );
 nvx_block5_assert( ! array_key_exists( 'phase-missing', $valid ), 'PHASE_MISSING_RECORD_DROPPED' );
+nvx_block5_assert( ! array_key_exists( '_error', $valid ), 'LOADER_ERROR_SENTINEL_NOT_A_RECORD' );
 
 $signature_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-signature-catalog.php' );
 nvx_block5_assert(
@@ -119,4 +122,4 @@ nvx_block5_assert( false !== $catalog_owner && false !== $aesthetic && $catalog_
 nvx_block5_assert( false !== $page_helpers && false !== $bridal && $page_helpers < $bridal, 'PAGE_HELPERS_PRECEDE_BRIDAL' );
 nvx_block5_assert( false !== $signature_cat && false !== $signature_page && $signature_cat < $signature_page, 'SIGNATURE_CATALOG_PRECEDES_RENDERER' );
 
-echo 'PHP_STRATEGY_SIGNATURE_AESTHETIC=PASS offers=currency_bound signature=validated bootstrap_order=verified' . PHP_EOL;
+echo 'PHP_STRATEGY_SIGNATURE_AESTHETIC=PASS offers=currency_bound signature=validated loader_sentinel=ignored bootstrap_order=verified' . PHP_EOL;
