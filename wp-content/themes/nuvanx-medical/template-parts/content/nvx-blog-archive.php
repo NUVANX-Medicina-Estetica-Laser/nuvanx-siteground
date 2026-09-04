@@ -11,10 +11,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Resolve Journal card media fail-closed.
  *
- * A post may use its own valid featured image or one positively matched clinical
- * theme asset. Bridal campaign imagery is deliberately excluded from Journal
- * fallback media. Unmatched articles render as editorial text cards rather than
- * borrowing an unrelated photograph.
+ * Archive cards never trust arbitrary WordPress featured images. Media must be
+ * selected from the governed theme catalog, positively match the current post
+ * with sufficient semantic evidence and remain unique within the rendered page.
+ * Bridal campaign imagery is excluded. Unmatched articles render as editorial
+ * text cards rather than borrowing an unrelated photograph.
  *
  * @param array{priority?:bool,sizes?:string,reset_used?:bool} $args Image flags.
  */
@@ -28,29 +29,6 @@ function nvx_blog_archive_semantic_image( array $args = array() ): string {
 
 	$priority = ! empty( $args['priority'] );
 	$sizes    = isset( $args['sizes'] ) ? (string) $args['sizes'] : '(min-width: 1024px) 33vw, (min-width: 641px) 50vw, 100vw';
-
-	if ( has_post_thumbnail() ) {
-		$thumb_id = (int) get_post_thumbnail_id();
-		$alt      = trim( (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true ) );
-		$attr     = array(
-			'class'    => 'nvx-blog-card__image',
-			'loading'  => $priority ? 'eager' : 'lazy',
-			'decoding' => 'async',
-			'alt'      => $alt,
-			'sizes'    => $sizes,
-		);
-		if ( $priority ) {
-			$attr['fetchpriority'] = 'high';
-		}
-
-		$html = get_the_post_thumbnail( null, 'large', $attr );
-		if ( is_string( $html ) && '' !== $html
-			&& 1 !== preg_match( '/logo-nuvanx|nuvanx-web\.webp|\/logo[-_]|nvx-logo|site-logo|custom-logo/iu', $html )
-			&& ( ! function_exists( 'nvx_public_html_is_vendor_image' ) || ! nvx_public_html_is_vendor_image( $html ) )
-		) {
-			return $html;
-		}
-	}
 
 	if ( ! function_exists( 'nvx_blog_named_image_catalog' ) || ! function_exists( 'nvx_blog_named_image_html' ) ) {
 		return '';
@@ -94,7 +72,7 @@ function nvx_blog_archive_semantic_image( array $args = array() ): string {
 		}
 	}
 
-	if ( ! is_array( $best ) || $best_score < 1 ) {
+	if ( ! is_array( $best ) || $best_score < 2 ) {
 		return '';
 	}
 
@@ -198,7 +176,7 @@ $topics = get_categories(
 						?>
 						<article id="post-<?php the_ID(); ?>" <?php post_class( $classes ); ?>>
 							<?php if ( in_array( $format, array( 'hero', 'horizontal' ), true ) && $has_media ) : ?>
-								<div class="nvx-blog-card__media" aria-hidden="true"><?php echo $image; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- WP thumbnail/theme image HTML. ?></div>
+								<div class="nvx-blog-card__media" aria-hidden="true"><?php echo $image; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- governed theme image HTML. ?></div>
 								<div class="nvx-blog-card__content">
 									<?php if ( $primary instanceof WP_Term ) : ?>
 										<span class="nvx-blog-card__category"><a href="<?php echo esc_url( get_category_link( $primary->term_id ) ); ?>"><?php echo esc_html( $primary->name ); ?></a></span>
@@ -215,7 +193,7 @@ $topics = get_categories(
 								</div>
 							<?php else : ?>
 								<?php if ( $has_media && 'vertical' === $format ) : ?>
-									<div class="nvx-blog-card__media" aria-hidden="true"><?php echo $image; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- WP thumbnail/theme image HTML. ?></div>
+									<div class="nvx-blog-card__media" aria-hidden="true"><?php echo $image; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- governed theme image HTML. ?></div>
 								<?php endif; ?>
 								<div class="nvx-blog-card__content">
 									<?php if ( 'text' === $format ) : ?>

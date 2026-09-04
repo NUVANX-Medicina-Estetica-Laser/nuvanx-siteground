@@ -81,6 +81,12 @@ function nvx_get_canonical_page_registry(): array {
 			'surface'  => 'surface-warm',
 			'template' => 'page-casos-de-pacientes.php',
 		),
+		'/protocolo-novias-madrid/' => array(
+			'owner'    => 'nvx_bridal_page',
+			'renderer' => 'nvx_bridal_inject_media',
+			'surface'  => 'surface-warm',
+			'template' => 'page.php',
+		),
 		'/medicina-estetica/' => array(
 			'owner'    => 'nvx_aesthetic_medicine_page',
 			'renderer' => 'nvx_aesthetic_medicine_page_content',
