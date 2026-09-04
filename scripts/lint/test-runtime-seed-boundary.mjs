@@ -89,6 +89,8 @@ assert.match(helper, /post_meta_postcommit_durable_verification_failed_/,
   'Post-commit verification must distinguish committed durable mismatch');
 assert.match(helper, /post_meta_postcommit_runtime_verification_failed_/,
   'Post-commit verification must distinguish a stale WordPress runtime view');
+assert.match(helper, /post_meta_postcommit_concurrent_change_/,
+  'Post-commit verification must detect a durable mutation that races the runtime read');
 
 assert.match(helper, /function\s+nvx_h1_invalidate_post_cache\s*\(\s*int\s+\$post_id\s*\)/,
   'H1 must provide bounded post and query cache invalidation');
@@ -101,25 +103,27 @@ assert.match(helper, /wp_cache_delete\s*\(\s*'last_changed',\s*'posts'\s*\)/,
 assert.doesNotMatch(helper, /wp_cache_flush\s*\(/,
   'H1 correctness and rollback cleanup must remain bounded; global cache flush is forbidden');
 
-assert.match(helper, /function\s+nvx_h1_prime_post_meta_cache_from_durable_storage\s*\(\s*int\s+\$post_id\s*\)/,
-  'H1 must explicitly prime runtime metadata from committed durable storage');
-assert.match(helper, /SELECT meta_key, meta_value FROM \{\$wpdb->postmeta\} WHERE post_id = %d ORDER BY meta_id ASC/,
-  'Cache priming must rebuild the complete postmeta set, not just H1 keys');
-assert.match(helper, /wp_cache_set\s*\(\s*\$post_id,\s*\$cache,\s*'post_meta'\s*\)/,
-  'Committed postmeta must be installed into the exact WordPress metadata cache key');
-assert.match(helper, /post_meta_cache_prime_verification_failed/,
-  'Cache priming must fail closed when the persistent cache does not reflect the committed snapshot');
+assert.doesNotMatch(helper, /function\s+nvx_h1_prime_post_meta_cache_from_durable_storage\s*\(/,
+  'Post-COMMIT verification must not own a manual postmeta cache snapshot writer');
+assert.doesNotMatch(helper, /wp_cache_set\s*\(\s*\$post_id[\s\S]{0,80}'post_meta'\s*\)/,
+  'Post-COMMIT verification must never install a durable snapshot into persistent post_meta cache');
+assert.match(helper, /try\s*\{[\s\S]{0,240}get_post_meta\s*\([\s\S]{0,240}finally\s*\{[\s\S]{0,180}nvx_h1_invalidate_post_cache\s*\(\s*\$post_id\s*\)/,
+  'Canonical runtime metadata reads must be fenced by guaranteed final invalidation');
+assert.match(helper, /\$post_runtime_values\s*=\s*\$wpdb->get_col/,
+  'Durable postmeta must be re-read after the runtime read to detect concurrent mutation');
 
 assert.match(helper, /function\s+nvx_h1_verify_runtime_plan\s*\(\s*array\s+\$plan,\s*array\s+\$created_ids\s*\)/,
   'H1 must have a dedicated post-commit runtime verifier with exact inserted IDs');
-assert.match(helper, /nvx_h1_invalidate_post_cache\s*\(\s*\$post_id\s*\);\s*nvx_h1_prime_post_meta_cache_from_durable_storage\s*\(\s*\$post_id\s*\)/,
-  'Each affected post must be invalidated and then primed from committed storage before runtime reads');
+assert.match(helper, /nvx_h1_invalidate_post_cache\s*\(\s*\$post_id\s*\);\s*try\s*\{/,
+  'Each affected post must start runtime verification from an invalidated cache boundary');
+assert.match(helper, /finally\s*\{[\s\S]{0,180}nvx_h1_invalidate_post_cache\s*\(\s*\$post_id\s*\)/,
+  'Each runtime verification operation must leave no verifier-populated post cache behind');
 assert.match(helper, /nvx_h1_verify_meta_after_commit\s*\(\s*\$post_id,\s*'_nvx_aesthetic_treatment_key'/,
-  'Aesthetic provenance must pass the post-commit durable/cache/runtime boundary');
+  'Aesthetic provenance must pass the post-commit durable/runtime boundary');
 assert.match(helper, /nvx_h1_verify_meta_after_commit\s*\(\s*\$post_id,\s*'_nvx_medical_review_status'/,
-  'Medical review status must pass the post-commit durable/cache/runtime boundary');
+  'Medical review status must pass the post-commit durable/runtime boundary');
 assert.match(helper, /approved_review_postcommit_verification_failed/,
-  'Approved medical-review provenance must be revalidated only after committed metadata is primed');
+  'Approved medical-review provenance must be revalidated after canonical runtime metadata verification');
 
 assert.match(helper, /\$created_ids\s*=\s*array\s*\(\s*\)/,
   'Apply owner must track IDs returned by successful inserts');
@@ -137,7 +141,7 @@ assert.match(helper, /bridal_postcommit_runtime_verification_failed/,
 const commitOffset = helper.indexOf("$wpdb->query( 'COMMIT' )");
 const runtimeVerifyOffset = helper.indexOf('nvx_h1_verify_runtime_plan( $plan, $created_ids )');
 assert.ok(commitOffset >= 0 && runtimeVerifyOffset > commitOffset,
-  'Runtime metadata invalidation, priming and verification must execute only after COMMIT');
+  'Runtime metadata invalidation and verification must execute only after COMMIT');
 assert.match(helper, /\$committed\s*=\s*false/,
   'Apply owner must track whether the transaction has committed');
 assert.match(helper, /if \( ! \$committed \) \{\s*\$wpdb->query\( 'ROLLBACK' \);/,
@@ -165,4 +169,4 @@ assert.match(helper, /get_post_meta\s*\(/);
 assert.match(helper, /wp_insert_post\s*\(/);
 assert.match(helper, /wp_update_post\s*\(/);
 
-console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single meta_write=sql-transaction-only meta_verification=durable-in-tx+durable-postcommit+cache-prime+runtime-postcommit cache_flush=bounded created_ids=exact bridal_partial_provenance=bounded_fail_closed approvals=preserved');
+console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single meta_write=sql-transaction-only meta_verification=durable-in-tx+durable-postcommit+canonical-runtime-read+postread-durable-recheck+final-invalidation cache_flush=bounded created_ids=exact bridal_partial_provenance=bounded_fail_closed approvals=preserved');

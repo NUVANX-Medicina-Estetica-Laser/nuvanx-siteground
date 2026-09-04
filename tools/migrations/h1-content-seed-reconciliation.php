@@ -337,7 +337,37 @@ function nvx_h1_verify_meta_after_commit( int $post_id, string $meta_key, string
 		}
 	}
 
-	if ( $expected !== (string) get_post_meta( $post_id, $meta_key, true ) ) {
+	// The verifier must never become a cache writer. Invalidate the exact keys,
+	// let WordPress perform its canonical runtime read, then invalidate again in
+	// a finally block so a lazy cache population cannot survive this verifier.
+	nvx_h1_invalidate_post_cache( $post_id );
+	$runtime_value = '';
+	try {
+		$runtime_value = (string) get_post_meta( $post_id, $meta_key, true );
+	} finally {
+		nvx_h1_invalidate_post_cache( $post_id );
+	}
+
+	// Re-read durable state after the runtime read. If another request changed
+	// the value during verification, fail closed instead of accepting a mixed
+	// snapshot or reinstalling stale metadata into persistent object cache.
+	$post_runtime_values = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s ORDER BY meta_id ASC",
+			$post_id,
+			$meta_key
+		)
+	);
+	if ( ! is_array( $post_runtime_values ) || array() === $post_runtime_values ) {
+		throw new RuntimeException( 'post_meta_postcommit_concurrent_change_' . $failure_key );
+	}
+	foreach ( $post_runtime_values as $stored_value ) {
+		if ( $expected !== (string) maybe_unserialize( $stored_value ) ) {
+			throw new RuntimeException( 'post_meta_postcommit_concurrent_change_' . $failure_key );
+		}
+	}
+
+	if ( $expected !== $runtime_value ) {
 		throw new RuntimeException( 'post_meta_postcommit_runtime_verification_failed_' . $failure_key );
 	}
 }
@@ -353,49 +383,6 @@ function nvx_h1_invalidate_post_cache( int $post_id ): void {
 	wp_cache_delete( $post_id, 'post_meta' );
 	wp_cache_delete( $post_id, 'posts' );
 	wp_cache_delete( 'last_changed', 'posts' );
-}
-
-/**
- * Prime the complete WordPress post-meta cache from committed durable rows.
- *
- * Rebuilding the whole cache preserves unrelated metadata and avoids relying on
- * a persistent-cache delete race to decide what `get_post_meta()` can observe.
- */
-function nvx_h1_prime_post_meta_cache_from_durable_storage( int $post_id ): void {
-	global $wpdb;
-
-	if ( $post_id <= 0 ) {
-		throw new RuntimeException( 'post_meta_cache_prime_invalid_post_id' );
-	}
-
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id = %d ORDER BY meta_id ASC",
-			$post_id
-		),
-		ARRAY_A
-	);
-	if ( ! is_array( $rows ) ) {
-		throw new RuntimeException( 'post_meta_cache_prime_durable_read_failed' );
-	}
-
-	$cache = array();
-	foreach ( $rows as $row ) {
-		if ( ! is_array( $row ) || ! array_key_exists( 'meta_key', $row ) || ! array_key_exists( 'meta_value', $row ) ) {
-			throw new RuntimeException( 'post_meta_cache_prime_row_malformed' );
-		}
-		$key             = (string) $row['meta_key'];
-		$cache[ $key ][] = (string) $row['meta_value'];
-	}
-
-	if ( false === wp_cache_set( $post_id, $cache, 'post_meta' ) ) {
-		throw new RuntimeException( 'post_meta_cache_prime_write_failed' );
-	}
-
-	$primed = wp_cache_get( $post_id, 'post_meta' );
-	if ( ! is_array( $primed ) || $cache !== $primed ) {
-		throw new RuntimeException( 'post_meta_cache_prime_verification_failed' );
-	}
 }
 
 /** Invalidate every exact post touched by a failed plan without a global flush. */
@@ -433,38 +420,41 @@ function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 		}
 
 		nvx_h1_invalidate_post_cache( $post_id );
-		nvx_h1_prime_post_meta_cache_from_durable_storage( $post_id );
-
-		if ( 'strategy' === $scope && in_array( $action, array( 'update_seed_review_meta', 'create_seed' ), true ) ) {
-			$expected = (string) ( $payload['review_status'] ?? '' );
-			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_strategy_review_status', $expected );
-			continue;
-		}
-
-		if ( 'aesthetic' === $scope && in_array( $action, array( 'repair_seed_meta', 'create_seed' ), true ) ) {
-			$expected_key    = sanitize_key( (string) ( $payload['key'] ?? '' ) );
-			$expected_review = 'create_seed' === $action ? 'pending' : (string) ( $payload['target_review'] ?? 'pending' );
-			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_aesthetic_treatment_key', $expected_key );
-			nvx_h1_verify_meta_after_commit( $post_id, '_nvx_medical_review_status', $expected_review );
-			if ( 'approved' === $expected_review && null === nvx_medical_review_record( $post_id ) ) {
-				throw new RuntimeException( 'approved_review_postcommit_verification_failed' );
+		try {
+			if ( 'strategy' === $scope && in_array( $action, array( 'update_seed_review_meta', 'create_seed' ), true ) ) {
+				$expected = (string) ( $payload['review_status'] ?? '' );
+				nvx_h1_verify_meta_after_commit( $post_id, '_nvx_strategy_review_status', $expected );
+				continue;
 			}
-			continue;
-		}
 
-		if ( 'journal' === $scope && 'create_seed' === $action ) {
-			$post = get_post( $post_id );
-			if ( ! ( $post instanceof WP_Post ) || 'post' !== $post->post_type || 'publish' !== $post->post_status || $slug !== (string) $post->post_name ) {
-				throw new RuntimeException( 'journal_postcommit_runtime_verification_failed' );
+			if ( 'aesthetic' === $scope && in_array( $action, array( 'repair_seed_meta', 'create_seed' ), true ) ) {
+				$expected_key    = sanitize_key( (string) ( $payload['key'] ?? '' ) );
+				$expected_review = 'create_seed' === $action ? 'pending' : (string) ( $payload['target_review'] ?? 'pending' );
+				nvx_h1_verify_meta_after_commit( $post_id, '_nvx_aesthetic_treatment_key', $expected_key );
+				nvx_h1_verify_meta_after_commit( $post_id, '_nvx_medical_review_status', $expected_review );
+				if ( 'approved' === $expected_review && null === nvx_medical_review_record( $post_id ) ) {
+					throw new RuntimeException( 'approved_review_postcommit_verification_failed' );
+				}
+				continue;
 			}
-			continue;
-		}
 
-		if ( 'bridal' === $scope && 'retire_exact_seed' === $action ) {
-			if ( 'draft' !== get_post_status( $post_id ) ) {
-				throw new RuntimeException( 'bridal_postcommit_runtime_verification_failed' );
+			if ( 'journal' === $scope && 'create_seed' === $action ) {
+				$post = get_post( $post_id );
+				if ( ! ( $post instanceof WP_Post ) || 'post' !== $post->post_type || 'publish' !== $post->post_status || $slug !== (string) $post->post_name ) {
+					throw new RuntimeException( 'journal_postcommit_runtime_verification_failed' );
+				}
+				continue;
 			}
-			continue;
+
+			if ( 'bridal' === $scope && 'retire_exact_seed' === $action ) {
+				if ( 'draft' !== get_post_status( $post_id ) ) {
+					throw new RuntimeException( 'bridal_postcommit_runtime_verification_failed' );
+				}
+				continue;
+			}
+		} finally {
+			// Never leave cache state populated by verification reads behind.
+			nvx_h1_invalidate_post_cache( $post_id );
 		}
 	}
 }
