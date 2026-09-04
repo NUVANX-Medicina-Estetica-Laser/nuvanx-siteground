@@ -181,8 +181,8 @@ set +e
 env "${common_env[@]}" TEST_DUP_SCENARIO=window_incomplete bash "$SUBJECT" contract >"$window_log" 2>&1
 window_rc=$?
 set -e
-[[ "$window_rc" -eq 1 ]]
-grep -Fq 'PR_PREVIEW_LIVENESS=FAIL' "$window_log"
+[[ "$window_rc" -eq 75 ]]
+grep -Fq 'PR_PREVIEW_LIVENESS=TRANSIENT' "$window_log"
 grep -Fq 'reason=preview_run_window_incomplete' "$window_log"
 grep -Fq 'pages_scanned=10' "$window_log"
 grep -Fq 'mutation=forbidden' "$window_log"
@@ -253,4 +253,4 @@ for job_scenario in malformed_json non_object; do
   grep -Fq 'mutation=forbidden' "$log"
 done
 
-echo 'PR_PREVIEW_LIVENESS_CONTRACT=PASS latest_same_head_owner=1 older_superseded=1 unrelated_runs_ignored=1 unrelated_labels_ignored=1 paginated_duplicates_found=1 pagination_window_fail_closed=1 transient_exit_75=1 payload_fail_closed_exit_1=1'
+echo 'PR_PREVIEW_LIVENESS_CONTRACT=PASS latest_same_head_owner=1 older_superseded=1 unrelated_runs_ignored=1 unrelated_labels_ignored=1 paginated_duplicates_found=1 pagination_window_fail_closed=1 incomplete_window_transient=1 transient_exit_75=1 payload_fail_closed_exit_1=1'
