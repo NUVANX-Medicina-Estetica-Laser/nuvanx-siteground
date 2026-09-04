@@ -50,15 +50,19 @@ $enqueue_body  = false !== $enqueue_start && false !== $enqueue_end
 $dedupe_offset = strpos( $enqueue_body, "'_nvx_relay_dedupe_key'" );
 $next_offset   = strpos( $enqueue_body, "'_nvx_relay_next_attempt'", false === $dedupe_offset ? 0 : $dedupe_offset );
 $ready_offset  = strpos( $enqueue_body, "'_nvx_relay_ready'", false === $next_offset ? 0 : $next_offset );
-$bind_comment  = strpos( $enqueue_body, '// Bind claim to published post_id atomically via CAS.' );
+$bind_offset   = strpos(
+	$enqueue_body,
+	'nvx_supabase_relay_compare_and_swap_option( $claim_key, $in_flight_value, (string) $post_id )',
+	false === $ready_offset ? 0 : $ready_offset
+);
 $require_v3(
 	false !== $dedupe_offset
 	&& false !== $next_offset
 	&& false !== $ready_offset
-	&& false !== $bind_comment
+	&& false !== $bind_offset
 	&& $dedupe_offset < $next_offset
 	&& $next_offset < $ready_offset
-	&& $ready_offset < $bind_comment,
+	&& $ready_offset < $bind_offset,
 	'IDENTITY_READY_DUE_VISIBILITY_ORDERED'
 );
 

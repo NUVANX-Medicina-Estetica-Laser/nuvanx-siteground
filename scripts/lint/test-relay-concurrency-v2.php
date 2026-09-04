@@ -73,6 +73,7 @@ $GLOBALS['nvx_mock_insert_failure']           = false;
 $GLOBALS['nvx_mock_meta_failure_on_post']     = 0;
 $GLOBALS['nvx_mock_adopt_inserted_post']      = false;
 $GLOBALS['nvx_mock_update_failure_on_post']   = 0;
+$GLOBALS['nvx_mock_update_failure_status']    = '';
 
 // Option mocks
 function get_option( string $key, $default = false ) {
@@ -160,8 +161,10 @@ function wp_insert_post( $postarr = array(), $wp_error = false ) {
 	return $id;
 }
 function wp_update_post( $postarr = array(), $wp_error = false ) {
-	$id = (int) ( $postarr['ID'] ?? 0 );
-	if ( $id === $GLOBALS['nvx_mock_update_failure_on_post'] ) {
+	$id            = (int) ( $postarr['ID'] ?? 0 );
+	$target_status = isset( $postarr['post_status'] ) ? (string) $postarr['post_status'] : '';
+	$fail_status   = (string) ( $GLOBALS['nvx_mock_update_failure_status'] ?? '' );
+	if ( $id === $GLOBALS['nvx_mock_update_failure_on_post'] && ( '' === $fail_status || $target_status === $fail_status ) ) {
 		return $wp_error ? new WP_Error( 'mock_update_failed', 'Mock update failure.' ) : 0;
 	}
 	if ( $id < 1 || ! isset( $GLOBALS['nvx_mock_posts'][ $id ] ) ) {

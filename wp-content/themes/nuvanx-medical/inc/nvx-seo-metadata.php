@@ -360,44 +360,24 @@ function nvx_seo_current_metadata( string $field, string $fallback = '' ): strin
 /**
  * Determines whether the current installation should be treated as non-production.
  *
- * @return bool `true` for staging, local, configured non-production, or unrecognized environments; `false` only when `NVX_ENV` is set to `production`.
+ * The immutable request boundary owns environment identity. SEO must never
+ * reclassify the environment from client-controlled Host headers or late
+ * request globals.
  */
 function nvx_seo_is_nonproduction_environment(): bool {
-	// The only exception is a guarded WP-CLI reindex operation. It constructs
-	// Yoast indexables for sitemap-contract verification; it never runs in an
-	// HTTP request, does not change blog_public, and therefore cannot make
-	// staging2 indexable to search engines.
+	// The only exception is a guarded WP-CLI reindex operation. The canonical
+	// request owner applies the same exception, but keeping this explicit makes
+	// the indexing boundary self-documenting for standalone CLI consumers.
 	if ( defined( 'WP_CLI' ) && WP_CLI && '1' === getenv( 'NVX_ALLOW_STAGING_YOAST_INDEXABLE_REBUILD' ) ) {
 		return false;
 	}
 
-	// Staging2 must always be treated as non-production regardless of host or WP_ENVIRONMENT_TYPE.
-	if ( function_exists( 'nvx_environment_is_staging2' ) && nvx_environment_is_staging2() ) {
+	if ( ! function_exists( 'nvx_theme_request_context' ) ) {
 		return true;
 	}
 
-	// SiteGround preview/staging hosts must never be indexable.
-	$raw_host = isset( $_SERVER['HTTP_HOST'] ) ? strtolower( trim( (string) $_SERVER['HTTP_HOST'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-	// wp_parse_url() strips the port from both 'host:port' and '[::1]:port' (IPv6) forms.
-	$parsed_host = wp_parse_url( 'https://' . $raw_host, PHP_URL_HOST );
-	$host        = ( $parsed_host !== false && $parsed_host !== null ) ? $parsed_host : $raw_host;
-	if ( false !== strpos( $raw_host, '.sg-host.com' ) || false !== strpos( $raw_host, 'staging' ) || false !== strpos( $host, '.sg-host.com' ) || false !== strpos( $host, 'staging' ) ) {
-		return true;
-	}
-
-	if ( defined( 'NVX_ENV' ) ) {
-		return NVX_ENV !== 'production';
-	}
-
-	// Local development environments (localhost, 127.0.0.1, local domains)
-	if ( in_array( $host, array( 'localhost', '127.0.0.1', 'nuvanx.local', 'nuvanx.test' ), true ) ) {
-		return true;
-	}
-
-	// No NVX_ENV defined and not in known non-production hosts:
-	// FAIL SAFE (noindex) rather than FAIL OPEN (index) to prevent accidental indexing
-	error_log( '[nuvanx] CRITICAL: NVX_ENV constant is not defined and host is not recognized. Assuming non-production environment (noindex enabled) for safety. Define NVX_ENV=production in wp-config.php for production hosts.' );
-	return true;
+	$context = nvx_theme_request_context();
+	return true !== ( $context['is_production'] ?? false );
 }
 
 /**
@@ -582,18 +562,13 @@ function nvx_seo_route_alias_destination( string $path ): ?string {
 
 	$destination = home_url( $target );
 
-	// Only forward the request query string when the alias target has none of
-	// its own; wp_parse_str + add_query_arg re-encode it so raw request input
-	// never reaches the Location header verbatim.
-	if ( false === strpos( $target, '?' ) ) {
-		$request_uri = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '';
-		$query       = wp_parse_url( $request_uri, PHP_URL_QUERY );
-		$query       = is_string( $query ) ? $query : '';
-		if ( '' === $query && isset( $_SERVER['QUERY_STRING'] ) ) {
-			$query = (string) wp_unslash( $_SERVER['QUERY_STRING'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-		}
-		$args = array();
-		wp_parse_str( $query, $args );
+	// Forward only the bounded/sanitized query arguments owned by the immutable
+	// request context. Raw QUERY_STRING is never a second request authority.
+	if ( false === strpos( $target, '?' ) && function_exists( 'nvx_theme_request_context' ) ) {
+		$context = nvx_theme_request_context();
+		$args    = isset( $context['query_args'] ) && is_array( $context['query_args'] )
+			? $context['query_args']
+			: array();
 		if ( ! empty( $args ) ) {
 			$destination = add_query_arg( $args, $destination );
 		}
@@ -610,9 +585,10 @@ function nvx_seo_handle_route_alias_redirect(): void {
 		return;
 	}
 
-	$uri  = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '/';
-	$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
-	$path = '' !== trim( $path, '/' ) ? '/' . trim( $path, '/' ) . '/' : '/';
+	$path = function_exists( 'nvx_theme_request_path' ) ? nvx_theme_request_path() : '';
+	if ( '' === $path ) {
+		return;
+	}
 
 	$destination = nvx_seo_route_alias_destination( $path );
 	if ( null !== $destination ) {
