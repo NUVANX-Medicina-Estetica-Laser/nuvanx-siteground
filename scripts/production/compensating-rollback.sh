@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 : "${PROD_ROOT:?Missing PROD_ROOT}"
+: "${SITEGROUND_CACHE_HELPER:?Missing SITEGROUND_CACHE_HELPER}"
 BASE_URL="${BASE_URL:-https://nuvanx.com}"
 BASE_URL="${BASE_URL%/}"
 # PROD_DB_NAME is the canonical production DB identifier used as a boundary
@@ -20,6 +21,16 @@ printf '%s\n' '=== NUVANX POST-CUTOVER COMPENSATING ROLLBACK ==='
 }
 [[ "$PROD_PARENT" == '/home/customer/www/nuvanx.com' ]] || {
   echo "PRODUCTION_COMPENSATING_ROLLBACK=FAIL reason=unexpected_prod_parent parent=$PROD_PARENT" >&2
+  exit 2
+}
+[[ -s "$SITEGROUND_CACHE_HELPER" ]] || {
+  echo "PRODUCTION_COMPENSATING_ROLLBACK=FAIL reason=cache_helper_missing helper=$SITEGROUND_CACHE_HELPER" >&2
+  exit 2
+}
+# shellcheck source=/dev/null
+source "$SITEGROUND_CACHE_HELPER"
+[[ "$(type -t siteground_cache_purge || true)" == 'function' ]] || {
+  echo 'PRODUCTION_COMPENSATING_ROLLBACK=FAIL reason=canonical_cache_function_missing' >&2
   exit 2
 }
 [[ -d "$BACKUP_ROOT" ]] || {
@@ -109,24 +120,13 @@ else
   echo 'PRODUCTION_COMPENSATING_ROLLBACK_DB=SKIP reason=no-release-db-write-marker'
 fi
 
-cd "$PROD_ROOT"
-wp cache flush
-if wp plugin is-installed sg-cachepress >/dev/null 2>&1; then
-  sg_was_active=0
-  if wp plugin is-active sg-cachepress >/dev/null 2>&1; then
-    sg_was_active=1
-  else
-    wp plugin activate sg-cachepress --quiet
-  fi
-  wp sg purge || true
-  if [[ "$sg_was_active" -eq 0 ]]; then
-    wp plugin deactivate sg-cachepress --quiet || true
-  fi
+if ! siteground_cache_purge "$PROD_ROOT" preserve; then
+  echo 'PRODUCTION_COMPENSATING_ROLLBACK=FAIL reason=canonical_cache_purge_failed' >&2
+  exit 2
 fi
-rm -rf wp-content/uploads/siteground-optimizer-assets/siteground-optimizer-combined-* 2>/dev/null || true
-rm -rf wp-content/cache/sgo-cache/* wp-content/cache/* 2>/dev/null || true
-wp eval 'if (function_exists("opcache_reset")) { opcache_reset(); }' || true
+echo 'PRODUCTION_COMPENSATING_CACHE=PASS owner=tools/deploy/siteground-cache-purge.sh fail_closed=true'
 
+cd "$PROD_ROOT"
 [[ "$(wp config get DB_NAME)" == "$PROD_DB_NAME" ]] || { echo 'PRODUCTION_COMPENSATING_ROLLBACK=FAIL reason=db_identity' >&2; exit 2; }
 [[ "$(wp option get home)" == "$BASE_URL" ]] || { echo 'PRODUCTION_COMPENSATING_ROLLBACK=FAIL reason=home_identity' >&2; exit 2; }
 [[ "$(wp option get siteurl)" == "$BASE_URL" ]] || { echo 'PRODUCTION_COMPENSATING_ROLLBACK=FAIL reason=siteurl_identity' >&2; exit 2; }
