@@ -13,8 +13,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/nvx-page-render-helpers.php';
-
 /** Whether the current request is the bridal protocol page. */
 function nvx_is_bridal_protocol_page( string $content = '' ): bool {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
