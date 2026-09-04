@@ -611,9 +611,11 @@ function nvx_h1_apply_plan( array $plan ): array {
 				}
 				$target_review = (string) ( $payload['target_review'] ?? 'pending' );
 				if ( 'approved' === $target_review ) {
+					$current_review_state = nvx_h1_durable_aesthetic_review_state( $post->ID );
 					if (
-						nvx_h1_durable_meta_value( $post->ID, '_nvx_medical_reviewer' ) !== (string) ( $payload['reviewer'] ?? '' )
-						|| nvx_h1_durable_meta_value( $post->ID, '_nvx_medical_review_date' ) !== (string) ( $payload['review_date'] ?? '' )
+						! (bool) $current_review_state['approved']
+						|| (string) $current_review_state['reviewer'] !== (string) ( $payload['reviewer'] ?? '' )
+						|| (string) $current_review_state['date'] !== (string) ( $payload['review_date'] ?? '' )
 					) {
 						throw new RuntimeException( 'approved_review_provenance_changed' );
 					}
