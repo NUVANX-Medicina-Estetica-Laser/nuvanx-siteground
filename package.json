@@ -7,6 +7,7 @@
     "build:css": "node scripts/build/compile-theme-css.mjs",
     "build": "npm run build:css",
     "lint:repository-hygiene": "node scripts/lint/test-repository-hygiene.mjs",
+    "lint:repository-portability": "node scripts/lint/test-repository-portability.mjs",
     "lint:colors": "node scripts/lint/no-hardcoded-colors.mjs",
     "lint:fontsize": "node scripts/lint/no-hardcoded-fontsize.mjs",
     "lint:styles": "node scripts/lint/no-inline-layout-styles.mjs",
@@ -25,14 +26,14 @@
     "lint:tariff-ssot": "php scripts/lint/test-tariff-ssot-runtime.php && php scripts/lint/test-tariff-schema-nested-fail-closed.php",
     "lint:clinic-identity": "php scripts/lint/test-clinic-template-routing.php && php scripts/lint/test-clinic-identity-nap-governance.php",
     "lint:clinics-hub-equipment": "node scripts/lint/test-clinics-hub-equipment-contract.mjs",
-    "lint:css-ownership": "node scripts/lint/test-css-ownership-contract.mjs && node scripts/lint/test-css-release-materialization-contract.mjs",
+    "lint:css-ownership": "node scripts/lint/test-css-ownership-contract.mjs && node scripts/lint/test-css-important-budget.mjs && node scripts/lint/test-css-release-materialization-contract.mjs",
     "lint:integrations": "node scripts/lint/test-conversion-ownership-contract.mjs && node scripts/lint/test-integration-config-fail-closed.mjs && node scripts/lint/test-php-integrations-transport-ownership.mjs",
     "lint:performance-gate": "node scripts/lint/test-performance-regression-policy.mjs",
     "lint:php-surface": "node scripts/lint/test-php-entrypoints-templates.mjs",
     "lint:php-inventory": "node scripts/lint/test-php-repository-inventory.mjs",
     "lint:wpcs": "cd wp-content/themes/nuvanx-medical && export COMPOSER_VENDOR_DIR=\"${RUNNER_TEMP:-/tmp}/nvx-php-vendor\" && composer install --no-interaction --no-progress --prefer-dist && \"$COMPOSER_VENDOR_DIR/bin/phpcs\" --standard=phpcs.xml.dist .",
-    "lint:manifest": "npm run lint:repository-hygiene && node scripts/lint/test-css-manifest-contract.mjs && php scripts/lint/test-cases-publication-policy.php && npm run lint:css-ownership && npm run lint:integrations && npm run lint:performance-gate && npm run lint:hook-priorities && npm run lint:function-collisions && npm run lint:integrations-runtime && npm run lint:runtime-seeds && npm run lint:bootstrap && npm run lint:outbox-concurrency && npm run lint:clinical-evidence && npm run lint:tariff-ssot && npm run lint:clinic-identity && npm run lint:php-surface && npm run lint:php-inventory && npm run lint:wpcs",
-    "lint": "npm run lint:repository-hygiene && npm run lint:colors && npm run lint:fontsize && npm run lint:styles && npm run lint:routes && npm run lint:contrast && npm run lint:hook-priorities && npm run lint:function-collisions && npm run lint:integrations-runtime && npm run lint:runtime-seeds && npm run lint:bootstrap && npm run lint:outbox-concurrency && npm run lint:complianz && npm run lint:schema && npm run lint:tariff-ssot && npm run lint:endolaser-approval && npm run lint:clinical-evidence && npm run lint:clinic-identity && npm run lint:clinics-hub-equipment && npm run lint:manifest"
+    "lint:manifest": "npm run lint:repository-hygiene && npm run lint:repository-portability && node scripts/lint/test-css-manifest-contract.mjs && php scripts/lint/test-cases-publication-policy.php && npm run lint:css-ownership && npm run lint:integrations && npm run lint:performance-gate && npm run lint:hook-priorities && npm run lint:function-collisions && npm run lint:integrations-runtime && npm run lint:runtime-seeds && npm run lint:bootstrap && npm run lint:outbox-concurrency && npm run lint:clinical-evidence && npm run lint:tariff-ssot && npm run lint:clinic-identity && npm run lint:php-surface && npm run lint:php-inventory && npm run lint:wpcs",
+    "lint": "npm run lint:repository-hygiene && npm run lint:repository-portability && npm run lint:colors && npm run lint:fontsize && npm run lint:styles && npm run lint:routes && npm run lint:contrast && npm run lint:hook-priorities && npm run lint:function-collisions && npm run lint:integrations-runtime && npm run lint:runtime-seeds && npm run lint:bootstrap && npm run lint:outbox-concurrency && npm run lint:complianz && npm run lint:schema && npm run lint:tariff-ssot && npm run lint:endolaser-approval && npm run lint:clinical-evidence && npm run lint:clinic-identity && npm run lint:clinics-hub-equipment && npm run lint:manifest"
   },
   "engines": {
     "node": ">=18"
