@@ -92,6 +92,11 @@ assert.match(helper, /post_meta_postcommit_runtime_verification_failed_/,
 assert.match(helper, /post_meta_postcommit_concurrent_change_/,
   'Post-commit verification must detect a durable mutation that races the runtime read');
 
+assert.doesNotMatch(helper, /if\s*\(\s*\$approved\s*\|\|/,
+  'Approved seed pages that already match canonical key/status must remain idempotent no-ops');
+assert.match(helper, /if\s*\(\s*\$key\s*!==\s*\$current_key\s*\|\|\s*\$target_review\s*!==\s*\$current_review\s*\)/,
+  'Aesthetic repair must be planned only for an actual key/status drift');
+
 assert.match(helper, /function\s+nvx_h1_invalidate_post_cache\s*\(\s*int\s+\$post_id\s*\)/,
   'H1 must provide bounded post and query cache invalidation');
 assert.match(helper, /wp_cache_delete\s*\(\s*\$post_id\s*,\s*'post_meta'\s*\)/,
@@ -100,6 +105,10 @@ assert.match(helper, /clean_post_cache\s*\(\s*\$post_id\s*\)/,
   'Post-commit boundary must invalidate the exact post object cache');
 assert.match(helper, /wp_cache_delete\s*\(\s*'last_changed',\s*'posts'\s*\)/,
   'Post-commit verification must invalidate post-query cache via last_changed');
+assert.match(helper, /wp_cache_supports\s*\(\s*'flush_runtime'\s*\)/,
+  'Persistent-cache backends must advertise runtime-only flushing before it is used');
+assert.match(helper, /wp_cache_flush_runtime\s*\(\s*\)/,
+  'A supported runtime-only flush must clear same-process stale snapshots after exact-key invalidation');
 assert.doesNotMatch(helper, /wp_cache_flush\s*\(/,
   'H1 correctness and rollback cleanup must remain bounded; global cache flush is forbidden');
 
@@ -169,4 +178,4 @@ assert.match(helper, /get_post_meta\s*\(/);
 assert.match(helper, /wp_insert_post\s*\(/);
 assert.match(helper, /wp_update_post\s*\(/);
 
-console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single meta_write=sql-transaction-only meta_verification=durable-in-tx+durable-postcommit+canonical-runtime-read+postread-durable-recheck+final-invalidation cache_flush=bounded created_ids=exact bridal_partial_provenance=bounded_fail_closed approvals=preserved');
+console.log('RUNTIME_SEED_BOUNDARY=PASS runtime_mutators=0 canonical_owner=content-hygiene-staging-only child_status=fenced streaming=required direct_output=forbidden prevalidate_all=1 h1_meta_owner=single meta_write=sql-transaction-only meta_verification=durable-in-tx+durable-postcommit+canonical-runtime-read+postread-durable-recheck+final-invalidation cache_flush=bounded+runtime-local idempotent_approved_noop=1 created_ids=exact bridal_partial_provenance=bounded_fail_closed approvals=preserved');
