@@ -922,6 +922,15 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 		$dedupe_key    = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
 		$endpoint      = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
 		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
+
+		// Publication ownership outranks structural classification. Enqueue writes
+		// the generation token before identity/readiness metadata; recovery can
+		// observe that legitimate intermediate state. A live publisher must never
+		// be quarantined for metadata that it has not finished writing yet.
+		if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
+			return false;
+		}
+
 		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
 			$updated = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
 			if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
@@ -932,22 +941,13 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 			return false;
 		}
 
-		$claim_key = nvx_supabase_relay_queue_claim_key( $dedupe_key );
-		$current   = nvx_supabase_relay_queue_fresh_option( $claim_key );
 		if ( ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
-			if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
-				return false;
-			}
 			$updated = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
 			if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
 				nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'quarantine_transition_failed' );
 				return false;
 			}
 			nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'publication_incomplete' );
-			return false;
-		}
-
-		if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
 			return false;
 		}
 
@@ -1015,14 +1015,16 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_item_due' ) ) {
 		$is_prepared   = NVX_SUPABASE_RELAY_QUEUE_PREPARED_STATUS === $post->post_status;
 		$publish_claim = (string) get_post_meta( $post_id, '_nvx_relay_publish_claim', true );
 		$dedupe_key    = (string) get_post_meta( $post_id, '_nvx_relay_dedupe_key', true );
+
+		// A prepared row with a live generation is owned by its publisher. This
+		// invariant is evaluated before readiness/dedupe classification so the
+		// drainer cannot quarantine any legitimate intermediate publish state.
+		if ( $is_prepared && '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
+			return false;
+		}
+
 		if ( $is_prepared && ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
 			$dedupe_valid = 1 === preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key );
-			if ( '' !== $publish_claim && nvx_supabase_relay_queue_publish_claim_live( $publish_claim ) ) {
-				// A live publication generation is still authoritative even if the
-				// option owner has already advanced. Never quarantine an in-flight
-				// publisher; recovery begins only after its generation expires.
-				return false;
-			}
 			// A prepared row that carries a valid identity and durable due-visibility
 			// is a structurally complete publication whose only missing write is the
 			// readiness marker (a crash between next_attempt and ready, or a legacy
