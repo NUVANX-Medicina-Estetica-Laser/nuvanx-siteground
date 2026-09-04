@@ -69,7 +69,7 @@
   top: calc(var(--nvx-space-1) * -1);
   right: var(--nvx-space-2);
   font-family: var(--nvx-serif);
-  font-size: var(--nvx-space-12);
+  font-size: var(--nvx-type-quote-mark);
   font-weight: var(--nvx-fw-regular);
   line-height: 1;
   color: var(--nvx-ink);

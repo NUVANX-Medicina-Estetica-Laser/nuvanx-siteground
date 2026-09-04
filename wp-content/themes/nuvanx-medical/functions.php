@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-// Suppress deprecated warnings from WordPress core in production
+// Suppress deprecated warnings from WordPress core in production.
 if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
 	error_reporting( E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED );
 }
@@ -62,18 +62,11 @@ function nvx_theme_fonts(): void {
 	$font_url = 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap';
 	wp_enqueue_style( 'nvx-google-fonts', $font_url, array(), null );
 
-	if ( function_exists( 'nvx_theme_public_delivers_inline_styles' ) && nvx_theme_public_delivers_inline_styles() ) {
-		return;
-	}
-
-	$path = get_template_directory() . '/assets/css/nvx-fonts.css';
-	$ver  = is_readable( $path ) ? (string) filemtime( $path ) : NVX_THEME_VERSION;
-
 	wp_enqueue_style(
 		'nvx-fonts',
 		get_template_directory_uri() . '/assets/css/nvx-fonts.css',
 		array( 'nvx-google-fonts' ),
-		$ver
+		nvx_asset_version( 'assets/css/nvx-fonts.css' )
 	);
 }
 add_action( 'wp_enqueue_scripts', 'nvx_theme_fonts', 5 );
@@ -168,8 +161,8 @@ function nvx_asset_version( string $relative_path ): string {
 	if ( isset( $cache[ $relative_path ] ) ) {
 		return $cache[ $relative_path ];
 	}
-	$path = get_template_directory() . '/' . ltrim( $relative_path, '/' );
-	$version = is_readable( $path ) ? (string) filemtime( $path ) : NVX_THEME_VERSION;
+	$path     = get_template_directory() . '/' . ltrim( $relative_path, '/' );
+	$version  = is_readable( $path ) ? (string) filemtime( $path ) : NVX_THEME_VERSION;
 	$cache[ $relative_path ] = $version;
 	return $version;
 }
@@ -177,28 +170,20 @@ function nvx_asset_version( string $relative_path ): string {
 /** Enqueue the canonical design-system stack and page-owned assets. */
 function nvx_theme_scripts(): void {
 	$uri = get_template_directory_uri();
+	$css = $uri . '/assets/css/';
 
-	// Public pages inline the local stack (nvx-native-style-governance.php).
-	// File URLs stay off the LCP critical path; the editor still gets files.
-	$public_inline = function_exists( 'nvx_theme_public_delivers_inline_styles' )
-		&& nvx_theme_public_delivers_inline_styles();
-
-	if ( ! $public_inline ) {
-		$css = $uri . '/assets/css/';
-		wp_enqueue_style( 'nvx-tokens', $css . 'nvx-tokens.css', array( 'nvx-fonts' ), nvx_asset_version( 'assets/css/nvx-tokens.css' ) );
-		wp_enqueue_style( 'nvx-base', $css . 'nvx-base.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-base.css' ) );
-		wp_enqueue_style( 'nvx-layout', $css . 'nvx-site-layout.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-site-layout.css' ) );
-		wp_enqueue_style( 'nvx-components', $css . 'nvx-components.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-components.css' ) );
-		wp_enqueue_style( 'nvx-patterns', $css . 'nvx-patterns-editorial.css', array( 'nvx-components' ), nvx_asset_version( 'assets/css/nvx-patterns-editorial.css' ) );
-		wp_enqueue_style( 'nvx-treatment-authority', $css . 'nvx-treatment-authority.css', array( 'nvx-patterns' ), nvx_asset_version( 'assets/css/nvx-treatment-authority.css' ) );
-		wp_enqueue_style( 'nvx-header', $css . 'nvx-header.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-header.css' ) );
-		wp_enqueue_style( 'nvx-footer', $css . 'nvx-footer.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-footer.css' ) );
-	}
+	// Static CSS has one delivery owner: versioned browser-cacheable files.
+	wp_enqueue_style( 'nvx-tokens', $css . 'nvx-tokens.css', array( 'nvx-fonts' ), nvx_asset_version( 'assets/css/nvx-tokens.css' ) );
+	wp_enqueue_style( 'nvx-base', $css . 'nvx-base.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-base.css' ) );
+	wp_enqueue_style( 'nvx-layout', $css . 'nvx-site-layout.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-site-layout.css' ) );
+	wp_enqueue_style( 'nvx-components', $css . 'nvx-components.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-components.css' ) );
+	wp_enqueue_style( 'nvx-patterns', $css . 'nvx-patterns-editorial.css', array( 'nvx-components' ), nvx_asset_version( 'assets/css/nvx-patterns-editorial.css' ) );
+	wp_enqueue_style( 'nvx-treatment-authority', $css . 'nvx-treatment-authority.css', array( 'nvx-patterns' ), nvx_asset_version( 'assets/css/nvx-treatment-authority.css' ) );
+	wp_enqueue_style( 'nvx-header', $css . 'nvx-header.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-header.css' ) );
+	wp_enqueue_style( 'nvx-footer', $css . 'nvx-footer.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-footer.css' ) );
 
 	if ( nvx_theme_is_home_page() ) {
-		if ( ! $public_inline ) {
-			wp_enqueue_style( 'nvx-home-v3', $css . 'nvx-home-v3.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-home-v3.css' ) );
-		}
+		wp_enqueue_style( 'nvx-home-v3', $css . 'nvx-home-v3.css', array( 'nvx-tokens' ), nvx_asset_version( 'assets/css/nvx-home-v3.css' ) );
 		wp_enqueue_script(
 			'nvx-home-video',
 			$uri . '/assets/js/nvx-home-video.js',
@@ -208,7 +193,7 @@ function nvx_theme_scripts(): void {
 		);
 	}
 
-	if ( ! $public_inline && function_exists( 'nvx_theme_is_treatments_hub_page' ) && nvx_theme_is_treatments_hub_page() ) {
+	if ( function_exists( 'nvx_theme_is_treatments_hub_page' ) && nvx_theme_is_treatments_hub_page() ) {
 		wp_enqueue_style(
 			'nvx-portfolio-hub',
 			$css . 'nvx-portfolio-hub.css',

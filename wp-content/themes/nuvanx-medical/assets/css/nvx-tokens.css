@@ -18,26 +18,19 @@
   --nvx-text-muted: #4a4a4a;
   --nvx-color-paper: var(--nvx-surface-base);
   --nvx-color-line: rgba(17, 17, 17, 0.16);
-
-  /* Texto y bordes sobre superficies oscuras */
   --nvx-text-on-dark: var(--nvx-light);
-
-  /* Solid: Lighthouse treats alpha text as if composited on white and fails AA. */
   --nvx-text-on-dark-90: var(--nvx-light);
   --nvx-text-on-dark-88: rgba(247, 247, 245, 0.88);
   --nvx-text-on-dark-82: rgba(247, 247, 245, 0.82);
   --nvx-text-on-dark-78: rgba(247, 247, 245, 0.78);
   --nvx-text-on-dark-72: rgba(247, 247, 245, 0.72);
   --nvx-border-on-dark-55: rgba(247, 247, 245, 0.55);
-
-  /* Luxurious dark surfaces */
   --nvx-surface-dark: #070707;
   --nvx-border-on-dark-45: rgba(247, 247, 245, 0.45);
   --nvx-accent-success: #25d366;
   --nvx-accent-info: #4a5568;
   --nvx-ink-muted: rgba(17, 17, 17, 0.82);
 
-  /* Form-stage */
   --nvx-form-stage-warm: #ebebea;
   --nvx-form-stage-mid: #e0e0de;
   --nvx-form-stage-cool: #d4d4d2;
@@ -54,8 +47,6 @@
   --nvx-shadow-button-hover: 0 16px 32px rgba(26, 26, 26, 0.14);
   --nvx-shadow-focus-light: 0 0 0 2px var(--nvx-light);
   --nvx-shadow-focus-glow: 0 0 0 3px var(--nvx-accent-glow);
-
-  /* Text shadows for dark overlays */
   --nvx-text-shadow-overlay-strong: 0 1px 6px rgba(0, 0, 0, 0.6);
   --nvx-text-shadow-overlay-medium: 0 2px 10px rgba(0, 0, 0, 0.55);
   --nvx-text-shadow-overlay-heavy: 0 2px 8px rgba(0, 0, 0, 0.75);
@@ -100,7 +91,6 @@
   --nvx-portfolio-item-gap: clamp(96px, 12vw, 160px);
   --nvx-legal-page-pad-start: clamp(48px, 6vw, 88px);
   --nvx-legal-card-pad: clamp(28px, 4vw, 52px);
-
   --nvx-gap-base: clamp(16px, 2.5vw, 24px);
   --nvx-gap-wide: clamp(24px, 3vw, 40px);
   --nvx-gutter: clamp(32px, 6vw, 96px);
@@ -114,25 +104,18 @@
   --nvx-margin-lead: 32px;
   --nvx-margin-caption: 16px;
 
-  /* Shell y lectura: el gutter pertenece al contenedor, una vez por cada lado. */
   --nvx-shell: min(1240px, calc(100vw - (2 * var(--nvx-gutter-page))));
-
   --nvx-measure: 68ch;
   --nvx-measure-lead: 56ch;
   --nvx-measure-wide: 72rem;
 
-  /* Media */
   --nvx-media-ratio-card: 16 / 9;
   --nvx-media-max-h-featured: clamp(240px, 34vw, 400px);
-  /* Home video stage. Must stay in tokens (inlined) so first paint reserves
-     the same box that the loaded page uses. Do not override this in deferred CSS. */
   --nvx-home-hero-h: clamp(520px, 72svh, 680px);
 
-  /* Component dimensions */
   --nvx-header-height: 80px;
   --nvx-header-height-mobile: 72px;
   --nvx-touch-target-min: 48px;
-  /* Compact inline-link targets are intentionally smaller than form controls. */
   --nvx-touch-target-text-min: 48px;
   --nvx-card-index-size: 40px;
   --nvx-control-size: var(--nvx-touch-target-min);
@@ -144,7 +127,6 @@
   --nvx-submenu-max-width: 320px;
   --nvx-shell-max: 1240px;
 
-  /* Icon dimensions and stroke */
   --nvx-icon-xs: 16px;
   --nvx-icon-sm: 24px;
   --nvx-icon-md: 32px;
@@ -160,7 +142,6 @@
   --nvx-footer-link-gap: 12px;
   --nvx-footer-column-gap: var(--nvx-space-5);
 
-  /* Home video stage: keep the upper frame open; scrim only under the bottom copy. */
   --nvx-home-hero-overlay: linear-gradient(
     180deg,
     rgba(26, 26, 26, 0.35) 0%,
@@ -170,8 +151,6 @@
     rgba(26, 26, 26, 0.86) 86%,
     rgba(26, 26, 26, 0.92) 100%
   );
-
-  /* Stronger overlay for text legibility on light backgrounds (Nosotros hero) */
   --nvx-media-overlay-strong: linear-gradient(
     180deg,
     rgba(26, 26, 26, 0.68) 0%,
@@ -189,7 +168,7 @@
   --nvx-type-h1: clamp(2.2rem, 4vw, 3.2rem);
   --nvx-type-h2: clamp(1.7rem, 3vw, 2.4rem);
   --nvx-type-h3: 1.4rem;
-  --nvx-type-h5: 1.0rem;
+  --nvx-type-h5: 1rem;
   --nvx-type-body-compact: 0.9375rem;
   --nvx-type-lead: clamp(1.0625rem, 1.35vw, 1.25rem);
   --nvx-type-body: 1.0625rem;
@@ -201,14 +180,18 @@
   --nvx-type-nav-compact: 0.8125rem;
   --nvx-type-nav-submenu: 0.875rem;
   --nvx-type-nav-mobile: clamp(1.5rem, 6vw, 2.25rem);
-  --nvx-type-micro:    0.6875rem;
+  --nvx-type-micro: 0.6875rem;
   --nvx-type-caption2: 0.8125rem;
-  --nvx-type-lead-lg:  1.125rem;
+  --nvx-type-lead-lg: 1.125rem;
+  --nvx-type-card-title-max: 1.75rem;
+  --nvx-type-cta-title: 1.5rem;
+  --nvx-type-control-glyph: 1.75rem;
+  --nvx-type-quote-mark: 6rem;
 
   --nvx-fw-regular: 400;
   --nvx-fw-heading: 500;
   --nvx-fw-medium: 600;
-  --nvx-fw-bold:   700;
+  --nvx-fw-bold: 700;
   --nvx-lh-display: 1.15;
   --nvx-lh-h1: 1.15;
   --nvx-lh-h2: 1.15;
@@ -219,7 +202,6 @@
   --nvx-lh-caption: 1.5;
   --nvx-lh-nav: 1;
   --nvx-lh-nav-submenu: 1.35;
-  /* Shared editorial roles; do not substitute by numeric coincidence. */
   --nvx-lh-prose: 1.7;
   --nvx-lh-heading-editorial: 1.2;
   --nvx-lh-body-sm: 1.5;
@@ -241,30 +223,23 @@
   --nvx-track-data-label: 0.05em;
   --nvx-track-indication: 0.18em;
 
-  /* Sequential indices are UI labels, not display metrics */
   --nvx-index-number-size: var(--nvx-type-caption);
   --nvx-index-number-weight: 600;
   --nvx-index-number-track: 0.16em;
 
   --nvx-accent-line-dark: rgba(247, 247, 245, 0.15);
-
-  /* Additional design tokens added during migration */
   --nvx-outline-offset: 2px;
   --nvx-underline-offset-medium: 3px;
   --nvx-catalog-width: 900px;
   --nvx-section-tight-width: 800px;
 
-  /* ========== MOTION & TRANSITIONS ========== */
   --nvx-duration-fast: 160ms;
   --nvx-duration-normal: 240ms;
   --nvx-duration-slow: 320ms;
   --nvx-duration-slower: 480ms;
   --nvx-transition-fast: var(--nvx-duration-fast) cubic-bezier(0.2, 0, 0, 1);
-
-  /* Effects */
   --nvx-blur-strong: 10px;
 
-  /* Z-index system */
   --nvx-z-local-base: 1;
   --nvx-z-local-overlay: 2;
   --nvx-z-local-content: 3;
