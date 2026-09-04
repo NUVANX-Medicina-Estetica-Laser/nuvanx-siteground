@@ -143,7 +143,7 @@ function nvx_h1_build_plan(): array {
 			$current_key    = (string) get_post_meta( $existing->ID, '_nvx_aesthetic_treatment_key', true );
 			$current_review = strtolower( trim( (string) get_post_meta( $existing->ID, '_nvx_medical_review_status', true ) ) );
 
-			if ( $approved || $key !== $current_key || $target_review !== $current_review ) {
+			if ( $key !== $current_key || $target_review !== $current_review ) {
 				nvx_h1_plan_add(
 					$plan,
 					'ops',
@@ -383,6 +383,18 @@ function nvx_h1_invalidate_post_cache( int $post_id ): void {
 	wp_cache_delete( $post_id, 'post_meta' );
 	wp_cache_delete( $post_id, 'posts' );
 	wp_cache_delete( 'last_changed', 'posts' );
+
+	// Some persistent-cache backends can report an exact-key delete miss while
+	// this PHP process still carries a stale runtime snapshot. Clear only the
+	// request-local cache when the active backend explicitly supports it; never
+	// use a global persistent-cache flush for H1 correctness.
+	if (
+		function_exists( 'wp_cache_supports' )
+		&& function_exists( 'wp_cache_flush_runtime' )
+		&& wp_cache_supports( 'flush_runtime' )
+	) {
+		wp_cache_flush_runtime();
+	}
 }
 
 /** Invalidate every exact post touched by a failed plan without a global flush. */
