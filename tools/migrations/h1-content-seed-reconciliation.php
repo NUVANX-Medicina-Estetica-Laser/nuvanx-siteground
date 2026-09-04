@@ -93,9 +93,9 @@ function nvx_h1_durable_meta_value( int $post_id, string $meta_key ): string {
  * @return array{approved:bool,status:string,reviewer:string,date:string}
  */
 function nvx_h1_durable_aesthetic_review_state( int $post_id ): array {
-	$status   = strtolower( trim( nvx_h1_durable_meta_value( $post_id, '_nvx_medical_review_status' ) ) );
-	$reviewer = strtolower( trim( nvx_h1_durable_meta_value( $post_id, '_nvx_medical_reviewer' ) ) );
-	$date     = trim( nvx_h1_durable_meta_value( $post_id, '_nvx_medical_review_date' ) );
+	$status    = strtolower( trim( nvx_h1_durable_meta_value( $post_id, '_nvx_medical_review_status' ) ) );
+	$reviewer  = strtolower( trim( nvx_h1_durable_meta_value( $post_id, '_nvx_medical_reviewer' ) ) );
+	$date      = trim( nvx_h1_durable_meta_value( $post_id, '_nvx_medical_review_date' ) );
 	$reviewers = nvx_medical_reviewers();
 	$approved  = 'approved' === $status
 		&& isset( $reviewers[ $reviewer ] )
@@ -254,7 +254,7 @@ function nvx_h1_build_plan(): array {
 		$slug   = sanitize_title( (string) $raw_slug );
 		$marker = (string) ( $meta['marker'] ?? '' );
 		if ( '' === $slug || '' === $marker ) {
-			nvx_h1_plan_add( $plan, 'errors', 'journal', 'invalid_catalog_record', $slug ?: $key );
+			nvx_h1_plan_add( $plan, 'errors', 'journal', 'invalid_catalog_record', $slug );
 			continue;
 		}
 		$existing = get_page_by_path( $slug, OBJECT, 'post' );
