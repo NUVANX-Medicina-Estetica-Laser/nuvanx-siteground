@@ -8,6 +8,7 @@ EXPECTED_ROOT='/home/customer/www/staging2.nuvanx.com/public_html'
 EXPECTED_URL='https://staging2.nuvanx.com'
 PROD_ROOT='/home/customer/www/nuvanx.com/public_html'
 PROD_URL='https://nuvanx.com'
+CANONICAL_GITHUB_REPOSITORY='NUVANX-Medicina-Estetica-Laser/nuvanx-siteground'
 THEME_REL='wp-content/themes/nuvanx-medical'
 WP_ROOT=''
 SOURCE_THEME=''
@@ -62,6 +63,86 @@ fail() {
 fail_config() {
   echo "FAIL_CONFIG: $*" >&2
   exit 78
+}
+
+superseded_pr_preview() {
+  echo "MUTATION_FIFO=SUPERSEDED role=pr-preview reason=$1 stage=deploy-boundary mutation=forbidden" >&2
+  exit 78
+}
+
+# A pull_request_target preview is rebuilt from trusted master and an immutable
+# PR head, but several workflow setup steps happen before this script runs. The
+# final mutation authority therefore lives here, inside the trusted mutator,
+# immediately before any live Staging2 write. The immutable release directory
+# carries PR number, synthetic preview SHA, run id and run attempt; the public
+# GitHub API supplies the original head SHA and current PR state without moving
+# any credential onto SiteGround.
+verify_pr_preview_authority_if_applicable() {
+  local release_dir=''
+  local pr_number=''
+  local preview_sha=''
+  local run_id=''
+  local run_attempt=''
+  local run_json=''
+  local pr_json=''
+  local run_event=''
+  local run_head_sha=''
+  local api_run_attempt=''
+  local run_pr_matches=''
+  local pr_state=''
+  local merged_at=''
+  local current_pr_sha=''
+  local base_ref=''
+  local api_base="https://api.github.com/repos/${CANONICAL_GITHUB_REPOSITORY}"
+
+  release_dir="$(basename "$(dirname "$SOURCE_THEME")")"
+  if [[ "$release_dir" != pr-* ]]; then
+    echo 'PR_PREVIEW_AUTHORITY=NOT_APPLICABLE release=trusted-master-or-operator'
+    return 0
+  fi
+
+  if [[ ! "$release_dir" =~ ^pr-([0-9]+)-([0-9a-f]{40})-([0-9]+)-([0-9]+)$ ]]; then
+    fail 'PR preview release path is malformed; mutation authority cannot be proven'
+  fi
+  pr_number="${BASH_REMATCH[1]}"
+  preview_sha="${BASH_REMATCH[2]}"
+  run_id="${BASH_REMATCH[3]}"
+  run_attempt="${BASH_REMATCH[4]}"
+
+  [[ "$preview_sha" == "$DEPLOY_SHA" ]] || superseded_pr_preview 'preview_sha_mismatch'
+
+  run_json="$(curl -fsS --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 20 \
+    -H 'Accept: application/vnd.github+json' \
+    -H 'User-Agent: nuvanx-staging2-pr-authority' \
+    "$api_base/actions/runs/$run_id")" \
+    || fail 'Unable to verify PR preview workflow-run authority from GitHub'
+
+  run_event="$(printf '%s' "$run_json" | jq -r '.event // ""')"
+  run_head_sha="$(printf '%s' "$run_json" | jq -r '.head_sha // ""')"
+  api_run_attempt="$(printf '%s' "$run_json" | jq -r '(.run_attempt // 0) | tostring')"
+  run_pr_matches="$(printf '%s' "$run_json" | jq -r --argjson pr "$pr_number" '[.pull_requests[]? | select(.number == $pr)] | length')"
+
+  [[ "$run_event" == 'pull_request_target' ]] || superseded_pr_preview 'unexpected_run_event'
+  [[ "$run_head_sha" =~ ^[0-9a-f]{40}$ ]] || fail 'PR preview workflow run did not expose an immutable head SHA'
+  [[ "$api_run_attempt" == "$run_attempt" ]] || superseded_pr_preview 'run_attempt_mismatch'
+  [[ "$run_pr_matches" == '1' ]] || superseded_pr_preview 'run_pr_binding_mismatch'
+
+  pr_json="$(curl -fsS --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 20 \
+    -H 'Accept: application/vnd.github+json' \
+    -H 'User-Agent: nuvanx-staging2-pr-authority' \
+    "$api_base/pulls/$pr_number")" \
+    || fail 'Unable to verify current PR preview authority from GitHub'
+
+  pr_state="$(printf '%s' "$pr_json" | jq -r '.state // ""')"
+  merged_at="$(printf '%s' "$pr_json" | jq -r '.merged_at // ""')"
+  current_pr_sha="$(printf '%s' "$pr_json" | jq -r '.head.sha // ""')"
+  base_ref="$(printf '%s' "$pr_json" | jq -r '.base.ref // ""')"
+
+  [[ "$pr_state" == 'open' && -z "$merged_at" ]] || superseded_pr_preview 'pr_not_open'
+  [[ "$base_ref" == 'master' ]] || superseded_pr_preview 'pr_base_changed'
+  [[ "$current_pr_sha" == "$run_head_sha" ]] || superseded_pr_preview 'pr_head_superseded'
+
+  echo "PR_PREVIEW_AUTHORITY=PASS pr=$pr_number pr_sha=$run_head_sha preview_sha=$preview_sha run_id=$run_id run_attempt=$run_attempt stage=deploy-boundary"
 }
 
 provision_staging_hubspot_identity() {
@@ -120,9 +201,6 @@ verify_staging_hubspot_embed_contract() {
   local form=''
   local source='canonical_wp_config'
 
-  # Source contract: form identity is server-side only. The browser surfaces
-  # must render the canonical first-party owner and must never carry a HubSpot
-  # form frame/embed loader as a compatibility fallback.
   [[ -f "$secure_file" ]] || fail 'HubSpot secure identity resolver is missing from the immutable theme payload'
   [[ -f "$direct_form_file" ]] || fail 'canonical first-party valoración form is missing from the immutable theme payload'
   [[ -f "$managed_file" ]] || fail 'managed valoración landing is missing from the immutable theme payload'
@@ -139,8 +217,6 @@ verify_staging_hubspot_embed_contract() {
   ! grep -Eq 'hs-form-frame|forms/embed/' "$managed_file" || fail 'managed valoración landing still contains a retired HubSpot browser embed'
   ! grep -Eq 'hs-form-frame|forms/embed/' "$modal_file" || fail 'valoración modal still contains a retired HubSpot browser embed'
 
-  # Runtime precondition: provisioning immediately above writes the canonical
-  # pair. Legacy frame-era wp-config aliases are not valid Staging identity.
   (
     cd "$WP_ROOT"
     wp config has NVX_HUBSPOT_PORTAL_ID 2>/dev/null \
@@ -212,11 +288,10 @@ done
 [[ -n "$MIGRATIONS_DIR" && -d "$MIGRATIONS_DIR" ]] || fail 'migration directory cannot be resolved from repository or immutable release layout'
 [[ -n "$PUBLIC_INTEGRATION_CONFIG" && -f "$PUBLIC_INTEGRATION_CONFIG" ]] || fail_config 'public Staging integration identity manifest cannot be resolved from repository or immutable release layout'
 [[ -n "$CACHE_HELPER" && -f "$CACHE_HELPER" ]] || fail 'canonical SiteGround cache purge helper cannot be resolved from repository or immutable release layout'
-# shellcheck source=/dev/null
 source "$CACHE_HELPER"
 declare -F siteground_cache_purge >/dev/null || fail 'canonical SiteGround cache purge function is unavailable'
 
-for command_name in wp rsync tar php find mktemp sha256sum awk jq; do
+for command_name in wp rsync tar php find mktemp sha256sum awk jq curl; do
   command -v "$command_name" >/dev/null 2>&1 || fail "required command is unavailable: $command_name"
 done
 
@@ -331,6 +406,10 @@ echo '== Guard production read-only source identity =='
   [[ "$(wp option get blog_public)" == '1' ]] || fail 'production source must remain public'
   [[ "$(wp theme list --status=active --field=name)" == 'nuvanx-medical' ]] || fail 'unexpected production active theme'
 )
+
+# Final trusted authority boundary. No wp-config, live theme, database or cache
+# mutation may occur above this call for PR previews.
+verify_pr_preview_authority_if_applicable
 
 CONFIG_BACKUP="$(mktemp)"
 cp -p "$WP_ROOT/wp-config.php" "$CONFIG_BACKUP"
