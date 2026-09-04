@@ -92,7 +92,7 @@ grep -Fq 'siteground-cache-purge.sh" "nvx-prod:$REMOTE_RELEASE/siteground-cache-
   || fail 'production_workflow_missing_remote_helper_payload'
 grep -Fq 'PRODUCTION_CACHE_HELPER_PAYLOAD=PASS' "$PROD_WORKFLOW" \
   || fail 'production_workflow_missing_helper_lineage_evidence'
-grep -Fq "SITEGROUND_CACHE_HELPER='$REMOTE_RELEASE/siteground-cache-purge.sh'" "$PROD_WORKFLOW" \
+grep -Fq "SITEGROUND_CACHE_HELPER='\$REMOTE_RELEASE/siteground-cache-purge.sh'" "$PROD_WORKFLOW" \
   || fail 'production_workflow_compensation_helper_handoff_missing'
 
 # The canonical helper itself is fail-closed and restores requested plugin state
