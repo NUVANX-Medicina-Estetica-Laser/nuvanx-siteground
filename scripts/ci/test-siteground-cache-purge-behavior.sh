@@ -31,29 +31,43 @@ set -euo pipefail
 
 state_file="${WP_MOCK_STATE_FILE:?missing_state_file}"
 fail_cmd="${WP_MOCK_FAIL_CMD:-}"
+installed="${WP_MOCK_PLUGIN_INSTALLED:-1}"
+command_available="${WP_MOCK_SG_COMMAND_AVAILABLE:-0}"
 cmd="${1:-}"
 sub="${2:-}"
 
 case "$cmd:$sub" in
   plugin:is-installed)
-    exit 0
+    [[ "$installed" == '1' ]]
     ;;
   plugin:is-active)
-    [[ "$(cat "$state_file")" == 'active' ]]
+    [[ "$installed" == '1' && "$(cat "$state_file")" == 'active' ]]
     ;;
   plugin:activate)
+    [[ "$installed" == '1' ]] || exit 41
     printf '%s\n' active > "$state_file"
     exit 0
     ;;
   plugin:deactivate)
+    [[ "$installed" == '1' ]] || exit 42
     printf '%s\n' inactive > "$state_file"
     exit 0
+    ;;
+  help:sg)
+    # When the plugin exists but the command was not initially available, a
+    # fresh WP-CLI process after activation exposes it.
+    if [[ "$command_available" == '1' ]]; then exit 0; fi
+    if [[ "$installed" == '1' && "$(cat "$state_file")" == 'active' ]]; then exit 0; fi
+    exit 1
     ;;
   cache:flush)
     [[ "$fail_cmd" != 'cache-flush' ]] || exit 31
     exit 0
     ;;
   sg:purge)
+    if [[ "$command_available" != '1' && !( "$installed" == '1' && "$(cat "$state_file")" == 'active' ) ]]; then
+      exit 43
+    fi
     [[ "$fail_cmd" != 'sg-purge' ]] || exit 32
     exit 0
     ;;
@@ -72,6 +86,11 @@ chmod +x "$MOCK_BIN/wp"
 # shellcheck source=../../tools/deploy/siteground-cache-purge.sh
 source "$HELPER"
 
+set_mock_capability() {
+  export WP_MOCK_PLUGIN_INSTALLED="$1"
+  export WP_MOCK_SG_COMMAND_AVAILABLE="$2"
+}
+
 run_failure_case() {
   local name="$1"
   local initial="$2"
@@ -85,6 +104,7 @@ run_failure_case() {
   printf '%s\n' "$initial" > "$STATE_FILE"
   export WP_MOCK_STATE_FILE="$STATE_FILE"
   export WP_MOCK_FAIL_CMD="$fail_cmd"
+  set_mock_capability 1 0
 
   if PATH="$MOCK_BIN:$PATH" siteground_cache_purge "$WP_ROOT" "$final" >/dev/null 2>"$TMP/$name.err"; then
     fail "case=$name expected_failure=1"
@@ -110,12 +130,57 @@ run_success_case() {
   printf '%s\n' "$initial" > "$STATE_FILE"
   export WP_MOCK_STATE_FILE="$STATE_FILE"
   unset WP_MOCK_FAIL_CMD
+  set_mock_capability 1 0
 
   PATH="$MOCK_BIN:$PATH" siteground_cache_purge "$WP_ROOT" "$final" >/dev/null \
     || fail "case=$name expected_success=1"
   actual_state="$(cat "$STATE_FILE")"
   [[ "$actual_state" == "$expected_state" ]] \
     || fail "case=$name state=$actual_state expected_state=$expected_state"
+}
+
+run_command_first_case() {
+  local name="$1"
+  local fail_cmd="${2:-}"
+  local rc=0
+
+  printf '%s\n' uninstalled > "$STATE_FILE"
+  export WP_MOCK_STATE_FILE="$STATE_FILE"
+  set_mock_capability 0 1
+  if [[ -n "$fail_cmd" ]]; then export WP_MOCK_FAIL_CMD="$fail_cmd"; else unset WP_MOCK_FAIL_CMD; fi
+
+  if [[ -z "$fail_cmd" ]]; then
+    PATH="$MOCK_BIN:$PATH" siteground_cache_purge "$WP_ROOT" preserve >"$TMP/$name.out" 2>"$TMP/$name.err" \
+      || fail "case=$name expected_success=1"
+    grep -Fq 'initial=uninstalled final=preserve capability=wp-sg-purge mode=command-first' "$TMP/$name.out" \
+      || fail "case=$name missing_command_first_evidence"
+  else
+    if PATH="$MOCK_BIN:$PATH" siteground_cache_purge "$WP_ROOT" preserve >"$TMP/$name.out" 2>"$TMP/$name.err"; then
+      fail "case=$name expected_failure=1"
+    else
+      rc=$?
+    fi
+    [[ "$rc" -eq 32 ]] || fail "case=$name rc=$rc expected_rc=32"
+    grep -Fq 'SITEGROUND_CACHE_PURGE_RESTORE=PASS original_rc=32 restored=uninstalled' "$TMP/$name.err" \
+      || fail "case=$name missing_uninstalled_restore_evidence"
+  fi
+  [[ "$(cat "$STATE_FILE")" == 'uninstalled' ]] || fail "case=$name plugin_state_mutated"
+}
+
+run_missing_capability_case() {
+  local rc=0
+  printf '%s\n' uninstalled > "$STATE_FILE"
+  export WP_MOCK_STATE_FILE="$STATE_FILE"
+  unset WP_MOCK_FAIL_CMD
+  set_mock_capability 0 0
+  if PATH="$MOCK_BIN:$PATH" siteground_cache_purge "$WP_ROOT" preserve >/dev/null 2>"$TMP/no-capability.err"; then
+    fail 'case=no_capability expected_failure=1'
+  else
+    rc=$?
+  fi
+  [[ "$rc" -eq 1 ]] || fail "case=no_capability rc=$rc expected_rc=1"
+  grep -Fq 'SITEGROUND_CACHE_PURGE=FAIL reason=no_siteground_purge_capability' "$TMP/no-capability.err" \
+    || fail 'case=no_capability missing_fail_closed_evidence'
 }
 
 # Failures after optimizer activation/purge must restore the caller-requested state
@@ -130,4 +195,10 @@ run_success_case inactive_preserve_success inactive preserve inactive
 run_success_case inactive_active_success inactive active active
 run_success_case active_inactive_success active inactive inactive
 
-echo 'SITEGROUND_CACHE_BEHAVIOR=PASS failure_cases=4 success_cases=3 original_rc=preserved requested_state=restored opcache_return=fail_closed'
+# Host-provided `wp sg` is a first-class capability even without sg-cachepress in
+# the plugin registry. Preserve mode must never install or mutate plugin state.
+run_command_first_case command_only_success
+run_command_first_case command_only_failure sg-purge
+run_missing_capability_case
+
+echo 'SITEGROUND_CACHE_BEHAVIOR=PASS failure_cases=5 success_cases=4 original_rc=preserved requested_state=restored opcache_return=fail_closed command_first=verified missing_capability=fail_closed'
