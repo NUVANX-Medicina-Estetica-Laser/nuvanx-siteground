@@ -25,11 +25,14 @@ function nvx_tariff_ssot_assert( bool $condition, string $name ): void {
 	}
 }
 
-$root              = dirname( __DIR__, 2 );
-$catalog_source    = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php' );
-$guard_source      = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-tariff-output-guard.php' );
-$structured_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-structured-data.php' );
-$constants_source  = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php' );
+$root                     = dirname( __DIR__, 2 );
+$catalog_source           = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php' );
+$guard_source             = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-tariff-output-guard.php' );
+$structured_source        = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-structured-data.php' );
+$constants_source         = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php' );
+$schema_foundation_source = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-schema-foundation.php' );
+$schema_faq_source        = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-schema-faq.php' );
+$endolift_page_source     = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-endolift-page.php' );
 
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php';
 require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php';
@@ -42,6 +45,23 @@ nvx_tariff_ssot_assert( null === nvx_catalog_get_tariff_pvp( $tariffs, 'labios_h
 nvx_tariff_ssot_assert( 348.0 === nvx_catalog_get_tariff_pvp( $tariffs, 'bioestimuladores', 'polynucleotides_cara' ), 'BIO_CANONICAL_KEY' );
 nvx_tariff_ssot_assert( null !== nvx_catalog_get_tariff_pvp( $tariffs, 'Endolift®', 'marcacion_mandibular' ), 'MANDIBULAR_HAS_OWN_TARIFF_KEY' );
 nvx_tariff_ssot_assert( null !== nvx_catalog_get_tariff_pvp( $tariffs, 'Endolift®', 'muslos_internos' ), 'INNER_THIGH_HAS_OWN_TARIFF_KEY' );
+nvx_tariff_ssot_assert( nvx_tariff_public_row_is_complete( $tariffs, 'Endolift®', 'ojeras' ), 'PUBLIC_TARIFF_ROW_VALID_SHAPE' );
+
+$missing_label = $tariffs;
+unset( $missing_label['Endolift®']['ojeras']['label'] );
+nvx_tariff_ssot_assert( ! nvx_tariff_public_row_is_complete( $missing_label, 'Endolift®', 'ojeras' ), 'PUBLIC_TARIFF_ROW_MISSING_LABEL_FAILS_CLOSED' );
+
+$missing_group = $tariffs;
+unset( $missing_group['Endolift®']['ojeras']['group'] );
+nvx_tariff_ssot_assert( ! nvx_tariff_public_row_is_complete( $missing_group, 'Endolift®', 'ojeras' ), 'PUBLIC_TARIFF_ROW_MISSING_GROUP_FAILS_CLOSED' );
+
+$blank_label = $tariffs;
+$blank_label['Endolift®']['ojeras']['label'] = '   ';
+nvx_tariff_ssot_assert( ! nvx_tariff_public_row_is_complete( $blank_label, 'Endolift®', 'ojeras' ), 'PUBLIC_TARIFF_ROW_BLANK_LABEL_FAILS_CLOSED' );
+
+$invalid_pvp = $tariffs;
+$invalid_pvp['Endolift®']['ojeras']['pvp'] = 'not-a-price';
+nvx_tariff_ssot_assert( ! nvx_tariff_public_row_is_complete( $invalid_pvp, 'Endolift®', 'ojeras' ), 'PUBLIC_TARIFF_ROW_INVALID_PVP_FAILS_CLOSED' );
 
 $neutral_copy = nvx_catalog_price_unavailable_copy();
 $catalog      = nvx_catalog_json_resolved( 'aesthetic-medicine-page.json' );
@@ -66,7 +86,7 @@ $shuffled = array(
 		array( 'n' => '02', 'price' => 'legacy 999 €' ),
 	),
 );
-$shuffled = nvx_catalog_apply_tariff_truth( $shuffled, 'aesthetic-medicine-page.json' );
+$shuffled      = nvx_catalog_apply_tariff_truth( $shuffled, 'aesthetic-medicine-page.json' );
 $shuffled_by_n = array();
 foreach ( $shuffled['treatments'] as $treatment ) {
 	$shuffled_by_n[ $treatment['n'] ] = $treatment['price'];
@@ -88,9 +108,9 @@ nvx_tariff_ssot_assert( 'Respuesta clínica sin precio.' === $endolift_hydrated[
 nvx_tariff_ssot_assert( false === strpos( $endolift_hydrated['faq']['items'][1]['a'], '999' ), 'FAQ_PRICING_IDENTITY_HYDRATED' );
 nvx_tariff_ssot_assert( false !== strpos( $endolift_hydrated['faq']['items'][1]['a'], 'Papada:' ), 'FAQ_PRICING_IDENTITY_CANONICAL_COPY' );
 
-$endolift_reordered = $endolift_fixture;
+$endolift_reordered                 = $endolift_fixture;
 $endolift_reordered['faq']['items'] = array_reverse( $endolift_reordered['faq']['items'] );
-$endolift_reordered = nvx_catalog_apply_tariff_truth( $endolift_reordered, 'endolift-page.json' );
+$endolift_reordered                 = nvx_catalog_apply_tariff_truth( $endolift_reordered, 'endolift-page.json' );
 nvx_tariff_ssot_assert( false === strpos( $endolift_reordered['faq']['items'][0]['a'], '999' ), 'FAQ_REORDER_SAFE' );
 nvx_tariff_ssot_assert( 'Respuesta clínica sin precio.' === $endolift_reordered['faq']['items'][1]['a'], 'FAQ_REORDER_NON_PRICE_UNTOUCHED' );
 
@@ -183,4 +203,16 @@ nvx_tariff_ssot_assert( false !== strpos( $guard_source, "add_filter( 'wpseo_sch
 nvx_tariff_ssot_assert( false !== strpos( $structured_source, "require_once __DIR__ . '/nvx-tariff-output-guard.php';" ), 'SCHEMA_BOOTSTRAP_LOADS_TARIFF_FENCE' );
 nvx_tariff_ssot_assert( false !== strpos( $catalog_source, "error_log( 'NUVANX catalog: ' . \$message )" ), 'PRODUCTION_INTEGRITY_LOGGING_PRESENT' );
 
-echo 'TARIFF_SSOT_RUNTIME=PASS source=tariff-catalog faq=semantic-identity reorder=pass duplicate=fail-closed anatomy=independent output=html+schema-fenced aesthetic=reorder-safe hook=registered' . PHP_EOL;
+// Source-level ownership ratchet: tariff-catalog.json is the only production
+// owner of these public PVPs. Schema/renderers may consume the canonical owner
+// or fail closed, but they may not duplicate plausible fallback values.
+nvx_tariff_ssot_assert( false !== strpos( $schema_foundation_source, "nvx_catalog_json_load( 'tariff-catalog.json' )" ), 'SCHEMA_USES_CANONICAL_TARIFF_LOADER' );
+nvx_tariff_ssot_assert( false === strpos( $schema_foundation_source, 'get_template_directory() . \'/inc/data/tariff-catalog.json\'' ), 'SCHEMA_SECOND_TARIFF_READER_REMOVED' );
+foreach ( array( '798.60', '1064.80', '330.00', '450.00' ) as $forbidden_price_literal ) {
+	nvx_tariff_ssot_assert( false === strpos( $schema_foundation_source, $forbidden_price_literal ), 'SCHEMA_NUMERIC_FALLBACK_REMOVED_' . str_replace( '.', '_', $forbidden_price_literal ) );
+}
+nvx_tariff_ssot_assert( false === strpos( $schema_faq_source, "'798,60'" ) && false === strpos( $schema_faq_source, "'1.064,80'" ), 'FAQ_NUMERIC_FALLBACKS_REMOVED' );
+nvx_tariff_ssot_assert( false === strpos( $endolift_page_source, '798.60' ), 'ENDOLIFT_VISIBLE_NUMERIC_FALLBACK_REMOVED' );
+nvx_tariff_ssot_assert( false !== strpos( $endolift_page_source, 'nvx_tariff_public_truth_is_complete' ), 'ENDOLIFT_VISIBLE_OUTPUT_FAILS_CLOSED' );
+
+echo 'TARIFF_SSOT_RUNTIME=PASS source=tariff-catalog faq=semantic-identity reorder=pass duplicate=fail-closed anatomy=independent output=html+schema-fenced aesthetic=reorder-safe hook=registered source_fallbacks=blocked row_shape=fail-closed' . PHP_EOL;

@@ -94,8 +94,7 @@ function nvx_endolift_process_icon( string $name ): string {
  * @return string The rendered hero copy markup.
  */
 function nvx_endolift_hero_copy_markup(): string {
-	require_once __DIR__ . '/nvx-catalog-json.php';
-	$data = nvx_catalog_json_resolved( 'endolift-page.json' )['hero'] ?? array();
+	$data = function_exists( 'nvx_catalog_json_resolved' ) ? ( nvx_catalog_json_resolved( 'endolift-page.json' )['hero'] ?? array() ) : array();
 
 	$colegiado = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 
@@ -119,24 +118,20 @@ function nvx_endolift_hero_copy_markup(): string {
 	);
 }
 
-
 /**
  * Builds the Endolift® editorial body markup, including clinical information, treatment details, pricing, recovery guidance, and FAQs.
  *
  * @return string The rendered editorial body HTML.
  */
 function nvx_endolift_editorial_body_markup(): string {
-	require_once __DIR__ . '/nvx-catalog-json.php';
-	$data = nvx_catalog_json_resolved( 'endolift-page.json' );
+	$data = function_exists( 'nvx_catalog_json_resolved' ) ? nvx_catalog_json_resolved( 'endolift-page.json' ) : array();
 
-	$colegiado    = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
+	$colegiado     = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 	$clinical_ssot = nvx_get_clinical_treatment( 'endolift_facial' );
-	$price_from   = function_exists( 'nvx_endolift_price_from_eur' ) ? nvx_endolift_price_from_eur() : 798.60;
-	$price_label  = function_exists( 'nvx_format_price_eur' ) ? nvx_format_price_eur( $price_from ) : number_format_i18n( $price_from, 2 );
-	$review_label = ! empty( $clinical_ssot['scientific_review_date'] )
+	$review_label  = ! empty( $clinical_ssot['scientific_review_date'] )
 		? wp_date( 'F Y', strtotime( $clinical_ssot['scientific_review_date'] ) )
 		: ( function_exists( 'nvx_clinical_review_month_label' ) ? nvx_clinical_review_month_label() : 'agosto 2026' );
-	$equipo_url   = home_url( '/equipo-medico/' );
+	$equipo_url    = home_url( '/equipo-medico/' );
 
 	$html = '<div class="nvx-endolift-editorial">';
 
@@ -153,20 +148,17 @@ function nvx_endolift_editorial_body_markup(): string {
 	$html .= ' <a class="nvx-brand-inline-link" href="' . esc_url( $equipo_url ) . '">' . esc_html( $data['review']['link'] ?? '' ) . '</a>';
 	$html .= '</p>';
 
-
 	// Ficha Clínica E-E-A-T (SSOT)
 	$clinical = nvx_get_clinical_treatment( 'endolift_facial' );
 	if ( $clinical ) {
 		$html .= '<aside class="nvx-clinical-factsheet" aria-label="Ficha clínica estructurada">';
 		$html .= '<h3 class="nvx-clinical-factsheet__title">Ficha Técnica: ' . esc_html( $clinical['name'] ) . '</h3>';
 		$html .= '<dl class="nvx-clinical-factsheet__list">';
-		
 		$html .= '<dt>Mecanismo</dt><dd>' . esc_html( $clinical['mechanism'] ) . '</dd>';
 		$html .= '<dt>Anestesia</dt><dd>' . esc_html( $clinical['anesthesia'] ) . '</dd>';
 		$html .= '<dt>Duración</dt><dd>' . esc_html( $clinical['duration'] ) . '</dd>';
 		$html .= '<dt>Recuperación</dt><dd>' . esc_html( $clinical['recovery'] ) . '</dd>';
 		$html .= '<dt>Sesiones</dt><dd>' . esc_html( $clinical['sessions'] ) . '</dd>';
-		
 		$html .= '</dl>';
 		$html .= '</aside>';
 	}
@@ -245,12 +237,10 @@ function nvx_endolift_editorial_body_markup(): string {
 	$html .= nvx_page_brand_section_open_markup( 'nvx-endolift-biophysics', 'nvx-endolift-bio-title' );
 	$html .= nvx_page_brand_section_heading_markup( esc_html( $data['biophysics']['kicker'] ?? '' ), 'nvx-endolift-bio-title', esc_html( $data['biophysics']['title'] ?? '' ) );
 	$html .= '<p class="nvx-body nvx-body--measure">' . esc_html( $data['biophysics']['body1'] ?? '' ) . '</p>';
-
 	$html .= '<figure class="nvx-endolift-formula">';
 	$html .= '<p class="nvx-endolift-formula__eq" aria-hidden="true"><span class="nvx-endolift-formula__q">Q</span> = <span class="nvx-endolift-formula__mu">μ<sub>a</sub></span> · <span class="nvx-endolift-formula__phi">Φ</span></p>';
 	$html .= '<figcaption class="nvx-endolift-formula__cap">' . esc_html( $data['biophysics']['caption'] ?? '' ) . '</figcaption>';
 	$html .= '</figure>';
-
 	$html .= '<p class="nvx-body nvx-body--measure">' . esc_html( $data['biophysics']['body2'] ?? '' ) . '</p>';
 	$html .= '</div></section>';
 
@@ -317,20 +307,29 @@ function nvx_endolift_editorial_body_markup(): string {
 	// F. Presupuesto Clínico — Valoración personalizada.
 	$html .= nvx_page_brand_section_open_markup( 'nvx-endolift-investment', 'nvx-endolift-price-title', '', array( 'id' => 'inversion-endolift' ) );
 	$html .= nvx_page_brand_section_heading_markup( esc_html( $data['investment']['kicker'] ?? '' ), 'nvx-endolift-price-title', esc_html( $data['investment']['title'] ?? '' ) );
-	$ojeras     = function_exists( 'nvx_tariff_price_label' ) ? nvx_tariff_price_label( 'Endolift®', 'ojeras' ) : $price_label . ' €';
-	$papada     = function_exists( 'nvx_tariff_price_label' ) ? nvx_tariff_price_label( 'Endolift®', 'papada' ) : '';
-	$cuello     = function_exists( 'nvx_tariff_price_label' ) ? nvx_tariff_price_label( 'Endolift®', 'cuello' ) : '';
-	$combo      = function_exists( 'nvx_tariff_price_label' ) ? nvx_tariff_price_label( 'endolift_combo', 'papada_cuello' ) : '';
-	$full_face  = function_exists( 'nvx_tariff_price_label' ) ? nvx_tariff_price_label( 'endolift_combo', 'full_face' ) : '';
-	$price_body = sprintf(
-		/* translators: 1-5: canonical tariff labels from tariff-catalog.json */
-		__( 'El plan y presupuesto de Endolift® se determinan tras la valoración médica presencial en Chamberí o Salamanca–Goya. Tarifas de referencia del catálogo: desde %1$s (ojeras), %2$s (papada o marcación mandibular cada una), %3$s (cuello). Combos frecuentes como papada+cuello (%4$s) o full face (%5$s) se valoran según indicación. El presupuesto definitivo se documenta tras valoración anatómica presencial. El procedimiento se realiza en 1 sola sesión en la mayoría de indicaciones, con control evolutivo a los 3 y 6 meses. Cada tratamiento incluye:', 'nuvanx-medical' ),
-		$ojeras,
-		$papada,
-		$cuello,
-		$combo,
-		$full_face
-	);
+
+	$tariff_complete = function_exists( 'nvx_tariff_public_truth_is_complete' ) && nvx_tariff_public_truth_is_complete();
+	if ( $tariff_complete && function_exists( 'nvx_tariff_price_label' ) ) {
+		$ojeras    = nvx_tariff_price_label( 'Endolift®', 'ojeras' );
+		$papada    = nvx_tariff_price_label( 'Endolift®', 'papada' );
+		$cuello    = nvx_tariff_price_label( 'Endolift®', 'cuello' );
+		$combo     = nvx_tariff_price_label( 'endolift_combo', 'papada_cuello' );
+		$full_face = nvx_tariff_price_label( 'endolift_combo', 'full_face' );
+		$price_body = sprintf(
+			/* translators: 1-5: canonical tariff labels from tariff-catalog.json */
+			__( 'El plan y presupuesto de Endolift® se determinan tras la valoración médica presencial en Chamberí o Salamanca–Goya. Tarifas de referencia del catálogo: desde %1$s (ojeras), %2$s (papada o marcación mandibular cada una), %3$s (cuello). Combos frecuentes como papada+cuello (%4$s) o full face (%5$s) se valoran según indicación. El presupuesto definitivo se documenta tras valoración anatómica presencial. El procedimiento se realiza en 1 sola sesión en la mayoría de indicaciones, con control evolutivo a los 3 y 6 meses. Cada tratamiento incluye:', 'nuvanx-medical' ),
+			$ojeras,
+			$papada,
+			$cuello,
+			$combo,
+			$full_face
+		);
+	} else {
+		$price_body = function_exists( 'nvx_tariff_public_neutral_copy' )
+			? nvx_tariff_public_neutral_copy()
+			: __( 'Presupuesto individualizado tras valoración médica. Consulta la tarifa vigente con el equipo antes de confirmar el tratamiento.', 'nuvanx-medical' );
+	}
+
 	$html .= '<p class="nvx-body nvx-body--measure">' . esc_html( $price_body ) . '</p>';
 	$html .= '<ul class="nvx-endolift-price-includes" role="list">';
 	foreach ( $data['investment']['items'] ?? array() as $item ) {
@@ -364,14 +363,16 @@ function nvx_endolift_editorial_body_markup(): string {
 		$faqs = $data['faq']['items'];
 	}
 	if ( empty( $faqs ) ) {
+		$neutral_price_copy = function_exists( 'nvx_tariff_public_neutral_copy' )
+			? nvx_tariff_public_neutral_copy()
+			: __( 'Presupuesto individualizado tras valoración médica. Consulta la tarifa vigente con el equipo antes de confirmar el tratamiento.', 'nuvanx-medical' );
 		$faqs = array(
 			array(
 				'q' => '¿Cuánto cuesta el Endolift® facial en NUVANX Madrid?',
-				'a' => 'La tarifa de referencia parte desde ' . $price_label . ' €. El presupuesto definitivo se documenta tras valoración anatómica presencial.',
+				'a' => $neutral_price_copy,
 			),
 		);
 	}
-
 
 	if ( function_exists( 'nvx_faq_direct_answer_markup' ) ) {
 		$html .= nvx_faq_direct_answer_markup( $faqs, 'nvx-endolift-faq-list' );
@@ -389,12 +390,10 @@ function nvx_endolift_editorial_body_markup(): string {
 	$html .= '</div></section>';
 
 	// Closing valoración CTA: site-wide nvx-cta-banner in footer.php (not page-local).
-
 	$html .= '<div class="nvx-related-links"><p>';
 	$html .= esc_html__( 'Endolift® no es una laserlipólisis corporal. Para comparar longitudes de onda y protocolos, consulta', 'nuvanx-medical' ) . ' ';
 	$html .= '<a href="' . esc_url( home_url( '/smartlipo-laserlipolisis-endolift/' ) ) . '">' . esc_html__( 'Smartlipo®, laserlipólisis y Endolift®', 'nuvanx-medical' ) . '</a>.';
 	$html .= '</p></div>';
-
 	$html .= '</div>';
 
 	return $html;
@@ -438,7 +437,6 @@ function nvx_content_restructure_endolift_page( string $content ): string {
 }
 add_filter( 'the_content', 'nvx_content_restructure_endolift_page', NVX_HOOK_PRIO_ENDOLIFT );
 
-
 /**
  * Inyectar el schema MedicalProcedure basado en la evidencia clínica de NUVANX.
  */
@@ -453,7 +451,7 @@ function nvx_endolift_extend_yoast_schema( $graph ) {
 		return $graph;
 	}
 
-	$url = get_permalink( get_queried_object_id() );
+	$url            = get_permalink( get_queried_object_id() );
 	$medical_schema = nvx_clinical_generate_schema( 'endolift_facial', $url );
 
 	if ( ! $medical_schema ) {
@@ -461,7 +459,7 @@ function nvx_endolift_extend_yoast_schema( $graph ) {
 	}
 
 	// Check if a node with the same @id already exists to avoid duplicates
-	$procedure_id = $medical_schema['@id'] ?? '';
+	$procedure_id   = $medical_schema['@id'] ?? '';
 	$existing_index = null;
 
 	if ( $procedure_id && is_array( $graph ) ) {
