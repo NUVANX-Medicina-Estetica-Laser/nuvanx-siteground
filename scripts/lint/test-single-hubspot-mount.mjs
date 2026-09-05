@@ -60,7 +60,7 @@ assert.match(secureBridge, /nvx_is_test_lead/, 'QA classification must remain se
 assert.match(secureBridge, /nvx_test_run_id/, 'QA run lineage must remain server-owned');
 assert.match(captureRelay, /add_filter\(\s*'http_response',\s*'nvx_lead_captured_on_http_response',\s*10,\s*3\s*\)/, 'Durable capture relay must observe accepted secure HubSpot responses');
 assert.match(captureRelay, /status < 200 \|\| \$status >= 300/, 'Supabase capture must be suppressed unless HubSpot returned 2xx');
-assert.match(captureRelay, /valid nvx_lead_id missing/, 'Durable relay must fail closed without canonical lineage');
+assert.match(captureRelay, /'lead_captured_relay',\s*'lead_id_missing'/, 'Durable relay must fail closed without canonical lineage');
 
 assert.match(placementRuntime, /#nvx-valoracion-first-party-form\[data-nvx-first-party-owner=/, 'Runtime placement QA must inspect the canonical first-party owner');
 assert.match(placementRuntime, /form\[data-nvx-direct-form\]/, 'Runtime placement QA must inspect the canonical direct form');

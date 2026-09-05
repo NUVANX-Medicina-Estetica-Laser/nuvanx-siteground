@@ -18,7 +18,6 @@ if ( ! defined( 'NVX_HUBSPOT_SECURE_MAX_BODY_BYTES' ) ) {
 	define( 'NVX_HUBSPOT_SECURE_MAX_BODY_BYTES', 65536 );
 }
 
-
 /**
  * Emit bounded operational telemetry.
  *
@@ -38,25 +37,18 @@ if ( ! function_exists( 'nvx_hubspot_secure_log' ) ) {
 
 		$outcome = strtoupper( sanitize_key( $outcome ) );
 
-		if ( ! in_array( $outcome, $allowed_outcomes, true ) ) {
+		if ( ! in_array( $outcome, $allowed_outcomes, true ) || ! function_exists( 'nvx_observability_log' ) ) {
 			return;
 		}
 
-		$line = 'NVX_HUBSPOT_SECURE=' . $outcome;
-
-		if ( '' !== $reason ) {
-			$safe_reason = sanitize_key( $reason );
-
-			if ( '' !== $safe_reason ) {
-				$line .= ' reason=' . $safe_reason;
-			}
-		}
-
-		if ( $status > 0 ) {
-			$line .= ' status=' . absint( $status );
-		}
-
-		error_log( $line );
+		nvx_observability_log(
+			'hubspot_secure',
+			strtolower( $outcome ),
+			array(
+				'reason'      => '' !== $reason ? sanitize_key( $reason ) : null,
+				'http_status' => $status > 0 ? absint( $status ) : null,
+			)
+		);
 	}
 }
 
@@ -178,39 +170,29 @@ if ( ! function_exists( 'nvx_hubspot_secure_identity' ) ) {
 	}
 }
 
-/**
- * Resolve the canonical HubSpot portal ID.
- */
+/** Resolve the canonical HubSpot portal ID. */
 if ( ! function_exists( 'nvx_hubspot_secure_portal_id' ) ) {
 	function nvx_hubspot_secure_portal_id(): string {
 		return nvx_hubspot_secure_identity()['portal_id'];
 	}
 }
 
-/**
- * Resolve the canonical HubSpot valoración form ID.
- */
+/** Resolve the canonical HubSpot valoración form ID. */
 if ( ! function_exists( 'nvx_hubspot_secure_form_id' ) ) {
 	function nvx_hubspot_secure_form_id(): string {
 		return nvx_hubspot_secure_identity()['form_id'];
 	}
 }
 
-/**
- * Whether canonical HubSpot identity is configured.
- */
+/** Whether canonical HubSpot identity is configured. */
 if ( ! function_exists( 'nvx_hubspot_secure_identity_configured' ) ) {
 	function nvx_hubspot_secure_identity_configured(): bool {
-		return ''
-			!== nvx_hubspot_secure_portal_id()
-			&& ''
-			!== nvx_hubspot_secure_form_id();
+		return '' !== nvx_hubspot_secure_portal_id()
+			&& '' !== nvx_hubspot_secure_form_id();
 	}
 }
 
-/**
- * Public HubSpot Forms API URL intercepted by this bridge.
- */
+/** Public HubSpot Forms API URL intercepted by this bridge. */
 if ( ! function_exists( 'nvx_hubspot_secure_original_url' ) ) {
 	function nvx_hubspot_secure_original_url(): string {
 		$portal = nvx_hubspot_secure_portal_id();
@@ -227,9 +209,7 @@ if ( ! function_exists( 'nvx_hubspot_secure_original_url' ) ) {
 	}
 }
 
-/**
- * Authenticated HubSpot server-to-server submit URL.
- */
+/** Authenticated HubSpot server-to-server submit URL. */
 if ( ! function_exists( 'nvx_hubspot_secure_submit_url' ) ) {
 	function nvx_hubspot_secure_submit_url(): string {
 		$portal = nvx_hubspot_secure_portal_id();
@@ -246,9 +226,7 @@ if ( ! function_exists( 'nvx_hubspot_secure_submit_url' ) ) {
 	}
 }
 
-/**
- * Validate canonical UUID v4 lineage.
- */
+/** Validate canonical UUID v4 lineage. */
 if ( ! function_exists( 'nvx_hubspot_secure_is_uuid_v4' ) ) {
 	function nvx_hubspot_secure_is_uuid_v4( string $value ): bool {
 		return 1 === preg_match(
@@ -258,11 +236,7 @@ if ( ! function_exists( 'nvx_hubspot_secure_is_uuid_v4' ) ) {
 	}
 }
 
-/**
- * Fields controlled exclusively by the server.
- *
- * @return string[]
- */
+/** @return string[] */
 if ( ! function_exists( 'nvx_hubspot_secure_server_owned_fields' ) ) {
 	function nvx_hubspot_secure_server_owned_fields(): array {
 		return array(
@@ -272,11 +246,7 @@ if ( ! function_exists( 'nvx_hubspot_secure_server_owned_fields' ) ) {
 	}
 }
 
-/**
- * Fields requiring explicit marketing consent.
- *
- * @return string[]
- */
+/** @return string[] */
 if ( ! function_exists( 'nvx_hubspot_secure_marketing_fields' ) ) {
 	function nvx_hubspot_secure_marketing_fields(): array {
 		return array(
@@ -310,11 +280,7 @@ if ( ! function_exists( 'nvx_hubspot_secure_marketing_fields' ) ) {
 	}
 }
 
-/**
- * URL-valued HubSpot fields.
- *
- * @return string[]
- */
+/** @return string[] */
 if ( ! function_exists( 'nvx_hubspot_secure_url_fields' ) ) {
 	function nvx_hubspot_secure_url_fields(): array {
 		return array(
@@ -333,31 +299,24 @@ if ( ! function_exists( 'nvx_hubspot_secure_url_fields' ) ) {
  */
 if ( ! function_exists( 'nvx_hubspot_secure_normalize_field' ) ) {
 	function nvx_hubspot_secure_normalize_field( array $field ): ?array {
-		$raw_name = isset( $field['name'] )
-			? (string) $field['name']
-			: '';
-
-		$name = sanitize_key( $raw_name );
+		$raw_name = isset( $field['name'] ) ? (string) $field['name'] : '';
+		$name     = sanitize_key( $raw_name );
 
 		if ( '' === $name || $name !== $raw_name ) {
 			return null;
 		}
 
 		$raw_value = $field['value'] ?? '';
-
 		if ( ! is_scalar( $raw_value ) && null !== $raw_value ) {
 			return null;
 		}
 
 		$value = (string) $raw_value;
-
 		if ( 'email' === $name ) {
 			$value = sanitize_email( $value );
-
 			if ( '' !== $value && ! is_email( $value ) ) {
 				return null;
 			}
-
 			$value = nvx_hubspot_secure_limit_string( $value, 120 );
 		} elseif ( 'message' === $name ) {
 			$value = sanitize_textarea_field( $value );
@@ -373,7 +332,6 @@ if ( ! function_exists( 'nvx_hubspot_secure_normalize_field' ) ) {
 		$object_type = isset( $field['objectTypeId'] )
 			? sanitize_text_field( (string) $field['objectTypeId'] )
 			: '0-1';
-
 		if ( '0-1' !== $object_type ) {
 			return null;
 		}
@@ -389,67 +347,38 @@ if ( ! function_exists( 'nvx_hubspot_secure_normalize_field' ) ) {
 /**
  * Normalize fields crossing the authenticated bridge.
  *
- * QA values are removed unconditionally. Marketing fields survive only with
- * explicit consent. nvx_lead_id survives only as UUID v4.
- *
  * @param array<int,mixed> $fields Raw HubSpot fields.
  * @return array<int,array{objectTypeId:string,name:string,value:string}>
  */
 if ( ! function_exists( 'nvx_hubspot_secure_filter_fields' ) ) {
-	function nvx_hubspot_secure_filter_fields(
-		array $fields,
-		bool $marketing_consent
-	): array {
-		$server_owned = array_fill_keys(
-			nvx_hubspot_secure_server_owned_fields(),
-			true
-		);
-
-		$marketing = array_fill_keys(
-			nvx_hubspot_secure_marketing_fields(),
-			true
-		);
-
-		$output = array();
+	function nvx_hubspot_secure_filter_fields( array $fields, bool $marketing_consent ): array {
+		$server_owned = array_fill_keys( nvx_hubspot_secure_server_owned_fields(), true );
+		$marketing    = array_fill_keys( nvx_hubspot_secure_marketing_fields(), true );
+		$output       = array();
 
 		foreach ( $fields as $field ) {
 			if ( ! is_array( $field ) || ! isset( $field['name'] ) ) {
 				continue;
 			}
-
 			$name = sanitize_key( (string) $field['name'] );
-
-			if ( '' === $name ) {
-				continue;
-			}
-
-			if ( isset( $server_owned[ $name ] ) ) {
-				continue;
-			}
-
-			if ( ! $marketing_consent && isset( $marketing[ $name ] ) ) {
+			if ( '' === $name || isset( $server_owned[ $name ] ) || ( ! $marketing_consent && isset( $marketing[ $name ] ) ) ) {
 				continue;
 			}
 
 			$normalized = nvx_hubspot_secure_normalize_field( $field );
-
 			if ( null === $normalized ) {
 				continue;
 			}
 
 			if ( 'nvx_lead_id' === $name ) {
 				$value = strtolower( trim( $normalized['value'] ) );
-
 				if ( ! nvx_hubspot_secure_is_uuid_v4( $value ) ) {
 					continue;
 				}
-
 				$normalized['value'] = $value;
 			}
-
 			$output[] = $normalized;
 		}
-
 		return array_values( $output );
 	}
 }
@@ -464,50 +393,22 @@ if ( ! function_exists( 'nvx_hubspot_secure_append_qa' ) ) {
 	function nvx_hubspot_secure_append_qa( array $fields ): array {
 		$qa = function_exists( 'nvx_attribution_qa_context' )
 			? nvx_attribution_qa_context()
-			: array(
-				'is_test_lead' => false,
-				'test_run_id'  => '',
-			);
+			: array( 'is_test_lead' => false, 'test_run_id' => '' );
 
-		$is_test_lead = isset( $qa['is_test_lead'] )
-			&& true === (bool) $qa['is_test_lead'];
+		$is_test_lead = isset( $qa['is_test_lead'] ) && true === (bool) $qa['is_test_lead'];
+		$test_run_id  = isset( $qa['test_run_id'] ) ? sanitize_text_field( (string) $qa['test_run_id'] ) : '';
+		$test_run_id  = nvx_hubspot_secure_limit_string( $test_run_id, 120 );
 
-		$test_run_id = isset( $qa['test_run_id'] )
-			? sanitize_text_field( (string) $qa['test_run_id'] )
-			: '';
-
-		$test_run_id = nvx_hubspot_secure_limit_string(
-			$test_run_id,
-			120
-		);
-
-		if (
-			$is_test_lead
-			&& 1 !== preg_match(
-				'/^staging2-[A-Za-z0-9._:-]{1,110}$/D',
-				$test_run_id
-			)
-		) {
+		if ( $is_test_lead && 1 !== preg_match( '/^staging2-[A-Za-z0-9._:-]{1,110}$/D', $test_run_id ) ) {
 			$is_test_lead = false;
 			$test_run_id  = '';
 		}
-
 		if ( ! $is_test_lead ) {
 			$test_run_id = '';
 		}
 
-		$fields[] = array(
-			'objectTypeId' => '0-1',
-			'name'         => 'nvx_is_test_lead',
-			'value'        => $is_test_lead ? 'true' : 'false',
-		);
-
-		$fields[] = array(
-			'objectTypeId' => '0-1',
-			'name'         => 'nvx_test_run_id',
-			'value'        => $test_run_id,
-		);
-
+		$fields[] = array( 'objectTypeId' => '0-1', 'name' => 'nvx_is_test_lead', 'value' => $is_test_lead ? 'true' : 'false' );
+		$fields[] = array( 'objectTypeId' => '0-1', 'name' => 'nvx_test_run_id', 'value' => $test_run_id );
 		return $fields;
 	}
 }
@@ -518,133 +419,64 @@ if ( ! function_exists( 'nvx_hubspot_secure_append_qa' ) ) {
  * @param array<string,mixed> $payload
  */
 if ( ! function_exists( 'nvx_hubspot_secure_payload_is_staging_qa' ) ) {
-	function nvx_hubspot_secure_payload_is_staging_qa(
-		array $payload
-	): bool {
-		$host = strtolower(
-			(string) wp_parse_url(
-				get_site_url(),
-				PHP_URL_HOST
-			)
-		);
-
+	function nvx_hubspot_secure_payload_is_staging_qa( array $payload ): bool {
+		$host = strtolower( (string) wp_parse_url( get_site_url(), PHP_URL_HOST ) );
 		if ( 'staging2.nuvanx.com' !== $host ) {
 			return false;
 		}
 
-		$fields = isset( $payload['fields'] )
-			&& is_array( $payload['fields'] )
-				? $payload['fields']
-				: array();
-
+		$fields      = isset( $payload['fields'] ) && is_array( $payload['fields'] ) ? $payload['fields'] : array();
 		$test_lead   = '';
 		$test_run_id = '';
-
 		foreach ( $fields as $field ) {
 			if ( ! is_array( $field ) ) {
 				continue;
 			}
-
-			$name = isset( $field['name'] )
-				? sanitize_key( (string) $field['name'] )
-				: '';
-
-			$value = isset( $field['value'] )
-				? sanitize_text_field( (string) $field['value'] )
-				: '';
-
+			$name  = isset( $field['name'] ) ? sanitize_key( (string) $field['name'] ) : '';
+			$value = isset( $field['value'] ) ? sanitize_text_field( (string) $field['value'] ) : '';
 			if ( 'nvx_is_test_lead' === $name ) {
 				$test_lead = $value;
 			}
-
 			if ( 'nvx_test_run_id' === $name ) {
 				$test_run_id = $value;
 			}
 		}
-
-		return 'true' === $test_lead
-			&& 1 === preg_match(
-				'/^staging2-[A-Za-z0-9._:-]{1,110}$/D',
-				$test_run_id
-			);
+		return 'true' === $test_lead && 1 === preg_match( '/^staging2-[A-Za-z0-9._:-]{1,110}$/D', $test_run_id );
 	}
 }
 
-/**
- * Retrieve one request header from wp_remote_* parsed arguments.
- *
- * @param array<string,mixed> $headers
- */
+/** @param array<string,mixed> $headers */
 if ( ! function_exists( 'nvx_hubspot_secure_request_header' ) ) {
-	function nvx_hubspot_secure_request_header(
-		array $headers,
-		string $wanted
-	): string {
+	function nvx_hubspot_secure_request_header( array $headers, string $wanted ): string {
 		foreach ( $headers as $name => $value ) {
 			if ( 0 !== strcasecmp( (string) $name, $wanted ) ) {
 				continue;
 			}
-
 			if ( is_array( $value ) ) {
 				$value = implode( ',', $value );
 			}
-
 			return trim( (string) $value );
 		}
-
 		return '';
 	}
 }
 
-/**
- * Validate that the intercepted request has the expected transport shape.
- *
- * @param array<string,mixed> $args
- */
+/** @param array<string,mixed> $args */
 if ( ! function_exists( 'nvx_hubspot_secure_valid_original_request' ) ) {
-	function nvx_hubspot_secure_valid_original_request(
-		array $args
-	): bool {
-		$method = strtoupper(
-			sanitize_text_field(
-				(string) ( $args['method'] ?? '' )
-			)
-		);
-
+	function nvx_hubspot_secure_valid_original_request( array $args ): bool {
+		$method = strtoupper( sanitize_text_field( (string) ( $args['method'] ?? '' ) ) );
 		if ( 'POST' !== $method ) {
 			return false;
 		}
 
-		$headers = isset( $args['headers'] )
-			&& is_array( $args['headers'] )
-				? $args['headers']
-				: array();
-
-		$content_type = strtolower(
-			nvx_hubspot_secure_request_header(
-				$headers,
-				'Content-Type'
-			)
-		);
-
-		if (
-			'' === $content_type
-			|| 0 !== strpos(
-				$content_type,
-				'application/json'
-			)
-		) {
+		$headers      = isset( $args['headers'] ) && is_array( $args['headers'] ) ? $args['headers'] : array();
+		$content_type = strtolower( nvx_hubspot_secure_request_header( $headers, 'Content-Type' ) );
+		if ( '' === $content_type || 0 !== strpos( $content_type, 'application/json' ) ) {
 			return false;
 		}
 
 		$body = $args['body'] ?? '';
-
-		if ( ! is_string( $body ) ) {
-			return false;
-		}
-
-		return strlen( $body )
-			<= (int) NVX_HUBSPOT_SECURE_MAX_BODY_BYTES;
+		return is_string( $body ) && strlen( $body ) <= (int) NVX_HUBSPOT_SECURE_MAX_BODY_BYTES;
 	}
 }
 
@@ -652,200 +484,78 @@ if ( ! function_exists( 'nvx_hubspot_secure_valid_original_request' ) ) {
  * Intercept the canonical public HubSpot request and replace it with one
  * authenticated server-to-server request.
  *
- * WordPress hook boundaries deliberately use mixed values and defensive casts.
- *
  * @param mixed $preempt Existing preempted response or false.
  * @param mixed $args    Parsed wp_remote_* arguments.
  * @param mixed $url     Requested URL.
  * @return mixed
  */
 if ( ! function_exists( 'nvx_hubspot_secure_pre_http_request' ) ) {
-	function nvx_hubspot_secure_pre_http_request(
-		mixed $preempt,
-		mixed $args,
-		mixed $url
-	): mixed {
-		$url = is_string( $url ) ? $url : '';
-
+	function nvx_hubspot_secure_pre_http_request( mixed $preempt, mixed $args, mixed $url ): mixed {
+		$url          = is_string( $url ) ? $url : '';
 		$original_url = nvx_hubspot_secure_original_url();
 
 		if ( '' === $original_url ) {
-			$public_submit_prefix =
-				'https://api.hsforms.com/submissions/v3/integration/submit/';
-
-			if (
-				0 === strpos(
-					$url,
-					$public_submit_prefix
-				)
-			) {
-				nvx_hubspot_secure_log(
-					'FAILURE',
-					'identity_missing'
-				);
-
-				return new WP_Error(
-					'nvx_missing_hubspot_identity',
-					'HubSpot portal/form identity is not configured.'
-				);
+			$public_submit_prefix = 'https://api.hsforms.com/submissions/v3/integration/submit/';
+			if ( 0 === strpos( $url, $public_submit_prefix ) ) {
+				nvx_hubspot_secure_log( 'FAILURE', 'identity_missing' );
+				return new WP_Error( 'nvx_missing_hubspot_identity', 'HubSpot portal/form identity is not configured.' );
 			}
-
 			return $preempt;
 		}
 
-		if ( ! hash_equals( $original_url, $url ) ) {
+		if ( ! hash_equals( $original_url, $url ) || false !== $preempt ) {
 			return $preempt;
 		}
 
-		/*
-		 * Respect a security/plugin layer that has already preempted this exact
-		 * request. Never override an existing decision.
-		 */
-		if ( false !== $preempt ) {
-			return $preempt;
-		}
-
-		$args = is_array( $args )
-			? $args
-			: array();
-
+		$args = is_array( $args ) ? $args : array();
 		if ( ! nvx_hubspot_secure_valid_original_request( $args ) ) {
-			nvx_hubspot_secure_log(
-				'FAILURE',
-				'invalid_request_shape'
-			);
-
-			return new WP_Error(
-				'nvx_invalid_hubspot_request',
-				'HubSpot request transport contract is invalid.'
-			);
+			nvx_hubspot_secure_log( 'FAILURE', 'invalid_request_shape' );
+			return new WP_Error( 'nvx_invalid_hubspot_request', 'HubSpot request transport contract is invalid.' );
 		}
 
 		$secure_url = nvx_hubspot_secure_submit_url();
-
 		if ( '' === $secure_url ) {
-			nvx_hubspot_secure_log(
-				'FAILURE',
-				'secure_url_missing'
-			);
-
-			return new WP_Error(
-				'nvx_missing_hubspot_identity',
-				'HubSpot portal/form identity is not configured.'
-			);
+			nvx_hubspot_secure_log( 'FAILURE', 'secure_url_missing' );
+			return new WP_Error( 'nvx_missing_hubspot_identity', 'HubSpot portal/form identity is not configured.' );
 		}
 
 		if ( ! defined( 'NVX_HUBSPOT_ACCESS_TOKEN' ) ) {
-			nvx_hubspot_secure_log(
-				'FAILURE',
-				'credential_missing'
-			);
-
-			return new WP_Error(
-				'nvx_missing_credential',
-				'HubSpot server credential is not configured.'
-			);
+			nvx_hubspot_secure_log( 'FAILURE', 'credential_missing' );
+			return new WP_Error( 'nvx_missing_credential', 'HubSpot server credential is not configured.' );
 		}
-
-		$token = trim(
-			(string) NVX_HUBSPOT_ACCESS_TOKEN
-		);
-
+		$token = trim( (string) NVX_HUBSPOT_ACCESS_TOKEN );
 		if ( '' === $token ) {
-			nvx_hubspot_secure_log(
-				'FAILURE',
-				'credential_empty'
-			);
-
-			return new WP_Error(
-				'nvx_missing_credential',
-				'HubSpot server credential is not configured.'
-			);
+			nvx_hubspot_secure_log( 'FAILURE', 'credential_empty' );
+			return new WP_Error( 'nvx_missing_credential', 'HubSpot server credential is not configured.' );
 		}
 
 		if ( ! function_exists( 'nvx_marketing_consent_granted' ) ) {
-			nvx_hubspot_secure_log(
-				'FAILURE',
-				'consent_owner_missing'
-			);
-
-			return new WP_Error(
-				'nvx_missing_consent_owner',
-				'Marketing consent owner is unavailable.'
-			);
+			nvx_hubspot_secure_log( 'FAILURE', 'consent_owner_missing' );
+			return new WP_Error( 'nvx_missing_consent_owner', 'Marketing consent owner is unavailable.' );
 		}
 
-		$body = (string) ( $args['body'] ?? '' );
-
-		$payload = json_decode(
-			$body,
-			true
-		);
-
-		if (
-			JSON_ERROR_NONE !== json_last_error()
-			|| ! is_array( $payload )
-		) {
-			nvx_hubspot_secure_log(
-				'FAILURE',
-				'invalid_json'
-			);
-
-			return new WP_Error(
-				'nvx_invalid_hubspot_payload',
-				'HubSpot request payload is invalid.'
-			);
+		$body    = (string) ( $args['body'] ?? '' );
+		$payload = json_decode( $body, true );
+		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $payload ) ) {
+			nvx_hubspot_secure_log( 'FAILURE', 'invalid_json' );
+			return new WP_Error( 'nvx_invalid_hubspot_payload', 'HubSpot request payload is invalid.' );
 		}
 
 		$marketing_consent = nvx_marketing_consent_granted();
-
-		$fields = isset( $payload['fields'] )
-			&& is_array( $payload['fields'] )
-				? $payload['fields']
-				: array();
-
-		$fields = nvx_hubspot_secure_filter_fields( $fields, $marketing_consent );
-
-		$fields = nvx_hubspot_secure_append_qa( $fields );
-
+		$fields            = isset( $payload['fields'] ) && is_array( $payload['fields'] ) ? $payload['fields'] : array();
+		$fields            = nvx_hubspot_secure_filter_fields( $fields, $marketing_consent );
+		$fields            = nvx_hubspot_secure_append_qa( $fields );
 		$payload['fields'] = $fields;
 
-		if (
-			function_exists( 'nvx_environment_is_staging2' )
-			&& true === (bool) nvx_environment_is_staging2() && ! nvx_hubspot_secure_payload_is_staging_qa( $payload )
-		) {
-			nvx_hubspot_secure_log(
-				'FAILURE',
-				'staging_outbound_blocked'
-			);
-
-			return new WP_Error(
-				'nvx_staging_outbound_blocked',
-				'Staging2 outbound HubSpot traffic is restricted to server-owned QA submissions.'
-			);
+		if ( function_exists( 'nvx_environment_is_staging2' ) && nvx_environment_is_staging2() && ! nvx_hubspot_secure_payload_is_staging_qa( $payload ) ) {
+			nvx_hubspot_secure_log( 'FAILURE', 'staging_outbound_blocked' );
+			return new WP_Error( 'nvx_staging_outbound_blocked', 'Staging2 outbound HubSpot traffic is restricted to server-owned QA submissions.' );
 		}
 
-		$encoded_payload = wp_json_encode(
-			$payload,
-			JSON_UNESCAPED_SLASHES
-		);
-
-		if (
-			! is_string( $encoded_payload )
-			|| ''
-			=== $encoded_payload
-			|| strlen( $encoded_payload )
-			> (int) NVX_HUBSPOT_SECURE_MAX_BODY_BYTES
-		) {
-			nvx_hubspot_secure_log(
-				'FAILURE',
-				'payload_encode'
-			);
-
-			return new WP_Error(
-				'nvx_hubspot_payload_encode_failed',
-				'HubSpot request payload could not be encoded.'
-			);
+		$encoded_payload = wp_json_encode( $payload, JSON_UNESCAPED_SLASHES );
+		if ( ! is_string( $encoded_payload ) || '' === $encoded_payload || strlen( $encoded_payload ) > (int) NVX_HUBSPOT_SECURE_MAX_BODY_BYTES ) {
+			nvx_hubspot_secure_log( 'FAILURE', 'payload_encode' );
+			return new WP_Error( 'nvx_hubspot_payload_encode_failed', 'HubSpot request payload could not be encoded.' );
 		}
 
 		$response = wp_remote_post(
@@ -861,63 +571,29 @@ if ( ! function_exists( 'nvx_hubspot_secure_pre_http_request' ) ) {
 					'Content-Type'  => 'application/json',
 					'Authorization' => 'Bearer ' . $token,
 				),
-				'body'               => $encoded_payload,
+				'body' => $encoded_payload,
 			)
 		);
 
-		/*
-		 * Do not include token, request body or response body in operational
-		 * telemetry.
-		 */
 		if ( is_wp_error( $response ) ) {
-			nvx_hubspot_secure_log(
-				'TRANSPORT',
-				sanitize_key(
-					(string) $response->get_error_code()
-				)
-			);
-
+			nvx_hubspot_secure_log( 'TRANSPORT', sanitize_key( (string) $response->get_error_code() ) );
 			return $response;
 		}
 
-		$status = absint(
-			wp_remote_retrieve_response_code(
-				$response
-			)
-		);
-
+		$status = absint( wp_remote_retrieve_response_code( $response ) );
 		if ( $status < 200 || $status >= 300 ) {
-			nvx_hubspot_secure_log(
-				'FAILURE',
-				'hubspot_http',
-				$status
-			);
-
+			nvx_hubspot_secure_log( 'FAILURE', 'hubspot_http', $status );
 			return $response;
 		}
 
-		nvx_hubspot_secure_log(
-			'SUCCESS',
-			'',
-			$status
-		);
-
+		nvx_hubspot_secure_log( 'SUCCESS', '', $status );
 		return $response;
 	}
 }
 
 if (
 	function_exists( 'has_filter' )
-	&& false
-	=== has_filter(
-		'pre_http_request',
-		'nvx_hubspot_secure_pre_http_request'
-	)
+	&& false === has_filter( 'pre_http_request', 'nvx_hubspot_secure_pre_http_request' )
 ) {
-	add_filter(
-		'pre_http_request',
-		'nvx_hubspot_secure_pre_http_request',
-		10,
-		3
-	);
+	add_filter( 'pre_http_request', 'nvx_hubspot_secure_pre_http_request', 10, 3 );
 }

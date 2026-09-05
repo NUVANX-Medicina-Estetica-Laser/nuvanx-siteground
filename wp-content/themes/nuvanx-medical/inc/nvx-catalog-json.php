@@ -16,15 +16,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 function nvx_catalog_log_error( string $message ): void {
 	static $seen = array();
 
-	$fingerprint = md5( $message );
+	$fingerprint = hash( 'sha256', $message );
 	if ( isset( $seen[ $fingerprint ] ) ) {
 		return;
 	}
 	$seen[ $fingerprint ] = true;
 
-	// Catalog integrity failures are operational failures in every environment,
-	// not debug-only diagnostics. Never include payloads, secrets or PII here.
-	error_log( 'NUVANX catalog: ' . $message );
+	if ( function_exists( 'nvx_observability_log' ) ) {
+		nvx_observability_log(
+			'catalog',
+			'integrity_failure',
+			array( 'code' => substr( $fingerprint, 0, 16 ) )
+		);
+	}
 }
 
 /**

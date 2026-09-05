@@ -12,6 +12,8 @@
  * @package nuvanx-medical
  */
 
+declare(strict_types=1);
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -185,7 +187,8 @@ add_filter(
  * Page-level MedicalWebPage + ReserveAction for /madrid/valoracion/.
  *
  * Organization already exposes ReserveAction. This pass types the landing
- * itself so the H1 and initial answer are speakable and reviewed.
+ * itself so the H1 and initial answer are speakable. Canonical medical review
+ * provenance is applied later by nvx-medical-review.php.
  *
  * @param mixed $graph Yoast schema graph.
  * @return mixed
@@ -199,7 +202,6 @@ function nvx_valoracion_schema_graph( $graph ) {
 	}
 
 	$url         = home_url( '/madrid/valoracion/' );
-	$colegiado   = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 	$description = __( 'Valoración médica en Madrid de 15 a 30 minutos: diagnóstico, indicación y presupuesto documentado antes de tratar. Sin Anestesia General. Recuperación en 48h como reincorporación habitual, según el protocolo indicado. Sin obligación de procedimiento.', 'nuvanx-medical' );
 	$action      = array(
 		'@type'  => 'ReserveAction',
@@ -216,16 +218,6 @@ function nvx_valoracion_schema_graph( $graph ) {
 		'result' => array(
 			'@type' => 'Reservation',
 			'name'  => __( 'Cita de valoración médica', 'nuvanx-medical' ),
-		),
-	);
-	$reviewer    = array(
-		'@type'      => 'Physician',
-		'name'       => 'Dr. José Javier Rivera Tejeda',
-		'url'        => home_url( '/equipo-medico/#physician-rivera-tejeda' ),
-		'identifier' => array(
-			'@type' => 'PropertyValue',
-			'name'  => defined( 'NVX_SD_LABEL_NUM_COLEGIADO' ) ? NVX_SD_LABEL_NUM_COLEGIADO : 'Número de colegiado ICOMEM',
-			'value' => $colegiado,
 		),
 	);
 
@@ -249,8 +241,6 @@ function nvx_valoracion_schema_graph( $graph ) {
 		$graph[ $index ]['description']     = $description;
 		$graph[ $index ]['url']             = $url;
 		$graph[ $index ]['inLanguage']      = 'es-ES';
-		$graph[ $index ]['lastReviewed']    = '2026-08-01';
-		$graph[ $index ]['reviewedBy']      = $reviewer;
 		$graph[ $index ]['speakable']       = array(
 			'@type'       => 'SpeakableSpecification',
 			'cssSelector' => array( '#nvx-valoracion-h1', '#nvx-valoracion-lead' ),

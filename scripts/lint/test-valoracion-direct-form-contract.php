@@ -19,6 +19,7 @@ $GLOBALS['nvx_test_transients']     = array();
 $GLOBALS['nvx_test_inline_scripts'] = array();
 $GLOBALS['nvx_test_hubspot_url']    = 'https://api.hsforms.com/submissions/v3/integration/submit/12345678/11111111-1111-4111-8111-111111111111';
 $GLOBALS['nvx_test_hubspot_form']   = '11111111-1111-4111-8111-111111111111';
+$GLOBALS['nvx_test_observability']  = array();
 
 function add_action( ...$args ): bool { unset( $args ); return true; }
 function home_url( $path = '' ): string { return 'https://example.test' . (string) $path; }
@@ -29,7 +30,9 @@ function add_query_arg( $key, $value, $url ): string {
 function esc_url( $value ): string { return (string) $value; }
 function esc_html__( $value, $domain = null ): string { unset( $domain ); return (string) $value; }
 function esc_attr( $value ): string { return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' ); }
+function sanitize_key( $value ): string { return strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) $value ) ?? '' ); }
 function sanitize_text_field( $value ): string { return trim( (string) $value ); }
+function absint( $value ): int { return abs( (int) $value ); }
 function wp_unslash( $value ) { return $value; }
 function wp_nonce_field( $action, $name, $referer, $display ): string {
 	unset( $action, $referer, $display );
@@ -62,6 +65,13 @@ function nocache_headers(): void {}
 function wp_print_inline_script_tag( $script ): void { $GLOBALS['nvx_test_inline_scripts'][] = (string) $script; }
 function nvx_hubspot_secure_original_url(): string { return (string) ( $GLOBALS['nvx_test_hubspot_url'] ?? '' ); }
 function nvx_hubspot_secure_form_id(): string { return (string) ( $GLOBALS['nvx_test_hubspot_form'] ?? '' ); }
+function nvx_observability_log( string $domain, string $event, array $context = array() ): void {
+	$GLOBALS['nvx_test_observability'][] = array(
+		'domain'  => $domain,
+		'event'   => $event,
+		'context' => $context,
+	);
+}
 
 $root   = dirname( __DIR__, 2 );
 $module = $root . '/wp-content/themes/nuvanx-medical/inc/nvx-valoracion-direct-form.php';
@@ -155,6 +165,26 @@ foreach ( array( '"event":"nvx_conversion_signal"', '"nvx_event_name":"generate_
 nvx_valoracion_emit_direct_success();
 $assert( 1 === count( $GLOBALS['nvx_test_inline_scripts'] ), 'SUCCESS_SIGNAL_NO_DOUBLE_RENDER' );
 
+// Logger behavior is routed through the canonical structured owner.
+$GLOBALS['nvx_test_observability'] = array();
+nvx_valoracion_log_outcome(
+	'FAILURE',
+	'hubspot_http',
+	503,
+	array(
+		'form_id'      => '11111111-1111-4111-8111-111111111111',
+		'pageUri_hash' => 'abcdef12',
+		'consent'      => 'granted',
+		'hutk_present' => 'yes',
+		'test_id'      => '12345678',
+	)
+);
+$assert( 1 === count( $GLOBALS['nvx_test_observability'] ), 'LOG_CANONICAL_OWNER_ONCE' );
+$log = $GLOBALS['nvx_test_observability'][0];
+$assert( 'valoracion' === $log['domain'] && 'failure' === $log['event'], 'LOG_CANONICAL_DOMAIN_EVENT' );
+$assert( 'hubspot_http' === ( $log['context']['reason'] ?? '' ), 'LOG_REASON_BOUNDED' );
+$assert( 503 === ( $log['context']['http_status'] ?? 0 ), 'LOG_HTTP_STATUS_BOUNDED' );
+
 $source = (string) file_get_contents( $real );
 $assert( false !== strpos( $source, "'hubspot_config'" ), 'HUBSPOT_CONFIG_REASON_DECLARED' );
 $assert( false !== strpos( $source, 'nvx_hubspot_secure_original_url' ), 'HUBSPOT_CANONICAL_URL_OWNER' );
@@ -164,15 +194,18 @@ $assert( false === strpos( $source, '$attempts' ), 'NO_RETRY_ATTEMPTS_ARRAY' );
 $logger_start = strpos( $source, 'function nvx_valoracion_log_outcome' );
 $logger_end = strpos( $source, '/**', (int) $logger_start + 1 );
 $logger_body = false !== $logger_start && false !== $logger_end ? substr( $source, $logger_start, $logger_end - $logger_start ) : '';
-$assert( false !== strpos( $logger_body, 'error_log( $line )' ), 'LOG_SINK_BOUNDED' );
-foreach ( array( '$firstname', '$lastname', '$email', '$phone', '$message', '$payload', '$context', '$hutk', '$ip', '$raw' ) as $index => $forbidden ) {
+$assert( false !== strpos( $logger_body, 'nvx_observability_log(' ), 'LOG_CANONICAL_SINK_PRESENT' );
+$assert( false === strpos( $logger_body, 'error_log(' ), 'LOG_DIRECT_SINK_ABSENT' );
+foreach ( array( '$firstname', '$lastname', '$email', '$phone', '$message', '$payload', '$hutk', '$ip', '$raw' ) as $index => $forbidden ) {
 	$assert( false === strpos( $logger_body, $forbidden ), 'NO_PII_LOG_' . $index );
 }
+
+$assert( 0 === preg_match( '/\berror_log\s*\(/', $source ), 'VALORACION_NO_DIRECT_ERROR_LOG' );
 
 echo 'VALORACION_DIRECT_FORM_LASTNAME=PASS' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_HUBSPOT_CONFIG=PASS fail_closed=1 zero_transport=1' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_HUBSPOT_2XX=PASS' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_FAILURE_BRANCHES=PASS hubspot_config,hubspot_transport,hubspot_http' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_NO_AMBIGUOUS_RETRY=PASS' . PHP_EOL;
-echo 'VALORACION_DIRECT_FORM_LOGGING_NO_PII=PASS' . PHP_EOL;
+echo 'VALORACION_DIRECT_FORM_LOGGING_NO_PII=PASS owner=nvx_observability' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_GA4_SUCCESS_BRIDGE=PASS single_use=1 canonical_signal=1 replay_blocked=1' . PHP_EOL;

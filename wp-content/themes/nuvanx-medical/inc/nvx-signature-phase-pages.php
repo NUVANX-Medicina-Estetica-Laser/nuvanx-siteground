@@ -8,6 +8,8 @@
  * @package NUVANX
  */
 
+declare(strict_types=1);
+
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/nvx-signature-catalog.php';
@@ -91,7 +93,6 @@ function nvx_signature_phase_details_section( array $page ): string {
 		'advantage'            => __( 'Ventaja:', 'nuvanx-medical' ),
 	);
 
-
 	$items = '';
 	foreach ( $fields as $key => $label ) {
 		if ( ! empty( $page[ $key ] ) ) {
@@ -115,10 +116,10 @@ function nvx_signature_phase_details_section( array $page ): string {
  * @return string The generated landing page HTML.
  */
 function nvx_signature_phase_markup( array $page ): string {
-	$slug         = (string) ( $page['slug'] ?? '' );
-	$ficha_links  = is_array( $page['ficha_links'] ?? null ) ? $page['ficha_links'] : array();
-	$related      = is_array( $page['related_fichas'] ?? null ) ? $page['related_fichas'] : array();
-	$price_range  = (string) ( $page['price_range'] ?? '' );
+	$slug              = (string) ( $page['slug'] ?? '' );
+	$ficha_links       = is_array( $page['ficha_links'] ?? null ) ? $page['ficha_links'] : array();
+	$related           = is_array( $page['related_fichas'] ?? null ) ? $page['related_fichas'] : array();
+	$price_range       = (string) ( $page['price_range'] ?? '' );
 	$clinics           = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
 	$chamberi_reg      = (string) ( $clinics['chamberi']['reg'] ?? '' );
 	$goya_reg          = (string) ( $clinics['goya']['reg'] ?? '' );
@@ -179,9 +180,7 @@ function nvx_signature_phase_markup( array $page ): string {
 	$html      .= nvx_signature_phase_list( 'Límites y cuándo derivamos', (array) $page['limits'], 'nvx-strategy-checklist nvx-strategy-checklist--no' );
 	$html      .= nvx_signature_phase_details_section( $page );
 	$html      .= nvx_signature_faq_section( isset( $page['faq'] ) && is_array( $page['faq'] ) ? $page['faq'] : array() );
-
 	$html      .= '<section class="nvx-brand-section"><div class="nvx-brand-section__inner"><h2>' . esc_html__( 'Tu primera valoración clínica', 'nuvanx-medical' ) . '</h2>';
-
 	$html      .= '<p>' . esc_html__( 'La valoración revisa antecedentes, anatomía, tejido predominante, tratamientos previos, expectativas y disponibilidad para cuidados. Si no existe una indicación proporcionada, se explica la alternativa, la derivación o la decisión de no intervenir.', 'nuvanx-medical' ) . '</p>';
 	$html      .= '<p><a class="nvx-brand-btn nvx-brand-btn--primary" href="' . $valoracion . '">' . esc_html__( 'Iniciar valoración médica', 'nuvanx-medical' ) . '</a> <a class="nvx-brand-inline-link nvx-brand-inline-link--light" href="' . esc_url( home_url( '/protocolos-signature/' ) ) . '">' . esc_html__( 'Explorar Protocolos Signature', 'nuvanx-medical' ) . '</a></p></div></section></article>';
 	return $html;
@@ -421,9 +420,9 @@ function nvx_signature_hub_contour_cards(): array {
 		if ( '' === $slug ) {
 			continue;
 		}
-		$page    = $by_slug[ $slug ] ?? null;
-		$body    = is_array( $page ) ? (string) ( $page['lead'] ?? $page['intro'] ?? '' ) : '';
-		$card    = array(
+		$page = $by_slug[ $slug ] ?? null;
+		$body = is_array( $page ) ? (string) ( $page['lead'] ?? $page['intro'] ?? '' ) : '';
+		$card = array(
 			'kicker' => $kicker,
 			'title'  => $label,
 			'body'   => $body,
@@ -509,8 +508,8 @@ function nvx_signature_hub_markup( array $hub ): string {
 				'cta'    => __( 'Consultar valoración posgestacional', 'nuvanx-medical' ),
 			),
 		);
-		$html              .= nvx_signature_hub_cards_markup( $architecture_cards, 'Arquitecturas clínicas', 'Protocolos de contorno' );
-		$html              .= nvx_signature_hub_cards_markup( nvx_signature_hub_phase1_cards(), 'Protocolos de rostro y piel', 'Fase 1' );
+		$html .= nvx_signature_hub_cards_markup( $architecture_cards, 'Arquitecturas clínicas', 'Protocolos de contorno' );
+		$html .= nvx_signature_hub_cards_markup( nvx_signature_hub_phase1_cards(), 'Protocolos de rostro y piel', 'Fase 1' );
 	} elseif ( 'contour' === $kind ) {
 		$html .= '<section class="nvx-brand-section"><div class="nvx-brand-section__inner">';
 		$html .= '<h2>' . esc_html__( 'Cómo se decide el plan corporal', 'nuvanx-medical' ) . '</h2>';
@@ -518,7 +517,7 @@ function nvx_signature_hub_markup( array $hub ): string {
 		$html .= '</div></section>';
 		$html .= nvx_signature_hub_cards_markup( nvx_signature_hub_contour_cards(), 'Zonas de valoración', nvx_signature_contour_label_short() );
 	} elseif ( 'post-maternity' === $kind ) {
-		$html   .= nvx_signature_phase_list(
+		$html .= nvx_signature_phase_list(
 			'Qué se valora en postparto',
 			array(
 				'Tiempo desde el parto, lactancia y estado general de salud.',
@@ -527,7 +526,7 @@ function nvx_signature_hub_markup( array $hub ): string {
 				'Calidad cutánea, cicatrices y disponibilidad real de recuperación.',
 			)
 		);
-		$html   .= nvx_signature_phase_list(
+		$html .= nvx_signature_phase_list(
 			'Límites y cuándo esperamos o derivamos',
 			array(
 				'No es un protocolo de "recuperar el cuerpo de antes" en un plazo fijo.',
@@ -576,13 +575,12 @@ function nvx_signature_hub_markup( array $hub ): string {
 				'cta'    => __( 'Explorar contorno corporal', 'nuvanx-medical' ),
 			),
 		);
-		$html   .= nvx_signature_hub_cards_markup( $related, 'Rutas relacionadas', 'Continuidad clínica' );
+		$html .= nvx_signature_hub_cards_markup( $related, 'Rutas relacionadas', 'Continuidad clínica' );
 	}
 
 	$html .= nvx_signature_hub_shell_close();
 	return $html;
 }
-
 
 /**
  * Canonical short-path map for Contour and Post-Maternity public hubs.
@@ -852,6 +850,7 @@ add_filter( 'wpseo_twitter_description', 'nvx_signature_phase_seo_description', 
  * Papada hub is a decision page, not the Endolift® procedure.
  *
  * Types the WebPage as MedicalWebPage and points relatedLink at the ficha.
+ * Canonical review provenance is applied later by nvx-medical-review.php.
  *
  * @param mixed $graph Yoast schema graph.
  * @return mixed
@@ -868,18 +867,7 @@ function nvx_papada_hub_schema_graph( $graph ) {
 
 	$url         = home_url( '/papada-definicion-mandibular-madrid/' );
 	$ficha       = home_url( '/endolift-facial-papada-mandibula/' );
-	$colegiado   = function_exists( 'nvx_medical_colegiado' ) ? nvx_medical_colegiado( 'director' ) : '';
 	$description = (string) ( $page['lead'] ?? $page['seo_desc'] ?? '' );
-	$reviewer    = array(
-		'@type'      => 'Physician',
-		'name'       => 'Dr. José Javier Rivera Tejeda',
-		'url'        => home_url( '/equipo-medico/#physician-rivera-tejeda' ),
-		'identifier' => array(
-			'@type' => 'PropertyValue',
-			'name'  => defined( 'NVX_SD_LABEL_NUM_COLEGIADO' ) ? NVX_SD_LABEL_NUM_COLEGIADO : 'Número de colegiado ICOMEM',
-			'value' => $colegiado,
-		),
-	);
 
 	foreach ( $graph as $index => $node ) {
 		if ( ! is_array( $node ) || ! isset( $node['@type'] ) ) {
@@ -897,22 +885,20 @@ function nvx_papada_hub_schema_graph( $graph ) {
 			$graph[ $index ]['@type'] = array_values( array_unique( $types ) );
 		}
 
-		$graph[ $index ]['name']         = (string) ( $page['title'] ?? '' );
-		$graph[ $index ]['description']  = $description;
-		$graph[ $index ]['url']          = $url;
-		$graph[ $index ]['inLanguage']   = 'es-ES';
-		$graph[ $index ]['lastReviewed'] = '2026-08-01';
-		$graph[ $index ]['reviewedBy']   = $reviewer;
-		$graph[ $index ]['speakable']    = array(
+		$graph[ $index ]['name']        = (string) ( $page['title'] ?? '' );
+		$graph[ $index ]['description'] = $description;
+		$graph[ $index ]['url']         = $url;
+		$graph[ $index ]['inLanguage']  = 'es-ES';
+		$graph[ $index ]['speakable']   = array(
 			'@type'       => 'SpeakableSpecification',
 			'cssSelector' => array( '#nvx-signature-title', '#nvx-signature-lead' ),
 		);
-		$graph[ $index ]['about']        = array(
+		$graph[ $index ]['about']       = array(
 			'@type' => 'MedicalIndication',
 			'name'  => __( 'Papada y pérdida de definición mandibular', 'nuvanx-medical' ),
 		);
-		$graph[ $index ]['relatedLink']  = $ficha;
-		$graph[ $index ]['mainEntity']   = array(
+		$graph[ $index ]['relatedLink'] = $ficha;
+		$graph[ $index ]['mainEntity']  = array(
 			'@type'       => 'DiagnosticProcedure',
 			'name'        => __( 'Valoración médica de papada y definición mandibular', 'nuvanx-medical' ),
 			'description' => $description,
