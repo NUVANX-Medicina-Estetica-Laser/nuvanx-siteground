@@ -243,9 +243,41 @@ function isBlockHeader(value) {
   return BLOCK_HEADER_RE.test(value.trim());
 }
 
+function hasNonEmptyFlowMapping(value) {
+  const text = maskGithubExpressions(value);
+  let quote = null;
+  let escaped = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote === '"') {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') quote = null;
+      continue;
+    }
+    if (quote === "'") {
+      if (ch === "'" && text[i + 1] === "'") i += 1;
+      else if (ch === "'") quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch !== '{') continue;
+    const previous = i === 0 ? '' : text[i - 1];
+    if (i > 0 && !/[\s\[,:]/.test(previous)) continue;
+    let next = i + 1;
+    while (next < text.length && /\s/.test(text[next])) next += 1;
+    if (text[next] !== '}') return true;
+    i = next;
+  }
+  return false;
+}
+
 function assertCanonicalMapping(mapping, label, lineNo) {
   const masked = maskGithubExpressions(mapping.value).trim();
-  if (masked.startsWith('{') && masked !== '{}') {
+  if (hasNonEmptyFlowMapping(masked)) {
     fail(`${label}:${lineNo}: non-empty YAML flow mappings are forbidden in canonical workflows`);
   }
   if (mapping.key === '<<' || /^<<\s*:/.test(masked)) {
@@ -257,37 +289,60 @@ function assertCanonicalMapping(mapping, label, lineNo) {
   }
 }
 
+/**
+ * Parse the canonical workflow subset exactly once. Every downstream audit
+ * consumes these rows so block-scalar, sequence and mapping boundaries cannot
+ * disagree between duplicate-key, input and job-graph checks.
+ */
 function workflowStructure(raw, label) {
   const lines = raw.split(/\r?\n/);
   const rows = [];
-  let blockIndent = null;
+  let block = null;
 
   for (let index = 0; index < lines.length; index += 1) {
     const original = lines[index];
+    const lineNo = index + 1;
     if (/^\t+/.test(original) || /^ +\t/.test(original)) {
-      fail(`${label}:${index + 1}: tabs are forbidden in YAML indentation`);
+      fail(`${label}:${lineNo}: tabs are forbidden in YAML indentation`);
     }
     const indent = original.match(/^ */)[0].length;
     const trimmed = original.trim();
 
-    if (blockIndent !== null) {
-      if (!trimmed || indent > blockIndent) continue;
-      blockIndent = null;
+    if (block) {
+      if (!trimmed || indent > block.indent) {
+        block.row.blockBody.push(original.slice(Math.min(original.length, block.indent + 2)));
+        continue;
+      }
+      block = null;
     }
+
     if (!trimmed || trimmed.startsWith('#')) continue;
     if (indent % 2 !== 0) {
-      fail(`${label}:${index + 1}: canonical workflow indentation must use multiples of two spaces`);
+      fail(`${label}:${lineNo}: canonical workflow indentation must use multiples of two spaces`);
     }
 
     const clean = stripYamlComment(original.slice(indent));
     if (!clean.trim()) continue;
-    if (clean === '---' || clean === '...') fail(`${label}:${index + 1}: multi-document YAML is forbidden`);
+    if (clean === '---' || clean === '...') {
+      fail(`${label}:${lineNo}: multi-document YAML is forbidden`);
+    }
 
     let sequence = false;
     let mappingText = clean;
     let effectiveIndent = indent;
+    let scalarText = '';
+
     if (clean === '-') {
-      rows.push({ lineNo: index + 1, indent, effectiveIndent: indent + 2, clean, sequence: true, mapping: null });
+      rows.push({
+        lineNo,
+        indent,
+        effectiveIndent: indent + 2,
+        clean,
+        sequence: true,
+        mapping: null,
+        scalarText: '',
+        blockBody: null,
+      });
       continue;
     }
     if (clean.startsWith('- ')) {
@@ -296,31 +351,48 @@ function workflowStructure(raw, label) {
       effectiveIndent = indent + 2;
     }
     if (mappingText.startsWith('? ')) {
-      fail(`${label}:${index + 1}: explicit/complex YAML mapping keys are forbidden`);
+      fail(`${label}:${lineNo}: explicit/complex YAML mapping keys are forbidden`);
     }
 
-    const mapping = parseMapping(mappingText, label, index + 1);
-    if (mapping) {
-      assertCanonicalMapping(mapping, label, index + 1);
-      if (isBlockHeader(mapping.value)) blockIndent = effectiveIndent;
+    const mapping = parseMapping(mappingText, label, lineNo);
+    if (mapping) assertCanonicalMapping(mapping, label, lineNo);
+    else scalarText = mappingText;
+
+    const row = {
+      lineNo,
+      indent,
+      effectiveIndent,
+      clean,
+      sequence,
+      mapping,
+      scalarText,
+      blockBody: null,
+    };
+    if (mapping && isBlockHeader(mapping.value)) {
+      row.blockBody = [];
+      block = { indent: effectiveIndent, row };
     }
-    rows.push({ lineNo: index + 1, indent, effectiveIndent, clean, sequence, mapping });
+    rows.push(row);
   }
   return rows;
 }
 
-function scanYamlDuplicateKeys(raw, label) {
-  const rows = workflowStructure(raw, label);
+function scanYamlDuplicateKeys(rows, label) {
   const scopes = [];
-
   const scopeFor = (indent, reset = false) => {
     while (scopes.length && scopes.at(-1).indent > indent) scopes.pop();
     if (reset && scopes.length && scopes.at(-1).indent === indent) scopes.pop();
-    if (!scopes.length || scopes.at(-1).indent < indent) scopes.push({ indent, keys: new Map() });
+    if (!scopes.length || scopes.at(-1).indent < indent) {
+      scopes.push({ indent, keys: new Map() });
+    }
     return scopes.at(-1);
   };
 
   for (const row of rows) {
+    if (row.sequence && !row.mapping) {
+      scopeFor(row.effectiveIndent, true);
+      continue;
+    }
     if (!row.mapping) continue;
     const scope = scopeFor(row.effectiveIndent, row.sequence);
     if (scope.keys.has(row.mapping.key)) {
@@ -328,14 +400,11 @@ function scanYamlDuplicateKeys(raw, label) {
     }
     scope.keys.set(row.mapping.key, row.lineNo);
   }
-  return rows;
 }
 
-function dispatchDescriptionHeaders(raw, label) {
-  const rows = workflowStructure(raw, label);
+function dispatchDescriptionLines(rows) {
   const pathByIndent = new Map();
-  const headers = new Set();
-
+  const descriptions = new Set();
   for (const row of rows) {
     if (!row.mapping || row.sequence) continue;
     for (const depth of [...pathByIndent.keys()]) {
@@ -350,106 +419,119 @@ function dispatchDescriptionHeaders(raw, label) {
       && pathByIndent.get(4) === 'inputs'
       && INPUT_RE.test(pathByIndent.get(6) || '')
     ) {
-      headers.add(row.lineNo);
+      descriptions.add(row.lineNo);
     }
   }
-  return headers;
+  return descriptions;
 }
 
 function contextBases(kind) {
-  return kind === 'inputs' ? ['inputs', 'github.event.inputs'] : ['needs'];
+  return kind === 'inputs' ? ['github.event.inputs', 'inputs'] : ['needs'];
 }
 
-function contextIdentifier(kind) {
-  return kind === 'inputs' ? '[A-Za-z_][A-Za-z0-9_]*' : '[A-Za-z0-9_-]+';
+function isIdentifierChar(ch) {
+  return /[A-Za-z0-9_.-]/.test(ch || '');
 }
 
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function readQuoted(text, start) {
+  const quote = text[start];
+  let escaped = false;
+  for (let i = start + 1; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote === '"' && escaped) {
+      escaped = false;
+      continue;
+    }
+    if (quote === '"' && ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (ch === quote) return i;
+  }
+  return text.length - 1;
 }
 
 function scanContextRefs(text, kind, refs) {
-  const identifier = contextIdentifier(kind);
-  for (const base of contextBases(kind)) {
-    const escaped = escapeRegex(base);
-    const dot = new RegExp(`\\b${escaped}\\.(${identifier})\\b`, 'g');
-    const bracket = new RegExp(`\\b${escaped}\\s*\\[\\s*['\"](${identifier})['\"]\\s*\\]`, 'g');
-    let match;
-    while ((match = dot.exec(text)) !== null) refs.add(match[1]);
-    while ((match = bracket.exec(text)) !== null) refs.add(match[1]);
+  const idPattern = kind === 'inputs' ? INPUT_RE : JOB_RE;
+  const bases = contextBases(kind);
+  let quote = null;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote === '"') {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') quote = null;
+      continue;
+    }
+    if (quote === "'") {
+      if (ch === "'" && text[i + 1] === "'") i += 1;
+      else if (ch === "'") quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+
+    for (const base of bases) {
+      if (!text.startsWith(base, i)) continue;
+      if (i > 0 && isIdentifierChar(text[i - 1])) continue;
+      let cursor = i + base.length;
+      if (isIdentifierChar(text[cursor]) && text[cursor] !== '.') continue;
+
+      if (text[cursor] === '.') {
+        cursor += 1;
+        const start = cursor;
+        while (cursor < text.length && /[A-Za-z0-9_-]/.test(text[cursor])) cursor += 1;
+        const candidate = text.slice(start, cursor);
+        if (idPattern.test(candidate)) refs.add(candidate);
+        i = Math.max(i, cursor - 1);
+        break;
+      }
+
+      if (text[cursor] === '[') {
+        cursor += 1;
+        while (/\s/.test(text[cursor] || '')) cursor += 1;
+        if (text[cursor] !== '"' && text[cursor] !== "'") continue;
+        const endQuote = readQuoted(text, cursor);
+        const candidate = text.slice(cursor + 1, endQuote);
+        cursor = endQuote + 1;
+        while (/\s/.test(text[cursor] || '')) cursor += 1;
+        if (text[cursor] === ']' && idPattern.test(candidate)) refs.add(candidate);
+        i = Math.max(i, cursor);
+        break;
+      }
+    }
   }
 }
 
 function scanGithubExpressions(text, kind, refs) {
   const expression = /\$\{\{([\s\S]*?)\}\}/g;
   let match;
-  while ((match = expression.exec(text)) !== null) scanContextRefs(match[1], kind, refs);
+  while ((match = expression.exec(text)) !== null) {
+    scanContextRefs(match[1], kind, refs);
+  }
 }
 
-function executableContextReferences(raw, label, kind) {
-  const lines = raw.split(/\r?\n/);
+function executableContextReferences(rows, kind) {
   const refs = new Set();
-  const ignoredDescriptions = kind === 'inputs' ? dispatchDescriptionHeaders(raw, label) : new Set();
-  let block = null;
-
-  const flushBlock = () => {
-    if (!block) return;
-    if (!block.ignored) {
-      const body = block.body.join('\n');
-      scanGithubExpressions(body, kind, refs);
-      if (block.key === 'if') scanContextRefs(body, kind, refs);
-    }
-    block = null;
-  };
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const original = lines[index];
-    const lineNo = index + 1;
-    const indent = original.match(/^ */)[0].length;
-    const trimmed = original.trim();
-
-    if (block) {
-      if (!trimmed || indent > block.indent) {
-        block.body.push(original.slice(Math.min(original.length, block.indent + 2)));
-        continue;
-      }
-      flushBlock();
-    }
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const clean = stripYamlComment(original.slice(indent));
-    let mappingText = clean;
-    let effectiveIndent = indent;
-    if (clean.startsWith('- ')) {
-      mappingText = clean.slice(2).trimStart();
-      effectiveIndent = indent + 2;
-    } else if (clean === '-') {
+  const ignoredDescriptions = kind === 'inputs' ? dispatchDescriptionLines(rows) : new Set();
+  for (const row of rows) {
+    if (row.mapping) {
+      if (ignoredDescriptions.has(row.lineNo)) continue;
+      const text = row.blockBody !== null ? row.blockBody.join('\n') : row.mapping.value;
+      scanGithubExpressions(text, kind, refs);
+      if (row.mapping.key === 'if') scanContextRefs(text, kind, refs);
       continue;
     }
-
-    const mapping = parseMapping(mappingText, label, lineNo);
-    if (!mapping) {
-      scanGithubExpressions(clean, kind, refs);
-      continue;
-    }
-
-    const ignored = ignoredDescriptions.has(lineNo);
-    if (!ignored) {
-      scanGithubExpressions(clean, kind, refs);
-      if (mapping.key === 'if' && !isBlockHeader(mapping.value) && !mapping.value.includes('${{')) {
-        scanContextRefs(mapping.value, kind, refs);
-      }
-    }
-    if (isBlockHeader(mapping.value)) {
-      block = { key: mapping.key, indent: effectiveIndent, body: [], ignored };
-    }
+    scanGithubExpressions(row.scalarText || row.clean, kind, refs);
   }
-  flushBlock();
   return refs;
 }
 
-function workflowDispatchInputs(raw, label) {
-  const rows = workflowStructure(raw, label);
+function workflowDispatchInputs(rows, label) {
   const names = [];
   let dispatch = false;
   let inputs = false;
@@ -478,7 +560,7 @@ function workflowDispatchInputs(raw, label) {
     }
   }
 
-  const refs = executableContextReferences(raw, label, 'inputs');
+  const refs = executableContextReferences(rows, 'inputs');
   for (const name of names) {
     if (!refs.has(name)) fail(`${label}: workflow_dispatch input '${name}' has no executable caller`);
   }
@@ -491,16 +573,16 @@ function splitNeeds(value, label, lineNo) {
   if (source.startsWith('[')) {
     if (!source.endsWith(']')) fail(`${label}:${lineNo}: malformed needs flow sequence`);
     const refs = source.slice(1, -1).split(',').map((part) => part.trim()).filter(Boolean);
-    for (const ref of refs) if (!JOB_RE.test(ref)) fail(`${label}:${lineNo}: invalid needs reference '${ref}'`);
+    for (const ref of refs) {
+      if (!JOB_RE.test(ref)) fail(`${label}:${lineNo}: invalid needs reference '${ref}'`);
+    }
     return refs;
   }
   if (!JOB_RE.test(source)) fail(`${label}:${lineNo}: invalid needs reference '${source}'`);
   return [source];
 }
 
-function workflowJobs(raw, label) {
-  const rows = workflowStructure(raw, label);
-  const lines = raw.split(/\r?\n/);
+function workflowJobs(rows, label) {
   const jobsRoot = rows.findIndex((row) => row.indent === 0 && row.mapping?.key === 'jobs');
   if (jobsRoot < 0) fail(`${label}: missing top-level jobs map`);
 
@@ -508,7 +590,9 @@ function workflowJobs(raw, label) {
   for (let index = jobsRoot + 1; index < rows.length; index += 1) {
     const row = rows[index];
     if (row.indent === 0) break;
-    if (row.indent === 2 && row.mapping) jobs.push({ name: row.mapping.key, rowIndex: index, lineNo: row.lineNo });
+    if (row.indent === 2 && row.mapping) {
+      jobs.push({ name: row.mapping.key, rowIndex: index, lineNo: row.lineNo });
+    }
   }
   if (!jobs.length) fail(`${label}: jobs map is empty`);
 
@@ -520,7 +604,9 @@ function workflowJobs(raw, label) {
     if (!JOB_RE.test(ref)) fail(`${label}:${lineNo}: invalid needs reference '${ref}'`);
     if (!jobNames.has(ref)) fail(`${label}:${lineNo}: job '${job}' needs missing job '${ref}'`);
     if (ref === job) fail(`${label}:${lineNo}: job '${job}' cannot need itself`);
-    if (dependencies.get(job).includes(ref)) fail(`${label}:${lineNo}: job '${job}' duplicates needs '${ref}'`);
+    if (dependencies.get(job).includes(ref)) {
+      fail(`${label}:${lineNo}: job '${job}' duplicates needs '${ref}'`);
+    }
     dependencies.get(job).push(ref);
   };
 
@@ -535,17 +621,20 @@ function workflowJobs(raw, label) {
         for (const ref of direct) addDependency(jobs[jobIndex].name, ref, row.lineNo);
         continue;
       }
+
       let found = false;
       for (let childIndex = index + 1; childIndex < end; childIndex += 1) {
         const child = rows[childIndex];
         if (child.indent <= 4) break;
-        if (child.indent !== 6 || !child.clean.startsWith('- ')) continue;
-        const ref = stripYamlComment(child.clean.slice(2)).trim();
+        if (child.indent !== 6 || !child.sequence || child.mapping) continue;
+        const ref = stripYamlComment(child.scalarText).trim();
         if (!ref) continue;
         found = true;
         addDependency(jobs[jobIndex].name, ref, child.lineNo);
       }
-      if (!found) fail(`${label}:${row.lineNo}: job '${jobs[jobIndex].name}' declares empty needs`);
+      if (!found) {
+        fail(`${label}:${row.lineNo}: job '${jobs[jobIndex].name}' declares empty needs`);
+      }
     }
   }
 
@@ -562,12 +651,13 @@ function workflowJobs(raw, label) {
   for (const job of jobNames) visit(job);
 
   for (let jobIndex = 0; jobIndex < jobs.length; jobIndex += 1) {
-    const startLine = jobs[jobIndex].lineNo - 1;
-    const endLine = jobIndex + 1 < jobs.length ? jobs[jobIndex + 1].lineNo - 1 : lines.length;
-    const jobText = lines.slice(startLine, endLine).join('\n');
-    const refs = executableContextReferences(jobText, `${label}:${jobs[jobIndex].name}`, 'needs');
+    const start = jobs[jobIndex].rowIndex;
+    const end = jobIndex + 1 < jobs.length ? jobs[jobIndex + 1].rowIndex : rows.length;
+    const refs = executableContextReferences(rows.slice(start, end), 'needs');
     for (const ref of refs) {
-      if (!jobNames.has(ref)) fail(`${label}:${jobs[jobIndex].lineNo}: job '${jobs[jobIndex].name}' references unknown needs.${ref}`);
+      if (!jobNames.has(ref)) {
+        fail(`${label}:${jobs[jobIndex].lineNo}: job '${jobs[jobIndex].name}' references unknown needs.${ref}`);
+      }
       if (!dependencies.get(jobs[jobIndex].name).includes(ref)) {
         fail(`${label}:${jobs[jobIndex].lineNo}: job '${jobs[jobIndex].name}' references needs.${ref} without declaring it`);
       }
@@ -575,6 +665,15 @@ function workflowJobs(raw, label) {
   }
 
   return jobs.map((job) => job.name);
+}
+
+function auditWorkflow(raw, label) {
+  const rows = workflowStructure(raw, label);
+  scanYamlDuplicateKeys(rows, label);
+  return {
+    inputs: workflowDispatchInputs(rows, label),
+    jobs: workflowJobs(rows, label),
+  };
 }
 
 function expectFailure(fn, pattern, name) {
@@ -589,41 +688,137 @@ function expectFailure(fn, pattern, name) {
 
 function runSelfTests() {
   scanJsonRaw('{"a":1,"b":{"c":2}}', 'selftest-json-valid');
-  expectFailure(() => scanJsonRaw('{"a":1,"nested":{"x":1,"x":2}}', 'selftest-json-dup'), /duplicate JSON key 'x'/, 'nested duplicate JSON key');
-  expectFailure(() => scanJsonRaw('{"a":1,\u00a0"b":2}', 'selftest-json-nbsp-middle'), /expected JSON string|invalid JSON token|expected ','/, 'NBSP between JSON tokens');
-  expectFailure(() => scanJsonRaw('{"a":1}\u00a0', 'selftest-json-nbsp-tail'), /trailing content/, 'NBSP after JSON root');
+  expectFailure(
+    () => scanJsonRaw('{"a":1,"nested":{"x":1,"x":2}}', 'selftest-json-dup'),
+    /duplicate JSON key 'x'/,
+    'nested duplicate JSON key',
+  );
+  expectFailure(
+    () => scanJsonRaw('{"a":1,\u00a0"b":2}', 'selftest-json-nbsp-middle'),
+    /expected JSON string|invalid JSON token|expected ','/,
+    'NBSP between JSON tokens',
+  );
+  expectFailure(
+    () => scanJsonRaw('{"a":1}\u00a0', 'selftest-json-nbsp-tail'),
+    /trailing content/,
+    'NBSP after JSON root',
+  );
 
-  scanYamlDuplicateKeys('permissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo "http://example.test:a"\n          x="${value:-fallback}"\n        shell: bash\n', 'selftest-yaml-valid');
-  expectFailure(() => scanYamlDuplicateKeys('jobs:\n  a:\n    name: A\n    name: B\n', 'selftest-yaml-dup'), /duplicate YAML key 'name'/, 'duplicate YAML key');
-  expectFailure(() => scanYamlDuplicateKeys('jobs:\n  a:\n    steps:\n      - run: |\n          echo ok\n        shell: bash\n        shell: sh\n', 'selftest-yaml-block-sibling'), /duplicate YAML key 'shell'/, 'duplicate sibling after block scalar');
-  expectFailure(() => scanYamlDuplicateKeys('jobs:\n  "a":\n    runs-on: ubuntu-latest\n', 'selftest-yaml-quoted'), /non-canonical YAML mapping key/, 'quoted key accepted');
-  expectFailure(() => scanYamlDuplicateKeys('root: {a: 1, a: 2}\n', 'selftest-yaml-flow-map'), /non-empty YAML flow mappings are forbidden/, 'non-empty flow mapping accepted');
+  auditWorkflow(
+    'permissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo "http://example.test:a"\n          x="${value:-fallback}"\n        shell: bash\n',
+    'selftest-yaml-valid',
+  );
+  expectFailure(
+    () => auditWorkflow('jobs:\n  a:\n    name: A\n    name: B\n', 'selftest-yaml-dup'),
+    /duplicate YAML key 'name'/,
+    'duplicate YAML key',
+  );
+  expectFailure(
+    () => auditWorkflow(
+      'jobs:\n  a:\n    strategy:\n      matrix:\n        include: [{os: ubuntu, os: windows}]\n    runs-on: ubuntu-latest\n',
+      'selftest-yaml-nested-flow-map',
+    ),
+    /non-empty YAML flow mappings are forbidden/,
+    'nested flow mapping accepted',
+  );
+  auditWorkflow(
+    'jobs:\n  a:\n    strategy:\n      matrix:\n        include:\n          -\n            os: ubuntu\n            name: first\n          -\n            os: windows\n            name: second\n    runs-on: ubuntu-latest\n',
+    'selftest-yaml-standalone-dash',
+  );
+  expectFailure(
+    () => auditWorkflow(
+      'jobs:\n  a:\n    steps:\n      - run: |\n          echo ok\n        shell: bash\n        shell: sh\n',
+      'selftest-yaml-block-sibling',
+    ),
+    /duplicate YAML key 'shell'/,
+    'duplicate sibling after block scalar',
+  );
+  expectFailure(
+    () => auditWorkflow('jobs:\n  "a":\n    runs-on: ubuntu-latest\n', 'selftest-yaml-quoted'),
+    /non-canonical YAML mapping key/,
+    'quoted key accepted',
+  );
+  expectFailure(
+    () => auditWorkflow('root: {a: 1, a: 2}\njobs:\n  a:\n    runs-on: ubuntu-latest\n', 'selftest-yaml-flow-map'),
+    /non-empty YAML flow mappings are forbidden/,
+    'non-empty root flow mapping accepted',
+  );
 
-  const liveInput = ['on:', '  workflow_dispatch:', '    inputs:', '      live:', '        description: Live input', 'jobs:', '  a:', "    if: inputs.live == 'yes'", '    runs-on: ubuntu-latest'].join('\n');
-  workflowDispatchInputs(liveInput, 'selftest-input-live');
+  const liveInput = [
+    'on:',
+    '  workflow_dispatch:',
+    '    inputs:',
+    '      live:',
+    '        description: Live input',
+    'jobs:',
+    '  a:',
+    "    if: inputs.live == 'yes'",
+    '    runs-on: ubuntu-latest',
+  ].join('\n');
+  auditWorkflow(liveInput, 'selftest-input-live');
 
-  const foldedInput = ['on:', '  workflow_dispatch:', '    inputs:', '      live:', '        description: Live input', 'jobs:', '  a:', '    if: >-', '      always() &&', '      inputs.live &&', '      true', '    runs-on: ubuntu-latest'].join('\n');
-  workflowDispatchInputs(foldedInput, 'selftest-input-folded');
+  const deadDescription = [
+    'on:',
+    '  workflow_dispatch:',
+    '    inputs:',
+    '      dead:',
+    '        description: >2-',
+    '          ${{ inputs.dead }} docs only',
+    'jobs:',
+    '  a:',
+    '    runs-on: ubuntu-latest',
+  ].join('\n');
+  expectFailure(
+    () => auditWorkflow(deadDescription, 'selftest-input-doc'),
+    /input 'dead' has no executable caller/,
+    'dispatch description counted as executable',
+  );
 
-  const deadDescription = ['on:', '  workflow_dispatch:', '    inputs:', '      dead:', '        description: >2-', '          ${{ inputs.dead }} docs only', 'jobs:', '  a:', '    runs-on: ubuntu-latest'].join('\n');
-  expectFailure(() => workflowDispatchInputs(deadDescription, 'selftest-input-doc'), /input 'dead' has no executable caller/, 'dispatch description counted as executable');
+  auditWorkflow([
+    'jobs:',
+    '  a:',
+    '    runs-on: ubuntu-latest',
+    '  b:',
+    '    needs: a',
+    "    if: ${{ needs.a.result == 'success' }}",
+    '    runs-on: ubuntu-latest',
+  ].join('\n'), 'selftest-needs-valid');
 
-  const actionDescriptionInput = ['on:', '  workflow_dispatch:', '    inputs:', '      live:', '        description: Live input', 'jobs:', '  a:', '    runs-on: ubuntu-latest', '    steps:', '      - uses: owner/action@sha', '        with:', '          description: ${{ inputs.live }}'].join('\n');
-  workflowDispatchInputs(actionDescriptionInput, 'selftest-input-action-description');
+  expectFailure(
+    () => auditWorkflow([
+      'jobs:',
+      '  a:',
+      '    runs-on: ubuntu-latest',
+      '  b:',
+      "    if: needs.a.result == 'success'",
+      '    runs-on: ubuntu-latest',
+    ].join('\n'), 'selftest-needs-undeclared'),
+    /without declaring it/,
+    'undeclared needs context',
+  );
 
-  const actionDescriptionBlockInput = ['on:', '  workflow_dispatch:', '    inputs:', '      live:', '        description: Live input', 'jobs:', '  a:', '    runs-on: ubuntu-latest', '    steps:', '      - uses: owner/action@sha', '        with:', '          description: >-', '            ${{ inputs.live }}'].join('\n');
-  workflowDispatchInputs(actionDescriptionBlockInput, 'selftest-input-action-description-block');
+  auditWorkflow([
+    'jobs:',
+    '  a:',
+    '    runs-on: ubuntu-latest',
+    '    steps:',
+    '      - run: |',
+    '          echo "needs.phantom is shell text"',
+  ].join('\n'), 'selftest-needs-shell-text');
 
-  workflowJobs(['jobs:', '  build:', '    runs-on: ubuntu-latest', '  release:', '    needs: build # wait', '    runs-on: ubuntu-latest', '  audit:', '    needs:', '      - build', '      - release', '    if: >-', '      always() &&', "      needs.release.result == 'success'", '    runs-on: ubuntu-latest'].join('\n'), 'selftest-needs-valid');
-  expectFailure(() => workflowJobs(['jobs:', '  a:', '    needs: missing', '    runs-on: ubuntu-latest'].join('\n'), 'selftest-needs-missing'), /needs missing job 'missing'/, 'missing needs');
-  expectFailure(() => workflowJobs(['jobs:', '  a:', '    needs: b', '    runs-on: ubuntu-latest', '  b:', '    needs: a', '    runs-on: ubuntu-latest'].join('\n'), 'selftest-needs-cycle'), /cyclic job needs graph/, 'cyclic needs');
-  expectFailure(() => workflowJobs(['jobs:', '  a:', '    runs-on: ubuntu-latest', '  b:', "    if: needs.a.result == 'success'", '    runs-on: ubuntu-latest'].join('\n'), 'selftest-needs-context'), /without declaring it/, 'undeclared needs context');
-
-  workflowJobs(['jobs:', '  a:', '    runs-on: ubuntu-latest', '    steps:', '      - run: |', '          echo "needs.phantom is shell text"', '          # needs.ghost is shell text too'].join('\n'), 'selftest-needs-shell-text');
-  workflowJobs(['jobs:', '  a:', '    runs-on: ubuntu-latest', '  b:', '    needs: a', '    runs-on: ubuntu-latest', '    steps:', '      - uses: owner/action@sha', '        with:', '          description: ${{ needs.a.result }}'].join('\n'), 'selftest-needs-action-description');
-  workflowJobs(['jobs:', '  a:', '    runs-on: ubuntu-latest', '  b:', '    needs: a', '    runs-on: ubuntu-latest', '    steps:', '      - uses: owner/action@sha', '        with:', '          description: >-', '            ${{ needs.a.result }}'].join('\n'), 'selftest-needs-action-description-block');
-  expectFailure(() => workflowJobs(['jobs:', '  a:', '    runs-on: ubuntu-latest', '  b:', '    runs-on: ubuntu-latest', '    steps:', '      - uses: owner/action@sha', '        with:', '          description: ${{ needs.a.result }}'].join('\n'), 'selftest-needs-action-description-undeclared'), /without declaring it/, 'undeclared needs in action description');
-  expectFailure(() => workflowJobs(['jobs:', '  a:', '    runs-on: ubuntu-latest', '  b:', '    runs-on: ubuntu-latest', '    steps:', '      - uses: owner/action@sha', '        with:', '          description: >-', '            ${{ needs.a.result }}'].join('\n'), 'selftest-needs-action-description-block-undeclared'), /without declaring it/, 'undeclared needs in action description block');
+  auditWorkflow([
+    'jobs:',
+    '  a:',
+    '    runs-on: ubuntu-latest',
+    '  b:',
+    '    needs:',
+    '      - a',
+    '    runs-on: ubuntu-latest',
+    '    steps:',
+    '      - uses: owner/action@sha',
+    '        with:',
+    '          description: ${{ needs.a.result }}',
+  ].join('\n'), 'selftest-needs-block-list-description');
 }
 
 runSelfTests();
@@ -632,21 +827,25 @@ const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encodin
   .split('\0')
   .filter(Boolean);
 const jsonFiles = tracked.filter((file) => file.endsWith('.json'));
-const workflowFiles = tracked.filter((file) => /^\.github\/workflows\/.*\.ya?ml$/i.test(file)).sort();
+const workflowFiles = tracked
+  .filter((file) => /^\.github\/workflows\/.*\.ya?ml$/i.test(file))
+  .sort();
 
 if (workflowFiles.join(' ') !== '.github/workflows/production.yml .github/workflows/staging.yml') {
   fail(`Canonical workflow ownership drift: ${workflowFiles.join(' ') || '(none)'}`);
 }
 
-for (const file of jsonFiles) scanJsonRaw(fs.readFileSync(path.join(repoRoot, file), 'utf8'), file);
+for (const file of jsonFiles) {
+  scanJsonRaw(fs.readFileSync(path.join(repoRoot, file), 'utf8'), file);
+}
 
 let inputCount = 0;
 let jobCount = 0;
 for (const file of workflowFiles) {
   const raw = fs.readFileSync(path.join(repoRoot, file), 'utf8');
-  scanYamlDuplicateKeys(raw, file);
-  inputCount += workflowDispatchInputs(raw, file).length;
-  jobCount += workflowJobs(raw, file).length;
+  const audited = auditWorkflow(raw, file);
+  inputCount += audited.inputs.length;
+  jobCount += audited.jobs.length;
 }
 
 console.log(
