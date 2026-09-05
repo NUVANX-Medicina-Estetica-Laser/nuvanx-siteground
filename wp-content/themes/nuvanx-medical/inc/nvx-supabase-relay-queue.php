@@ -621,14 +621,28 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_compare_and_swap_status' ) ) {
 			if ( function_exists( 'wp_cache_delete' ) ) {
 				wp_cache_delete( $post_id, 'posts' );
 			}
+			// Retrieve existing post or construct a reliable snapshot for the transition dispatch.
+			// Shared object-cache refills racing the invalidation can cause get_post() to return
+			// the pre-CAS status, which must not suppress transition dispatch nor invalidate
+			// the committed database mutation.
 			$post = get_post( $post_id );
-			if ( ! $post instanceof WP_Post || $new_status !== (string) $post->post_status ) {
-				return false;
+			if ( $post instanceof WP_Post ) {
+				$post_snapshot = clone $post;
+			} else {
+				$post_snapshot = new WP_Post(
+					(object) array(
+						'ID'          => $post_id,
+						'post_type'   => NVX_SUPABASE_RELAY_QUEUE_CPT,
+						'post_status' => $new_status,
+					)
+				);
 			}
+			$post_snapshot->post_status = $new_status;
+
 			if ( function_exists( 'wp_transition_post_status' ) ) {
-				wp_transition_post_status( $new_status, $expected_status, $post );
+				wp_transition_post_status( $new_status, $expected_status, $post_snapshot );
 			} elseif ( function_exists( 'do_action' ) ) {
-				do_action( 'transition_post_status', $new_status, $expected_status, $post );
+				do_action( 'transition_post_status', $new_status, $expected_status, $post_snapshot );
 			}
 			return true;
 		}

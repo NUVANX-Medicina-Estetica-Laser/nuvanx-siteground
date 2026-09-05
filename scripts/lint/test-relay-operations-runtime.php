@@ -19,6 +19,14 @@ class WP_Post {
 	public string $post_status = 'draft';
 	public string $post_content = '';
 	public string $post_date_gmt = '';
+
+	public function __construct( mixed $post = null ) {
+		if ( is_object( $post ) ) {
+			foreach ( get_object_vars( $post ) as $key => $value ) {
+				$this->$key = $value;
+			}
+		}
+	}
 }
 
 function is_wp_error( mixed $value ): bool { return $value instanceof WP_Error; }
@@ -232,8 +240,10 @@ function get_posts( array $args = array() ): array {
 	return $results;
 }
 
+$mock_stale_cache_posts = array();
+
 function get_post( mixed $post = null, string $output = 'OBJECT', string $filter = 'raw' ): ?WP_Post {
-	global $mock_posts;
+	global $mock_posts, $mock_stale_cache_posts;
 	$post_id = $post instanceof WP_Post ? $post->ID : absint( $post );
 	if ( $post_id < 1 || ! isset( $mock_posts[ $post_id ] ) ) {
 		return null;
@@ -241,7 +251,7 @@ function get_post( mixed $post = null, string $output = 'OBJECT', string $filter
 	$p                = new WP_Post();
 	$p->ID            = $post_id;
 	$p->post_type     = $mock_posts[ $post_id ]['post_type'] ?? 'nvx_relay_outbox';
-	$p->post_status   = $mock_posts[ $post_id ]['post_status'] ?? 'draft';
+	$p->post_status   = $mock_stale_cache_posts[ $post_id ] ?? ( $mock_posts[ $post_id ]['post_status'] ?? 'draft' );
 	$p->post_content  = $mock_posts[ $post_id ]['post_content'] ?? '';
 	$p->post_date_gmt = $mock_posts[ $post_id ]['post_date_gmt'] ?? '';
 	return $p;
@@ -575,6 +585,30 @@ $cas_failed = nvx_supabase_relay_queue_compare_and_swap_status( 204, 'nvx_relay_
 $require( false === $cas_failed, 'CAS_MISMATCH_RETURNS_FALSE' );
 $require( 'pending' === $mock_posts[204]['post_status'], 'CAS_MISMATCH_LEAVES_STATUS_UNMODIFIED' );
 $require( ! isset( $mock_posts[204]['meta']['_nvx_relay_dead_at'] ), 'CAS_MISMATCH_DOES_NOT_TIMESTAMP_DEAD_AT' );
+
+// Test 4: Concurrent persistent-cache fill returning stale post status
+// Direct-SQL CAS succeeds in DB, but get_post() observes stale pre-CAS status
+// from a racing cache refill. The post snapshot must still dispatch transition_post_status,
+// stamp _nvx_relay_dead_at, and return true aligned with the committed database mutation.
+$mock_posts[205] = array(
+	'post_type'     => 'nvx_relay_outbox',
+	'post_status'   => 'nvx_relay_building',
+	'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $mock_relay_time - 120 ),
+	'post_content'  => '',
+	'meta'          => array(
+		'_nvx_relay_endpoint' => 'google_click',
+	),
+);
+
+// Simulate persistent object cache returning stale status 'nvx_relay_building' after SQL update
+$mock_stale_cache_posts[205] = 'nvx_relay_building';
+
+$cas_stale_cache_res = nvx_supabase_relay_queue_compare_and_swap_status( 205, 'nvx_relay_building', 'draft' );
+$require( true === $cas_stale_cache_res, 'STALE_CACHE_CAS_RETURNS_TRUE_ALIGNED_WITH_DB' );
+$require( 'draft' === $mock_posts[205]['post_status'], 'STALE_CACHE_CAS_DB_STATUS_UPDATED' );
+$require( (string) $mock_relay_time === ( $mock_posts[205]['meta']['_nvx_relay_dead_at'] ?? '' ), 'STALE_CACHE_CAS_DEAD_AT_TIMESTAMPED' );
+
+unset( $mock_stale_cache_posts[205] );
 
 // Test cleanup retention & untimestamped backfill
 $mock_posts         = array();

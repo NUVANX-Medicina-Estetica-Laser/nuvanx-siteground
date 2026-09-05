@@ -71,8 +71,8 @@ assert.match(ops, /update_post_meta\([\s\S]*'_nvx_relay_dead_at'/,
   'Dead terminal rows need explicit terminal timestamp');
 assert.doesNotMatch(queue, /update_post_meta\([^;\n]*'_nvx_relay_dead_at'/,
   'Dead-letter retention clock must remain owned by the operations module, not queue protocol paths');
-assert.match(queue, /wp_transition_post_status\(\s*\$new_status,\s*\$expected_status,\s*\$post\s*\)/,
-  'Direct-SQL status CAS in queue must dispatch transition_post_status to operations listener');
+assert.match(queue, /wp_transition_post_status\(\s*\$new_status,\s*\$expected_status,\s*\$post_snapshot\s*\)/,
+  'Direct-SQL status CAS in queue must dispatch transition_post_status with snapshot to operations listener');
 assert.match(ops, /'meta_query'[\s\S]*'_nvx_relay_dead_at'[\s\S]*'compare'\s*=>\s*'<='[\s\S]*'type'\s*=>\s*'NUMERIC'/,
   'Cleanup retention must use terminal timestamp, not post creation date');
 assert.doesNotMatch(ops, /post_date_gmt|date_query/,
