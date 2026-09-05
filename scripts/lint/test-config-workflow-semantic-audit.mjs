@@ -269,8 +269,48 @@ function hasNonEmptyFlowMapping(value) {
     if (i > 0 && !/[\s\[,:]/.test(previous)) continue;
     let next = i + 1;
     while (next < text.length && /\s/.test(text[next])) next += 1;
-    if (text[next] !== '}') return true;
-    i = next;
+    if (next < text.length && text[next] === '}') {
+      i = next;
+      continue;
+    }
+
+    let innerQuote = null;
+    let innerEscaped = false;
+    let depth = 1;
+    let hasColon = false;
+    let j = i + 1;
+    for (; j < text.length; j += 1) {
+      const innerCh = text[j];
+      if (innerQuote === '"') {
+        if (innerEscaped) innerEscaped = false;
+        else if (innerCh === '\\') innerEscaped = true;
+        else if (innerCh === '"') innerQuote = null;
+        continue;
+      }
+      if (innerQuote === "'") {
+        if (innerCh === "'" && text[j + 1] === "'") j += 1;
+        else if (innerCh === "'") innerQuote = null;
+        continue;
+      }
+      if (innerCh === '"' || innerCh === "'") {
+        innerQuote = innerCh;
+        continue;
+      }
+      if (innerCh === '{') {
+        depth += 1;
+        continue;
+      }
+      if (innerCh === '}') {
+        depth -= 1;
+        if (depth === 0) break;
+        continue;
+      }
+      if (innerCh === ':') {
+        hasColon = true;
+      }
+    }
+    if (hasColon) return true;
+    i = j;
   }
   return false;
 }
@@ -438,15 +478,26 @@ function readQuoted(text, start) {
   let escaped = false;
   for (let i = start + 1; i < text.length; i += 1) {
     const ch = text[i];
-    if (quote === '"' && escaped) {
-      escaped = false;
+    if (quote === '"') {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') return i;
       continue;
     }
-    if (quote === '"' && ch === '\\') {
-      escaped = true;
+    if (quote === "'") {
+      if (ch === "'" && text[i + 1] === "'") {
+        i += 1;
+        continue;
+      }
+      if (ch === "'") return i;
       continue;
     }
-    if (ch === quote) return i;
   }
   return text.length - 1;
 }
@@ -819,6 +870,78 @@ function runSelfTests() {
     '        with:',
     '          description: ${{ needs.a.result }}',
   ].join('\n'), 'selftest-needs-block-list-description');
+
+  expectFailure(
+    () => auditWorkflow(
+      'jobs:\n  a:\n    needs: missing\n    runs-on: ubuntu-latest\n',
+      'selftest-needs-missing',
+    ),
+    /needs missing job 'missing'/,
+    'missing needs',
+  );
+
+  expectFailure(
+    () => auditWorkflow(
+      'jobs:\n  a:\n    needs: b\n    runs-on: ubuntu-latest\n  b:\n    needs: a\n    runs-on: ubuntu-latest\n',
+      'selftest-needs-cycle',
+    ),
+    /cyclic job needs graph/,
+    'cyclic needs',
+  );
+
+  auditWorkflow([
+    'jobs:',
+    '  build:',
+    '    runs-on: ubuntu-latest',
+    '  release:',
+    '    needs: build # wait',
+    '    runs-on: ubuntu-latest',
+    '  audit:',
+    '    needs:',
+    '      - build',
+    '      - release',
+    '    if: >-',
+    '      always() &&',
+    "      needs.release.result == 'success'",
+    '    runs-on: ubuntu-latest',
+  ].join('\n'), 'selftest-needs-valid-folded-if');
+
+  expectFailure(
+    () => auditWorkflow([
+      'jobs:',
+      '  a:',
+      '    runs-on: ubuntu-latest',
+      '  b:',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - uses: owner/action@sha',
+      '        with:',
+      '          description: >-',
+      '            ${{ needs.a.result }}',
+    ].join('\n'), 'selftest-needs-action-description-block-undeclared'),
+    /without declaring it/,
+    'undeclared needs in action description block',
+  );
+
+  auditWorkflow([
+    'jobs:',
+    '  a:',
+    '    runs-on: ubuntu-latest',
+    '    steps:',
+    '      - run: echo {1..6}',
+    '      - run: for i in {1..12}; do echo $i; done',
+    '      - run: echo {a,b,c}',
+  ].join('\n'), 'selftest-shell-brace-expansion');
+
+  auditWorkflow([
+    'jobs:',
+    '  a:',
+    '    runs-on: ubuntu-latest',
+    '  b:',
+    '    needs: a',
+    "    if: ${{ needs['a'].result == 'success' }}",
+    '    runs-on: ubuntu-latest',
+  ].join('\n'), 'selftest-needs-bracket-access');
 }
 
 runSelfTests();
