@@ -313,6 +313,7 @@ function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
 				return $registry[ $slug_path ];
 			}
 		}
+	}
 
 	// Normalize request context path as fallback.
 	if ( function_exists( 'nvx_theme_request_context' ) ) {
