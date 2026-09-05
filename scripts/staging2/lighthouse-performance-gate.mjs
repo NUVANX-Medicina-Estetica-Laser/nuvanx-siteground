@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { resolvePerformanceGateMode } from './performance-gate-mode.mjs';
 import {
   shouldUseAuthenticatedStagingEgress,
+  stagingEgressExitCode,
   startAuthenticatedStagingEgress,
 } from './lighthouse-network-path.mjs';
 
@@ -51,11 +52,15 @@ if (shouldUseAuthenticatedStagingEgress(process.env)) {
       `PERF_NETWORK_PATH=AUTHENTICATED_SSH_HTTPS path_owner=${tunnel.networkPath} status=${tunnel.probe.status} path=${tunnel.probe.effectivePath} local_peer=${tunnel.probe.localPeer}`,
     );
   } catch (error) {
-    console.error(`PERF_NETWORK_PATH=FAIL_CLOSED reason=${String(error?.message || error).slice(0, 1500)}`);
-    process.exit(1);
+    const exitCode = stagingEgressExitCode(error);
+    const classification = exitCode === 75 ? 'TRANSIENT' : exitCode === 78 ? 'CONFIG' : 'DETERMINISTIC';
+    console.error(
+      `PERF_NETWORK_PATH=FAIL_${classification} exit=${exitCode} reason=${String(error?.message || error).slice(0, 1500)}`,
+    );
+    process.exit(exitCode);
   }
 } else if (String(process.env.GITHUB_ACTIONS || '').toLowerCase() === 'true') {
-  console.error('PERF_NETWORK_PATH=FAIL_CONFIG reason=github_actions_staging_tunnel_not_selected');
+  console.error('PERF_NETWORK_PATH=FAIL_CONFIG exit=78 reason=github_actions_staging_tunnel_not_selected');
   process.exit(78);
 }
 
