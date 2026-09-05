@@ -303,7 +303,7 @@ function workflowStructure(raw, label) {
     const mapping = parseMapping(mappingText, label, i + 1);
     if (mapping) {
       assertCanonicalMapping(mapping, label, i + 1);
-      if (isBlockHeader(mapping.value)) block = { indent, key: mapping.key };
+      if (isBlockHeader(mapping.value)) block = { indent: effectiveIndent, key: mapping.key };
     }
     rows.push({ lineNo: i + 1, indent, effectiveIndent, clean, sequence, mapping });
   }
