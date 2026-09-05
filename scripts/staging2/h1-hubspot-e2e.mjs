@@ -106,7 +106,7 @@ assert.match(secureBridge, /pre_http_request/, 'public form submit URL must stil
 
 assert.match(captureRelay, /add_filter\(\s*'http_response',\s*'nvx_lead_captured_on_http_response',\s*10,\s*3\s*\)/, 'capture relay must observe accepted secure HubSpot responses');
 assert.match(captureRelay, /nvx_lead_captured_endpoint/, 'capture relay must target the canonical Supabase ledger');
-assert.match(captureRelay, /valid nvx_lead_id missing/, 'capture relay must fail closed when lineage is missing');
+assert.match(captureRelay, /'lead_captured_relay',\s*'lead_id_missing'/, 'capture relay must fail closed when lineage is missing');
 assert.match(captureRelay, /status < 200 \|\| \$status >= 300/, 'capture relay must run only after HubSpot 2xx');
 
 assert.match(conversionEvents, /nvx_google_click_id/, 'browser attribution must retain the custom Google click ID property');
