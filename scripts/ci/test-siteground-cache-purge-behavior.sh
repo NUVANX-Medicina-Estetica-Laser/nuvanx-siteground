@@ -43,6 +43,11 @@ case "$cmd:$sub" in
   plugin:is-active)
     [[ "$installed" == '1' && "$(cat "$state_file")" == 'active' ]]
     ;;
+  plugin:get)
+    [[ "$installed" == '1' ]] || exit 44
+    cat "$state_file"
+    exit 0
+    ;;
   plugin:activate)
     [[ "$installed" == '1' ]] || exit 41
     printf '%s\n' active > "$state_file"
@@ -207,4 +212,4 @@ run_command_first_case command_only_success
 run_command_first_case command_only_failure sg-purge
 run_missing_capability_case
 
-echo 'SITEGROUND_CACHE_BEHAVIOR=PASS failure_cases=6 success_cases=4 original_rc=preserved requested_state=restored opcache_return=fail_closed command_first=verified missing_capability=fail_closed'
+echo 'SITEGROUND_CACHE_BEHAVIOR=PASS failure_cases=6 success_cases=4 original_rc=preserved requested_state=restored opcache_return=fail_closed command_first=verified missing_capability=fail_closed explicit_state_probe=verified'
