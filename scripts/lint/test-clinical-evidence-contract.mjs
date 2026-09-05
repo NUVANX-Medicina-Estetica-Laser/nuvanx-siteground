@@ -8,14 +8,16 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
 const themeRoot = resolve(root, 'wp-content/themes/nuvanx-medical');
 const matrixPath = resolve(themeRoot, 'inc/data/clinical-matrix.json');
+const routesPath = resolve(themeRoot, 'inc/data/routes.json');
 const governancePath = resolve(themeRoot, 'inc/nvx-clinical-governance.php');
 const constantsPath = resolve(themeRoot, 'inc/nvx-constants.php');
 const authorityGraphPath = resolve(themeRoot, 'inc/nvx-endolift-authority-graph.php');
 const signatureCatalogPath = resolve(themeRoot, 'inc/data/nvx-signature-phase-catalog.json');
 const clinicsPath = resolve(themeRoot, 'inc/data/clinics.json');
 
-const [matrixRaw, governance, constants, authorityGraph, signatureCatalogRaw, clinicsRaw] = await Promise.all([
+const [matrixRaw, routesRaw, governance, constants, authorityGraph, signatureCatalogRaw, clinicsRaw] = await Promise.all([
   readFile(matrixPath, 'utf8'),
+  readFile(routesPath, 'utf8'),
   readFile(governancePath, 'utf8'),
   readFile(constantsPath, 'utf8'),
   readFile(authorityGraphPath, 'utf8'),
@@ -24,6 +26,7 @@ const [matrixRaw, governance, constants, authorityGraph, signatureCatalogRaw, cl
 ]);
 
 const matrix = JSON.parse(matrixRaw);
+const routes = JSON.parse(routesRaw);
 const treatments = matrix?.treatments ?? {};
 const signatureCatalog = JSON.parse(signatureCatalogRaw);
 const clinicsRegistry = JSON.parse(clinicsRaw);
@@ -79,6 +82,39 @@ for (const [treatmentId, pmids] of Object.entries(required)) {
   for (const pmid of pmids) {
     if (!found.has(pmid)) fail(`required_pmid_missing:${treatmentId}:${pmid}`);
   }
+}
+
+// Route identity is owned by routes.json. Evidence governance must consume the
+// canonical schema_id instead of maintaining a second slug -> treatment map.
+const evidenceRoutes = {
+  '/endolift-facial-papada-mandibula/': 'endolift_facial',
+  '/laser-co2-fraccionado-madrid-textura-cicatrices-poro/': 'laser_co2',
+  '/exion-face/': 'exion_face',
+};
+for (const [route, treatmentId] of Object.entries(evidenceRoutes)) {
+  const row = routes?.[route];
+  if (row?.schema_group !== 'treatments' || row?.schema_id !== treatmentId) {
+    fail(`route_schema_identity_invalid:${route}:${treatmentId}`);
+  }
+}
+for (const marker of [
+  "require_once __DIR__ . '/nvx-catalog-json.php';",
+  "nvx_catalog_json_load( 'clinical-matrix.json' )",
+  "nvx_catalog_json_load( 'routes.json' )",
+  "( $row['schema_id'] ?? '' )",
+  "( $row['schema_group'] ?? '' )",
+  'declare(strict_types=1);',
+]) {
+  if (!governance.includes(marker)) fail(`clinical_ssot_contract_missing:${marker}`);
+}
+for (const forbiddenSource of [
+  'json_decode( file_get_contents',
+  "__DIR__ . '/data/clinical-matrix.json'",
+  "'endolift-facial-papada-mandibula'                     => 'endolift_facial'",
+  "'laser-co2-fraccionado-madrid-textura-cicatrices-poro' => 'laser_co2'",
+  "'exion-face'                                           => 'exion_face'",
+]) {
+  if (governance.includes(forbiddenSource)) fail(`clinical_secondary_owner_forbidden:${forbiddenSource}`);
 }
 
 const forbidden = [
@@ -157,7 +193,7 @@ for (const [clinic, expectedPath] of Object.entries(canonicalClinicPaths)) {
   }
 }
 for (const marker of [
-  "nvx_get_clinics_config",
+  'nvx_get_clinics_config',
   "['chamberi']['landing_path']",
   "['goya']['landing_path']",
   'home_url( $chamberi_path )',
@@ -190,4 +226,4 @@ if (!reciprocalLinks.some((row) => row?.path === '/endolift-facial-papada-mandib
   fail('papada_to_endolift_reciprocal_link_missing');
 }
 
-console.log(`CLINICAL_EVIDENCE_CONTRACT=PASS treatments=3 sources=6 balanced_evidence=1 public_copy_files=${publicCopyFiles.length} forbidden_claims=absent endolift_authority_graph=canonical`);
+console.log(`CLINICAL_EVIDENCE_CONTRACT=PASS treatments=3 sources=6 balanced_evidence=1 route_identity=routes-json public_copy_files=${publicCopyFiles.length} forbidden_claims=absent endolift_authority_graph=canonical`);

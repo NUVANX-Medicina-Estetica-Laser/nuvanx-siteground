@@ -39,7 +39,14 @@ function nvx_theme_normalize_managed_component_prose_wrapper( string $content ):
 		return $content;
 	}
 
-	if ( ! function_exists( 'nvx_get_page_owner' ) || empty( nvx_get_page_owner() ) ) {
+	if ( ! function_exists( 'nvx_get_page_owner' ) ) {
+		return $content;
+	}
+	$owner = nvx_get_page_owner();
+	if (
+		empty( $owner )
+		|| ( defined( 'NVX_CANONICAL_PAGE_UNOWNED' ) && NVX_CANONICAL_PAGE_UNOWNED === $owner )
+	) {
 		return $content;
 	}
 

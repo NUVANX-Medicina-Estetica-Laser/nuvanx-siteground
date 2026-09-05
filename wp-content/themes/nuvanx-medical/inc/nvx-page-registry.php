@@ -14,6 +14,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+const NVX_CANONICAL_PAGE_UNOWNED = 'nvx_unowned';
+
 /**
  * Returns the canonical Page Registry matrix:
  * path => [ 'owner' => ..., 'renderer' => ..., 'surface' => ..., 'template' => ... ]
@@ -34,12 +36,6 @@ function nvx_get_canonical_page_registry(): array {
 			'template' => 'front-page.php',
 		),
 		'/nosotros/' => array(
-			'owner'    => 'nvx_nosotros_page',
-			'renderer' => 'nvx_content_restructure_nosotros_page',
-			'surface'  => 'surface-warm',
-			'template' => 'page.php',
-		),
-		'/sobre-nosotros/' => array(
 			'owner'    => 'nvx_nosotros_page',
 			'renderer' => 'nvx_content_restructure_nosotros_page',
 			'surface'  => 'surface-warm',
@@ -114,12 +110,6 @@ function nvx_get_canonical_page_registry(): array {
 		'/laser-co2-fraccionado-madrid-textura-cicatrices-poro/' => array(
 			'owner'    => 'nvx_co2_page',
 			'renderer' => 'nvx_co2_page_content',
-			'surface'  => 'surface-warm',
-			'template' => 'page.php',
-		),
-		'/profhilo-madrid/' => array(
-			'owner'    => 'nvx_profhilo_page',
-			'renderer' => 'nvx_profhilo_page_content',
 			'surface'  => 'surface-warm',
 			'template' => 'page.php',
 		),
@@ -305,10 +295,10 @@ function nvx_get_canonical_page_registry(): array {
  * @return array{owner: string, renderer: string, surface: string, template: string}|null
  */
 function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
-	$registry = nvx_get_canonical_page_registry();
+	$registry  = nvx_get_canonical_page_registry();
 	$target_id = $post_id ?? (int) get_queried_object_id();
 
-	// Check current request URI path via schema helper
+	// Check current request URI path via schema helper.
 	if ( function_exists( 'nvx_schema_current_path' ) ) {
 		$path = nvx_schema_current_path( $target_id );
 		if ( isset( $registry[ $path ] ) ) {
@@ -316,7 +306,7 @@ function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
 		}
 	}
 
-	// Check queried post slug
+	// Check queried post slug.
 	if ( $target_id > 0 ) {
 		$slug = (string) get_post_field( 'post_name', $target_id );
 		if ( '' !== $slug ) {
@@ -327,9 +317,9 @@ function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
 		}
 	}
 
-	// Normalize request context path as fallback
+	// Normalize request context path as fallback.
 	if ( function_exists( 'nvx_theme_request_context' ) ) {
-		$raw_path = nvx_theme_request_context()['path'];
+		$raw_path  = nvx_theme_request_context()['path'];
 		$norm_path = '/' . trim( $raw_path, '/' ) . '/';
 		if ( '/' === $norm_path || '//' === $norm_path ) {
 			$norm_path = '/';
@@ -345,10 +335,17 @@ function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
 /**
  * Get canonical page owner, independent of hook registration order.
  *
+ * A route outside the registry receives an explicit non-empty sentinel. This
+ * makes the canonical registry authoritative even while legacy nvx_page_owner
+ * callbacks remain registered: they cannot claim an unregistered path.
+ *
  * @param int|null $post_id Post ID if available.
- * @return string|null
  */
-function nvx_get_canonical_page_owner( ?int $post_id = null ): ?string {
+function nvx_get_canonical_page_owner( ?int $post_id = null ): string {
 	$entry = nvx_resolve_canonical_page_entry( $post_id );
-	return $entry['owner'] ?? null;
+	if ( is_array( $entry ) && ! empty( $entry['owner'] ) ) {
+		return (string) $entry['owner'];
+	}
+
+	return NVX_CANONICAL_PAGE_UNOWNED;
 }

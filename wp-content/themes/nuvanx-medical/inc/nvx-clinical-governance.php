@@ -3,23 +3,26 @@
  * Clinical Governance & Medical Content Contract
  *
  * Centralizes the retrieval of clinical treatments data (SSOT).
- * Extracted from inc/data/clinical-matrix.json to enforce consistency
- * and valid medical claims across the UI, pricing, and Schema JSON-LD.
+ * Clinical matrix data is loaded through the canonical JSON catalog owner;
+ * route-to-treatment identity is resolved from routes.json schema_id rather
+ * than a second hand-maintained slug map.
  *
  * @package nuvanx-medical
  */
+
+declare(strict_types=1);
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/nvx-catalog-json.php';
 require_once __DIR__ . '/nvx-endolift-authority-graph.php';
 
 /**
  * Load and validate the Clinical Matrix catalog.
  *
  * @return array<string,array>
- * @throws RuntimeException If the JSON cannot be parsed.
  */
 function nvx_get_clinical_matrix(): array {
 	static $matrix = null;
@@ -28,14 +31,12 @@ function nvx_get_clinical_matrix(): array {
 		return $matrix;
 	}
 
-	$file = __DIR__ . '/data/clinical-matrix.json';
-	if ( ! is_readable( $file ) ) {
-		$matrix = array();
-		return $matrix;
-	}
-
-	$data = json_decode( file_get_contents( $file ), true );
-	if ( ! is_array( $data ) || empty( $data['treatments'] ) ) {
+	$data = nvx_catalog_json_load( 'clinical-matrix.json' );
+	if (
+		! empty( $data['_error'] )
+		|| ! isset( $data['treatments'] )
+		|| ! is_array( $data['treatments'] )
+	) {
 		$matrix = array();
 		return $matrix;
 	}
@@ -115,7 +116,11 @@ function nvx_clinical_generate_schema( string $treatment_id, string $url ): ?arr
 }
 
 /**
- * Resolve the governed evidence record for the current priority treatment page.
+ * Resolve the governed evidence record for the current treatment route.
+ *
+ * routes.json owns route -> schema_id identity. The clinical matrix owns the
+ * evidence attached to that ID. Aliases without their own schema_id therefore
+ * never become a second treatment authority.
  */
 function nvx_clinical_evidence_current_treatment_id(): string {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ! is_page() ) {
@@ -125,14 +130,36 @@ function nvx_clinical_evidence_current_treatment_id(): string {
 	$slug = function_exists( 'nvx_theme_current_page_slug' )
 		? nvx_theme_current_page_slug()
 		: (string) get_post_field( 'post_name', get_queried_object_id() );
+	$slug = trim( $slug, '/' );
+	if ( '' === $slug ) {
+		return '';
+	}
 
-	$routes = array(
-		'endolift-facial-papada-mandibula'                     => 'endolift_facial',
-		'laser-co2-fraccionado-madrid-textura-cicatrices-poro' => 'laser_co2',
-		'exion-face'                                           => 'exion_face',
-	);
+	$routes = nvx_catalog_json_load( 'routes.json' );
+	if ( ! empty( $routes['_error'] ) ) {
+		return '';
+	}
 
-	return $routes[ $slug ] ?? '';
+	$path = '/' . $slug . '/';
+	$row  = $routes[ $path ] ?? null;
+	if (
+		! is_array( $row )
+		|| 'treatments' !== (string) ( $row['schema_group'] ?? '' )
+	) {
+		return '';
+	}
+
+	$treatment_id = trim( (string) ( $row['schema_id'] ?? '' ) );
+	if ( '' === $treatment_id ) {
+		return '';
+	}
+
+	$treatment = nvx_get_clinical_treatment( $treatment_id );
+	if ( ! is_array( $treatment ) || empty( $treatment['evidence'] ) || ! is_array( $treatment['evidence'] ) ) {
+		return '';
+	}
+
+	return $treatment_id;
 }
 
 /**

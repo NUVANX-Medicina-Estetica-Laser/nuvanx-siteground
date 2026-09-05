@@ -50,7 +50,10 @@ while ( have_posts() ) :
 	$has_managed_editorial = false;
 	if ( function_exists( 'nvx_get_page_owner' ) ) {
 		$owner = nvx_get_page_owner();
-		if ( ! empty( $owner ) ) {
+		if (
+			! empty( $owner )
+			&& ( ! defined( 'NVX_CANONICAL_PAGE_UNOWNED' ) || NVX_CANONICAL_PAGE_UNOWNED !== $owner )
+		) {
 			$has_managed_editorial = true;
 		}
 	}
