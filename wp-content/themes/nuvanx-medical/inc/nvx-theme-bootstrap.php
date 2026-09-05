@@ -55,6 +55,7 @@ function nvx_theme_bootstrap_manifest(): array {
 		'inc/nvx-hubspot-secure-attribution.php',
 		'inc/nvx-gtm-integration.php',
 		'inc/nvx-attribution-integration.php',
+		'inc/nvx-supabase-relay-operations.php',
 		'inc/nvx-supabase-relay-queue.php',
 		'inc/nvx-lead-captured-relay.php',
 		'inc/nvx-google-attribution-relay-auth.php',
