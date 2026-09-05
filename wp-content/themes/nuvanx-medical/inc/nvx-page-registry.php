@@ -39,12 +39,6 @@ function nvx_get_canonical_page_registry(): array {
 			'surface'  => 'surface-warm',
 			'template' => 'page.php',
 		),
-		'/sobre-nosotros/' => array(
-			'owner'    => 'nvx_nosotros_page',
-			'renderer' => 'nvx_content_restructure_nosotros_page',
-			'surface'  => 'surface-warm',
-			'template' => 'page.php',
-		),
 		'/equipo-medico/' => array(
 			'owner'    => 'nvx_equipo_page',
 			'renderer' => 'nvx_content_restructure_equipo_page',
@@ -305,10 +299,10 @@ function nvx_get_canonical_page_registry(): array {
  * @return array{owner: string, renderer: string, surface: string, template: string}|null
  */
 function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
-	$registry = nvx_get_canonical_page_registry();
+	$registry  = nvx_get_canonical_page_registry();
 	$target_id = $post_id ?? (int) get_queried_object_id();
 
-	// Check current request URI path via schema helper
+	// Check current request URI path via schema helper.
 	if ( function_exists( 'nvx_schema_current_path' ) ) {
 		$path = nvx_schema_current_path( $target_id );
 		if ( isset( $registry[ $path ] ) ) {
@@ -316,7 +310,7 @@ function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
 		}
 	}
 
-	// Check queried post slug
+	// Check queried post slug.
 	if ( $target_id > 0 ) {
 		$slug = (string) get_post_field( 'post_name', $target_id );
 		if ( '' !== $slug ) {
@@ -325,11 +319,10 @@ function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
 				return $registry[ $slug_path ];
 			}
 		}
-	}
 
-	// Normalize request context path as fallback
+	// Normalize request context path as fallback.
 	if ( function_exists( 'nvx_theme_request_context' ) ) {
-		$raw_path = nvx_theme_request_context()['path'];
+		$raw_path  = nvx_theme_request_context()['path'];
 		$norm_path = '/' . trim( $raw_path, '/' ) . '/';
 		if ( '/' === $norm_path || '//' === $norm_path ) {
 			$norm_path = '/';
