@@ -107,11 +107,11 @@ nvx_block8_assert(
 // Medical review provenance is single-owner. Feature renderers may type and
 // enrich WebPage nodes, but must not stamp reviewedBy/lastReviewed themselves.
 nvx_block8_assert(
-	false === preg_match( '/\$graph\s*\[\s*\$index\s*\]\s*\[\s*[\'\"]lastReviewed[\'\"]\s*\]\s*=/', $valoracion ),
+	0 === preg_match( '/\$graph\s*\[\s*\$index\s*\]\s*\[\s*[\'\"]lastReviewed[\'\"]\s*\]\s*=/', $valoracion ),
 	'VALORACION_NO_DIRECT_LAST_REVIEWED_WRITER'
 );
 nvx_block8_assert(
-	false === preg_match( '/\$graph\s*\[\s*\$index\s*\]\s*\[\s*[\'\"]reviewedBy[\'\"]\s*\]\s*=/', $valoracion ),
+	0 === preg_match( '/\$graph\s*\[\s*\$index\s*\]\s*\[\s*[\'\"]reviewedBy[\'\"]\s*\]\s*=/', $valoracion ),
 	'VALORACION_NO_DIRECT_REVIEWER_WRITER'
 );
 nvx_block8_assert(
