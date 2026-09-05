@@ -13,12 +13,19 @@ final class WP_Error {
 	public function get_error_code(): string { return $this->code; }
 	public function get_error_message(): string { return $this->message; }
 }
+class WP_Post {
+	public int $ID = 1;
+	public string $post_type = 'nvx_relay_outbox';
+}
 
 function is_wp_error( mixed $value ): bool { return $value instanceof WP_Error; }
 function sanitize_key( string $value ): string { return strtolower( preg_replace( '/[^a-z0-9_\-]/', '', $value ) ?? '' ); }
+function sanitize_url( string $value ): string { return trim( $value ); }
 function absint( mixed $value ): int { return abs( (int) $value ); }
 function add_action( mixed ...$args ): void { unset( $args ); }
-function wp_remote_retrieve_response_code( mixed $response ): int { unset( $response ); return 0; }
+function add_filter( mixed ...$args ): void { unset( $args ); }
+function wp_json_encode( mixed $value ): string|false { return json_encode( $value ); }
+function nvx_supabase_relay_queue_endpoints(): array { return array( 'google_click' => 'https://example.test/google-click' ); }
 
 require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-supabase-relay-operations.php';
 
@@ -41,9 +48,35 @@ $require( 'nvx_relay_payload_too_large' === $click_reject->get_error_code(), 'GO
 $require( true === nvx_supabase_relay_validate_payload( 'lead_captured', $large_lead ), 'LEAD_CAPTURED_USES_SHARED_32768_LIMIT' );
 
 $invalid = nvx_supabase_relay_validate_payload( 'google_click', '{invalid-json' );
-$require( is_wp_error( $invalid ) && 'nvx_relay_payload_invalid' === $invalid->get_error_code(), 'INVALID_JSON_TERMINAL' );
-$classified = nvx_supabase_relay_classify( $click_reject );
-$require( false === $classified['retryable'], 'OVERSIZED_PAYLOAD_NOT_RETRYABLE' );
-$require( 'HTTP_4XX' === $classified['outcome'], 'OVERSIZED_PAYLOAD_TERMINAL_CLASS' );
+$require( is_wp_error( $invalid ) && 'nvx_relay_payload_invalid' === $invalid->get_error_code(), 'INVALID_JSON_REJECTED' );
 
-fwrite( STDOUT, "OUTBOX_PAYLOAD_LIMIT_RUNTIME=PASS google_click=8192 shared=32768\n" );
+$small_preflight = nvx_supabase_relay_operations_preflight_google_click(
+	false,
+	array( 'body' => $small_click ),
+	'https://example.test/google-click'
+);
+$require( false === $small_preflight, 'VALID_GOOGLE_CLICK_REACHES_NETWORK' );
+
+$large_preflight = nvx_supabase_relay_operations_preflight_google_click(
+	false,
+	array( 'body' => $large_click ),
+	'https://example.test/google-click'
+);
+$require( is_array( $large_preflight ), 'OVERSIZED_GOOGLE_CLICK_PREEMPTED' );
+$require( 422 === (int) ( $large_preflight['response']['code'] ?? 0 ), 'OVERSIZED_GOOGLE_CLICK_TERMINAL_HTTP_422' );
+
+$invalid_preflight = nvx_supabase_relay_operations_preflight_google_click(
+	false,
+	array( 'body' => '{invalid-json' ),
+	'https://example.test/google-click'
+);
+$require( 422 === (int) ( $invalid_preflight['response']['code'] ?? 0 ), 'INVALID_JSON_TERMINAL_HTTP_422' );
+
+$other_endpoint = nvx_supabase_relay_operations_preflight_google_click(
+	false,
+	array( 'body' => $large_click ),
+	'https://example.test/other'
+);
+$require( false === $other_endpoint, 'UNRELATED_HTTP_REQUEST_UNTOUCHED' );
+
+fwrite( STDOUT, "OUTBOX_PAYLOAD_LIMIT_RUNTIME=PASS google_click=8192 shared=32768 preflight=terminal_http_422\n" );
