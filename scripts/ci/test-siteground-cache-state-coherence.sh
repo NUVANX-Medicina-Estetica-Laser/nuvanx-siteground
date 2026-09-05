@@ -119,11 +119,37 @@ run_case() {
     || fail "case=$name missing_pass_evidence"
 }
 
-# These cases failed with cross-process stale active_plugins state before the
-# helper invalidated cache after each plugin state mutation.
+run_stale_startup_case() {
+  local name="$1"
+  local database_state="$2"
+  local stale_cache_state="$3"
+  local expected="$4"
+
+  printf '%s\n' "$database_state" > "$DB_STATE"
+  printf '%s\n' "$stale_cache_state" > "$CACHE_STATE"
+  printf '0\n' > "$FLUSH_COUNT"
+  unset WP_MOCK_FAIL_ACTIVATION WP_MOCK_FAIL_STATE_PROBE
+
+  PATH="$MOCK_BIN:$PATH" siteground_cache_purge "$WP_ROOT" preserve >"$TMP/$name.out" 2>"$TMP/$name.err" \
+    || fail "case=$name expected_success=1 stderr=$(tr '\n' ' ' < "$TMP/$name.err")"
+
+  [[ "$(cat "$DB_STATE")" == "$expected" ]] \
+    || fail "case=$name database_state=$(cat "$DB_STATE") expected=$expected"
+  [[ ! -f "$CACHE_STATE" ]] \
+    || fail "case=$name stale_startup_cache_survived=$(cat "$CACHE_STATE")"
+  grep -Fq "SITEGROUND_CACHE_PURGE=PASS initial=$expected final=preserve" "$TMP/$name.out" \
+    || fail "case=$name stale_state_was_snapshotted_as_initial"
+}
+
+# These cases reproduce stale cache created by a state mutation during the helper.
 run_case inactive_to_active inactive active active
 run_case inactive_preserve inactive preserve inactive
 run_case active_to_inactive active inactive inactive
+
+# Preserve mode must first invalidate stale state that already existed before the
+# helper started. The database state remains authoritative in both directions.
+run_stale_startup_case stale_start_db_active active inactive active
+run_stale_startup_case stale_start_db_inactive inactive active inactive
 
 # State coherence must never convert a genuine activation failure into PASS.
 printf 'inactive\n' > "$DB_STATE"
@@ -151,4 +177,4 @@ fi
 grep -Fq 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_state_probe_failed' "$TMP/probe-failure.err" \
   || fail 'case=state_probe_failure missing_fail_closed_evidence'
 
-echo 'SITEGROUND_CACHE_STATE_COHERENCE=PASS stale_cross_process_cases=3 genuine_activation_failure=fail_closed state_probe_failure=fail_closed'
+echo 'SITEGROUND_CACHE_STATE_COHERENCE=PASS stale_post_mutation_cases=3 stale_startup_cases=2 genuine_activation_failure=fail_closed state_probe_failure=fail_closed'
