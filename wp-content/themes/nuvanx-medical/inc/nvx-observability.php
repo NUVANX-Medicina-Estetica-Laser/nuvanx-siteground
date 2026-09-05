@@ -32,10 +32,12 @@ function nvx_observability_log( string $domain, string $event, array $context = 
 		'bytes',
 		'code',
 		'component',
+		'consent',
 		'endpoint',
 		'field',
 		'filename',
 		'http_status',
+		'hutk_present',
 		'key',
 		'limit',
 		'mode',
@@ -85,62 +87,4 @@ function nvx_observability_log( string $domain, string $event, array $context = 
 
 	// Sole runtime error_log() sink for the canonical theme bootstrap.
 	error_log( $line );
-}
-
-/** Canonical Supabase relay logger, defined before the queue compatibility fallback. */
-if ( ! function_exists( 'nvx_supabase_relay_log' ) ) {
-	function nvx_supabase_relay_log( string $endpoint, string $outcome, int $status = 0, string $reason = '' ): void {
-		$endpoint = sanitize_key( $endpoint );
-		$outcome  = strtoupper( sanitize_key( $outcome ) );
-		$allowed  = array( 'SUCCESS', 'HTTP_4XX', 'HTTP_429', 'HTTP_5XX', 'TRANSPORT', 'QUEUED', 'DRAINED', 'DEAD' );
-		if ( '' === $endpoint || ! in_array( $outcome, $allowed, true ) ) {
-			return;
-		}
-		nvx_observability_log(
-			'supabase_relay',
-			strtolower( $outcome ),
-			array(
-				'endpoint'    => $endpoint,
-				'http_status' => $status > 0 ? absint( $status ) : null,
-				'reason'      => '' !== $reason ? sanitize_key( $reason ) : null,
-			)
-		);
-	}
-}
-
-/** Canonical HubSpot secure bridge logger, defined before its compatibility fallback. */
-if ( ! function_exists( 'nvx_hubspot_secure_log' ) ) {
-	function nvx_hubspot_secure_log( string $outcome, string $reason = '', int $status = 0 ): void {
-		$outcome = strtoupper( sanitize_key( $outcome ) );
-		if ( ! in_array( $outcome, array( 'SUCCESS', 'FAILURE', 'TRANSPORT' ), true ) ) {
-			return;
-		}
-		nvx_observability_log(
-			'hubspot_secure',
-			strtolower( $outcome ),
-			array(
-				'reason'      => '' !== $reason ? sanitize_key( $reason ) : null,
-				'http_status' => $status > 0 ? absint( $status ) : null,
-			)
-		);
-	}
-}
-
-/** Canonical Google-click attribution relay logger, defined before its fallback. */
-if ( ! function_exists( 'nvx_attribution_log_direct_relay' ) ) {
-	function nvx_attribution_log_direct_relay( string $outcome, int $status = 0, string $reason = '' ): void {
-		$outcome = strtoupper( sanitize_key( $outcome ) );
-		$allowed = array( 'SUCCESS', 'FAILURE', 'HTTP_4XX', 'HTTP_429', 'HTTP_5XX', 'TRANSPORT', 'QUEUED', 'DEAD' );
-		if ( ! in_array( $outcome, $allowed, true ) ) {
-			return;
-		}
-		nvx_observability_log(
-			'attribution_relay',
-			strtolower( $outcome ),
-			array(
-				'http_status' => $status > 0 ? absint( $status ) : null,
-				'reason'      => '' !== $reason ? sanitize_key( $reason ) : null,
-			)
-		);
-	}
 }
