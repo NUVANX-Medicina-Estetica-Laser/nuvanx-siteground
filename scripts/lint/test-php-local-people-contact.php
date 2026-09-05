@@ -18,13 +18,15 @@ function nvx_block8_assert( bool $condition, string $name ): void {
 	}
 }
 
-$root = dirname( __DIR__, 2 );
-require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-constants.php';
-$dr   = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-dr-rivera-page.php' );
-$guide = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-que-exigir-page.php' );
-$valoracion = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-valoracion-managed-page.php' );
-$contact    = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-contacto-valoracion-page.php' );
-$clinics    = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-clinics-hub.php' );
+$root       = dirname( __DIR__, 2 );
+$theme_inc  = $root . '/wp-content/themes/nuvanx-medical/inc/';
+require_once $theme_inc . 'nvx-constants.php';
+$dr         = (string) file_get_contents( $theme_inc . 'nvx-dr-rivera-page.php' );
+$guide      = (string) file_get_contents( $theme_inc . 'nvx-que-exigir-page.php' );
+$valoracion = (string) file_get_contents( $theme_inc . 'nvx-valoracion-managed-page.php' );
+$medical    = (string) file_get_contents( $theme_inc . 'nvx-medical-review.php' );
+$contact    = (string) file_get_contents( $theme_inc . 'nvx-contacto-valoracion-page.php' );
+$clinics    = (string) file_get_contents( $theme_inc . 'nvx-clinics-hub.php' );
 
 if ( ! function_exists( 'is_admin' ) ) {
 	function is_admin(): bool { return false; }
@@ -57,8 +59,8 @@ if ( ! function_exists( 'nvx_schema_normalize_path' ) ) {
 	}
 }
 
-require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-dr-rivera-page.php';
-require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-que-exigir-page.php';
+require_once $theme_inc . 'nvx-dr-rivera-page.php';
+require_once $theme_inc . 'nvx-que-exigir-page.php';
 
 // Behavioral assertions covering exact, nested, prefixed, and unrelated paths.
 $GLOBALS['nvx_test_path'] = '/dr-javier-rivera-tejeda/';
@@ -102,16 +104,23 @@ nvx_block8_assert(
 	'GUIDE_NO_PREFIX_MATCH'
 );
 
-// Consolidation guards: keep confirmed cross-cutting debt visible until the
-// single-owner follow-up removes it deliberately.
+// Medical review provenance is single-owner. Feature renderers may type and
+// enrich WebPage nodes, but must not stamp reviewedBy/lastReviewed themselves.
 nvx_block8_assert(
-	false !== strpos( $valoracion, "\$graph[ \$index ]['lastReviewed']    = '2026-08-01'" ),
-	'VALORACION_UNGOVERNED_LAST_REVIEWED_RECORDED'
+	false === preg_match( '/\$graph\s*\[\s*\$index\s*\]\s*\[\s*[\'\"]lastReviewed[\'\"]\s*\]\s*=/', $valoracion ),
+	'VALORACION_NO_DIRECT_LAST_REVIEWED_WRITER'
 );
 nvx_block8_assert(
-	false !== strpos( $valoracion, "\$graph[ \$index ]['reviewedBy']      = \$reviewer" ),
-	'VALORACION_UNGOVERNED_REVIEWER_RECORDED'
+	false === preg_match( '/\$graph\s*\[\s*\$index\s*\]\s*\[\s*[\'\"]reviewedBy[\'\"]\s*\]\s*=/', $valoracion ),
+	'VALORACION_NO_DIRECT_REVIEWER_WRITER'
 );
+nvx_block8_assert(
+	false !== strpos( $medical, "['lastReviewed']" ) && false !== strpos( $medical, "['reviewedBy']" ),
+	'MEDICAL_REVIEW_CANONICAL_PROVENANCE_OWNER_PRESENT'
+);
+
+// Other Block 8 residual guards remain explicit until their dedicated owner
+// migrations are completed.
 nvx_block8_assert(
 	false !== strpos( $valoracion, 'https://wa.me/34689317399' ),
 	'VALORACION_HARDCODED_WHATSAPP_FALLBACK_RECORDED'
@@ -125,7 +134,7 @@ nvx_block8_assert(
 	'CLINICS_LATERAL_OWNER_RECORDED'
 );
 
-$bootstrap = (string) file_get_contents( $root . '/wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php' );
+$bootstrap = (string) file_get_contents( $theme_inc . 'nvx-theme-bootstrap.php' );
 $catalog   = strpos( $bootstrap, "'inc/nvx-catalog-json.php'" );
 $helpers   = strpos( $bootstrap, "'inc/nvx-page-render-helpers.php'" );
 $targets   = array(
@@ -147,4 +156,4 @@ foreach ( $targets as $target ) {
 	nvx_block8_assert( false !== $helpers && $helpers < $offset, 'HELPERS_PRECEDE_' . $target );
 }
 
-echo 'PHP_LOCAL_PEOPLE_CONTACT=PASS route_hijacks=exact manifest=covered consolidation_debt=guarded' . PHP_EOL;
+echo 'PHP_LOCAL_PEOPLE_CONTACT=PASS route_hijacks=exact manifest=covered provenance=single-owner consolidation_debt=guarded' . PHP_EOL;
