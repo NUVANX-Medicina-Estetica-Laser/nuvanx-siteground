@@ -28,15 +28,104 @@ function read(file) {
   return sourceCache.get(file);
 }
 
-const textExtensions = new Set(['.php', '.mjs', '.js', '.json', '.yml', '.yaml', '.md', '.sh', '.txt', '.xml']);
-const textFiles = tracked.filter((file) => {
-  if (!textExtensions.has(path.extname(file)) && file !== 'package.json') return false;
-  try {
-    return fs.statSync(path.join(root, file)).size <= 1_500_000;
-  } catch {
-    return false;
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripJsComments(source) {
+  let out = '';
+  let state = 'code';
+  let escaped = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    const next = source[i + 1] || '';
+
+    if (state === 'line-comment') {
+      if (char === '\n') {
+        out += '\n';
+        state = 'code';
+      } else {
+        out += ' ';
+      }
+      continue;
+    }
+    if (state === 'block-comment') {
+      if (char === '*' && next === '/') {
+        out += '  ';
+        i += 1;
+        state = 'code';
+      } else {
+        out += char === '\n' ? '\n' : ' ';
+      }
+      continue;
+    }
+
+    if (state === 'single' || state === 'double' || state === 'template') {
+      out += char;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if ((state === 'single' && char === "'") || (state === 'double' && char === '"') || (state === 'template' && char === '`')) {
+        state = 'code';
+      }
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      out += '  ';
+      i += 1;
+      state = 'line-comment';
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      out += '  ';
+      i += 1;
+      state = 'block-comment';
+      continue;
+    }
+    out += char;
+    if (char === "'") state = 'single';
+    else if (char === '"') state = 'double';
+    else if (char === '`') state = 'template';
   }
-});
+  return out;
+}
+
+function phpStringLiterals(source) {
+  const program = [
+    '$src = stream_get_contents(STDIN);',
+    'foreach (token_get_all($src) as $token) {',
+    '  if (is_array($token) && $token[0] === T_CONSTANT_ENCAPSED_STRING) {',
+    '    echo $token[1], "\\0";',
+    '  }',
+    '}',
+  ].join(' ');
+  return execFileSync('php', ['-r', program], {
+    cwd: root,
+    encoding: 'utf8',
+    input: source,
+    maxBuffer: 4 * 1024 * 1024,
+  }).split('\0').filter(Boolean);
+}
+
+function commandReferencesTarget(source, candidates) {
+  const executableLines = source
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith('#'));
+  for (const candidate of candidates) {
+    const escaped = escapeRegex(candidate);
+    const nodeCommand = new RegExp(`(?:^|[\\s:;|&])(?:node|tsx|bun)\\s+(?:--[^\\s]+\\s+)*["']?${escaped}["']?(?:\\s|$)`);
+    const denoCommand = new RegExp(`(?:^|[\\s:;|&])deno\\s+run(?:\\s+--[^\\s]+)*\\s+["']?${escaped}["']?(?:\\s|$)`);
+    const directCommand = new RegExp(`(?:^|[\\s:;|&])["']?${escaped}["']?(?:\\s|$)`);
+    if (executableLines.some((line) => nodeCommand.test(line) || denoCommand.test(line) || directCommand.test(line))) return true;
+  }
+  return false;
+}
 
 const seeds = new Map();
 function addSeed(file, reason) {
@@ -51,23 +140,31 @@ for (const [manual, reason] of Object.entries(registry.manual_entrypoints)) {
   addSeed(manual, 'manual_registry');
 }
 
-// Only executable authorities establish automatic reachability. Documentation,
-// arbitrary JSON and prose may describe a script, but they cannot make it live.
-// Explicit one-shots must be admitted through manual_entrypoints with a reason.
-const executableAuthorities = textFiles.filter((file) => (
-  file === 'package.json'
-  || /\.php$/.test(file)
-  || /\.sh$/.test(file)
-  || /^\.github\/workflows\/[^/]+\.ya?ml$/.test(file)
-));
-for (const caller of executableAuthorities) {
-  const content = read(caller);
+// Only executable syntax establishes automatic reachability. Documentation,
+// comments, assertions and arbitrary prose may mention a script, but they do
+// not make it live. Explicit one-shots belong in manual_entrypoints.
+const packageScripts = Object.values(JSON.parse(read('package.json')).scripts || {}).filter((value) => typeof value === 'string');
+for (const target of jsFiles) {
+  if (packageScripts.some((command) => commandReferencesTarget(command, [target]))) {
+    addSeed(target, 'referenced_by:package.json');
+  }
+}
+
+const themePrefix = 'wp-content/themes/nuvanx-medical';
+for (const caller of tracked.filter((file) => /\.php$/.test(file))) {
+  const literals = phpStringLiterals(read(caller));
   for (const target of jsFiles) {
-    const themePrefix = 'wp-content/themes/nuvanx-medical';
     const themeRelative = target.startsWith(`${themePrefix}/`) ? target.slice(themePrefix.length) : '';
-    if (content.includes(target) || (themeRelative && content.includes(themeRelative))) {
+    if (literals.some((literal) => literal.includes(target) || (themeRelative && literal.includes(themeRelative)))) {
       addSeed(target, `referenced_by:${caller}`);
     }
+  }
+}
+
+for (const caller of tracked.filter((file) => /\.sh$/.test(file) || /^\.github\/workflows\/[^/]+\.ya?ml$/.test(file))) {
+  const source = read(caller);
+  for (const target of jsFiles) {
+    if (commandReferencesTarget(source, [target])) addSeed(target, `referenced_by:${caller}`);
   }
 }
 
@@ -89,7 +186,7 @@ const importPatterns = [
 ];
 
 for (const file of jsFiles) {
-  const source = read(file);
+  const source = stripJsComments(read(file));
   for (const pattern of importPatterns) {
     for (const match of source.matchAll(pattern)) {
       const resolved = resolveJsSpecifier(file, match[1]);
@@ -135,9 +232,11 @@ for (const file of browserEntrypoints) {
 }
 const staleBrowserReviews = Object.keys(registry.browser_entrypoints).filter((file) => !browserEntrypoints.includes(file));
 
+// Raw JSON ownership is repository-wide: if a tracked JS/MJS executable reads
+// a file and destructively JSON.parse()s it, the structural/duplicate/alias
+// policy must be reviewed regardless of which directory contains the caller.
 const rawJsonConsumers = jsFiles.filter((file) => {
-  if (!/^(?:scripts\/(?:lint|staging2|build)|tools\/)/.test(file)) return false;
-  const source = read(file);
+  const source = stripJsComments(read(file));
   return /JSON\.parse\s*\(/.test(source) && /(?:readFileSync|readFile)\s*\(/.test(source);
 });
 const rawReviewFields = ['duplicate_keys', 'aliases_cycles', 'structural_invariants'];
@@ -157,7 +256,7 @@ const staleRawReviews = Object.keys(registry.raw_json_validators).filter((file) 
 
 const boundedWaitConsumers = jsFiles.filter((file) => {
   if (!/^(?:scripts\/staging2|tools\/)/.test(file)) return false;
-  return /(?:setTimeout\s*\(|\bsleep\s*\()/.test(read(file));
+  return /(?:setTimeout\s*\(|\bsleep\s*\()/.test(stripJsComments(read(file)));
 });
 const missingBoundedWaitReviews = [];
 for (const file of boundedWaitConsumers) {
