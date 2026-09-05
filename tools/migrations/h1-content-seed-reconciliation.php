@@ -516,8 +516,11 @@ function nvx_h1_verify_runtime_plan( array $plan, array $created_ids ): void {
 				$expected_review = 'create_seed' === $action ? 'pending' : (string) ( $payload['target_review'] ?? 'pending' );
 				nvx_h1_verify_meta_after_commit( $post_id, '_nvx_aesthetic_treatment_key', $expected_key );
 				nvx_h1_verify_meta_after_commit( $post_id, '_nvx_medical_review_status', $expected_review );
-				if ( 'approved' === $expected_review && null === nvx_medical_review_record( $post_id ) ) {
-					throw new RuntimeException( 'approved_review_postcommit_verification_failed' );
+				if ( 'approved' === $expected_review ) {
+					$durable_review = nvx_h1_durable_aesthetic_review_state( $post_id );
+					if ( empty( $durable_review['approved'] ) || null === nvx_medical_review_record( $post_id ) ) {
+						throw new RuntimeException( 'approved_review_postcommit_verification_failed' );
+					}
 				}
 				continue;
 			}

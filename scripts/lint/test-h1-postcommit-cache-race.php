@@ -96,6 +96,8 @@ if ( isset( $GLOBALS['nvx_test_cache']['post_meta'][ $post_id ] ) ) {
 	fwrite( STDERR, "Delete-miss verification left post_meta cache populated.\n" );
 	exit( 1 );
 }
+// nvx_h1_verify_meta_after_commit enforces invalidation twice: once before
+// reading runtime meta and once in the finally block to clear any lazy snapshot.
 if ( $GLOBALS['nvx_test_runtime_flushes'] < 2 ) {
 	fwrite( STDERR, "Runtime-local cache flush was not enforced around verification.\n" );
 	exit( 1 );
