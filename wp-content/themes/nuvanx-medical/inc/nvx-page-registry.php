@@ -111,12 +111,6 @@ function nvx_get_canonical_page_registry(): array {
 			'surface'  => 'surface-warm',
 			'template' => 'page.php',
 		),
-		'/profhilo-madrid/' => array(
-			'owner'    => 'nvx_profhilo_page',
-			'renderer' => 'nvx_profhilo_page_content',
-			'surface'  => 'surface-warm',
-			'template' => 'page.php',
-		),
 		'/exion-btl/' => array(
 			'owner'    => 'nvx_exion_page',
 			'renderer' => 'nvx_exion_page_content',
