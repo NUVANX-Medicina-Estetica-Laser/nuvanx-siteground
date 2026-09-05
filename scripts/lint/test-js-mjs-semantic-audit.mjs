@@ -96,6 +96,42 @@ function stripJsComments(source) {
   return out;
 }
 
+function stripShellComments(source) {
+  let out = '';
+  let quote = null;
+  let escaped = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (escaped) {
+      out += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\' && quote !== "'") {
+      out += char;
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      out += char;
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      out += char;
+      continue;
+    }
+    if (char === '#' && (i === 0 || /[\s;|&()]/.test(source[i - 1]))) {
+      while (i < source.length && source[i] !== '\n') i += 1;
+      if (i < source.length) out += '\n';
+      continue;
+    }
+    out += char;
+  }
+  return out;
+}
+
 function phpStringLiterals(source) {
   const program = [
     '$src = stream_get_contents(STDIN);',
@@ -114,18 +150,35 @@ function phpStringLiterals(source) {
 }
 
 function commandReferencesTarget(source, candidates) {
-  const executableLines = source
-    .split(/\r?\n/)
-    .filter((line) => !line.trimStart().startsWith('#'));
+  const executableSource = stripShellComments(source);
   for (const candidate of candidates) {
     const escaped = escapeRegex(candidate);
-    const nodeCommand = new RegExp(`(?:^|[\\s:;|&])(?:node|tsx|bun)\\s+(?:--[^\\s]+\\s+)*["']?${escaped}["']?(?:\\s|$)`);
-    const denoCommand = new RegExp(`(?:^|[\\s:;|&])deno\\s+run(?:\\s+--[^\\s]+)*\\s+["']?${escaped}["']?(?:\\s|$)`);
-    const directCommand = new RegExp(`(?:^|[\\s:;|&])["']?${escaped}["']?(?:\\s|$)`);
-    if (executableLines.some((line) => nodeCommand.test(line) || denoCommand.test(line) || directCommand.test(line))) return true;
+    const rootedTarget = `(?:\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?/)?${escaped}`;
+    const tail = `(?=[\\s;|&)]|$)`;
+    const nodeCommand = new RegExp(`(?:^|[\\s:;|&])(?:node|tsx|bun)\\s+(?:--[^\\s]+\\s+)*["']?${rootedTarget}["']?${tail}`, 'm');
+    const denoCommand = new RegExp(`(?:^|[\\s:;|&])deno\\s+run(?:\\s+--[^\\s]+)*\\s+["']?${rootedTarget}["']?${tail}`, 'm');
+    const directCommand = new RegExp(`(?:^|[\\s:;|&])["']?${rootedTarget}["']?${tail}`, 'm');
+    if (nodeCommand.test(executableSource) || denoCommand.test(executableSource) || directCommand.test(executableSource)) return true;
+
+    const assignment = new RegExp(`(?:^|\\n)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*["']?${rootedTarget}["']?${tail}`, 'g');
+    for (const match of executableSource.matchAll(assignment)) {
+      const variableName = escapeRegex(match[1]);
+      const variableRef = `\\$\\{?${variableName}\\}?`;
+      const nodeVariable = new RegExp(`(?:^|[\\s:;|&])(?:node|tsx|bun)\\s+(?:--[^\\s]+\\s+)*["']?${variableRef}["']?${tail}`, 'm');
+      const denoVariable = new RegExp(`(?:^|[\\s:;|&])deno\\s+run(?:\\s+--[^\\s]+)*\\s+["']?${variableRef}["']?${tail}`, 'm');
+      const directVariable = new RegExp(`(?:^|[\\s:;|&])["']?${variableRef}["']?${tail}`, 'm');
+      if (nodeVariable.test(executableSource) || denoVariable.test(executableSource) || directVariable.test(executableSource)) return true;
+    }
   }
   return false;
 }
+
+const reachabilityFixture = 'scripts/example/live-contract.mjs';
+assert.equal(commandReferencesTarget(`node ${reachabilityFixture}`, [reachabilityFixture]), true, 'literal shell command must establish reachability');
+assert.equal(commandReferencesTarget(`node "$ROOT/${reachabilityFixture}"`, [reachabilityFixture]), true, 'ROOT-prefixed shell command must establish reachability');
+assert.equal(commandReferencesTarget(`CONTRACT="$ROOT/${reachabilityFixture}"\nnode "$CONTRACT"`, [reachabilityFixture]), true, 'assigned script variable must establish reachability when executed');
+assert.equal(commandReferencesTarget(`# node ${reachabilityFixture}`, [reachabilityFixture]), false, 'shell comments must not establish reachability');
+assert.equal(commandReferencesTarget(`CONTRACT="$ROOT/${reachabilityFixture}"\necho "$CONTRACT"`, [reachabilityFixture]), false, 'assignment without execution must not establish reachability');
 
 const seeds = new Map();
 function addSeed(file, reason) {
