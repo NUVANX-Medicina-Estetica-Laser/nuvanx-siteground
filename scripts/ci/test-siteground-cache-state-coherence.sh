@@ -29,6 +29,7 @@ db_state="${WP_MOCK_DB_STATE:?missing_db_state}"
 cache_state="${WP_MOCK_CACHE_STATE:?missing_cache_state}"
 flush_count="${WP_MOCK_FLUSH_COUNT:?missing_flush_count}"
 fail_activation="${WP_MOCK_FAIL_ACTIVATION:-0}"
+fail_state_probe="${WP_MOCK_FAIL_STATE_PROBE:-0}"
 cmd="${1:-}"
 sub="${2:-}"
 
@@ -46,6 +47,11 @@ case "$cmd:$sub" in
     ;;
   plugin:is-active)
     [[ "$(effective_state)" == 'active' ]]
+    ;;
+  plugin:get)
+    [[ "$fail_state_probe" != '1' ]] || exit 55
+    effective_state
+    exit 0
     ;;
   plugin:activate)
     [[ "$fail_activation" != '1' ]] || exit 41
@@ -100,7 +106,7 @@ run_case() {
   printf '%s\n' "$initial" > "$DB_STATE"
   rm -f "$CACHE_STATE"
   printf '0\n' > "$FLUSH_COUNT"
-  unset WP_MOCK_FAIL_ACTIVATION
+  unset WP_MOCK_FAIL_ACTIVATION WP_MOCK_FAIL_STATE_PROBE
 
   PATH="$MOCK_BIN:$PATH" siteground_cache_purge "$WP_ROOT" "$final" >"$TMP/$name.out" 2>"$TMP/$name.err" \
     || fail "case=$name expected_success=1 stderr=$(tr '\n' ' ' < "$TMP/$name.err")"
@@ -123,6 +129,7 @@ run_case active_to_inactive active inactive inactive
 printf 'inactive\n' > "$DB_STATE"
 rm -f "$CACHE_STATE"
 printf '0\n' > "$FLUSH_COUNT"
+unset WP_MOCK_FAIL_STATE_PROBE
 export WP_MOCK_FAIL_ACTIVATION=1
 if PATH="$MOCK_BIN:$PATH" siteground_cache_purge "$WP_ROOT" active >"$TMP/real-failure.out" 2>"$TMP/real-failure.err"; then
   fail 'case=real_activation_failure expected_failure=1'
@@ -132,4 +139,16 @@ grep -Fq 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_activation_failed' "$TMP/
 [[ "$(cat "$DB_STATE")" == 'inactive' ]] \
   || fail 'case=real_activation_failure state_mutated'
 
-echo 'SITEGROUND_CACHE_STATE_COHERENCE=PASS stale_cross_process_cases=3 genuine_activation_failure=fail_closed'
+# An operational WP-CLI/DB error while reading state must not be interpreted as
+# ordinary inactivity.
+printf 'inactive\n' > "$DB_STATE"
+rm -f "$CACHE_STATE"
+unset WP_MOCK_FAIL_ACTIVATION
+export WP_MOCK_FAIL_STATE_PROBE=1
+if PATH="$MOCK_BIN:$PATH" siteground_cache_purge "$WP_ROOT" preserve >"$TMP/probe-failure.out" 2>"$TMP/probe-failure.err"; then
+  fail 'case=state_probe_failure expected_failure=1'
+fi
+grep -Fq 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_state_probe_failed' "$TMP/probe-failure.err" \
+  || fail 'case=state_probe_failure missing_fail_closed_evidence'
+
+echo 'SITEGROUND_CACHE_STATE_COHERENCE=PASS stale_cross_process_cases=3 genuine_activation_failure=fail_closed state_probe_failure=fail_closed'
