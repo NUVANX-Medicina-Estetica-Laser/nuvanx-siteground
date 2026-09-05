@@ -39,14 +39,48 @@ function nvx_tariff_public_requirements(): array {
 	);
 }
 
+/**
+ * Whether one public tariff row has the complete canonical shape consumed by
+ * Schema/renderers. Numeric PVP alone is not sufficient public truth: a row
+ * missing its label or semantic group is malformed and must fail closed.
+ */
+function nvx_tariff_public_row_is_complete( array $tariffs, string $group, string $key ): bool {
+	if ( ! isset( $tariffs[ $group ][ $key ] ) || ! is_array( $tariffs[ $group ][ $key ] ) ) {
+		return false;
+	}
+
+	$row = $tariffs[ $group ][ $key ];
+	return isset( $row['pvp'], $row['label'], $row['group'] )
+		&& is_numeric( $row['pvp'] )
+		&& is_string( $row['label'] )
+		&& '' !== trim( $row['label'] )
+		&& is_string( $row['group'] )
+		&& '' !== trim( $row['group'] );
+}
+
 /** Whether canonical tariff truth is complete enough for public price output. */
 function nvx_tariff_public_truth_is_complete(): bool {
 	if ( ! function_exists( 'nvx_catalog_json_load' ) || ! function_exists( 'nvx_catalog_tariffs_complete' ) ) {
 		return false;
 	}
 
-	$tariffs = nvx_catalog_json_load( 'tariff-catalog.json' );
-	return nvx_catalog_tariffs_complete( $tariffs, nvx_tariff_public_requirements() );
+	$tariffs      = nvx_catalog_json_load( 'tariff-catalog.json' );
+	$requirements = nvx_tariff_public_requirements();
+	if ( ! nvx_catalog_tariffs_complete( $tariffs, $requirements ) ) {
+		return false;
+	}
+
+	foreach ( $requirements as $requirement ) {
+		if (
+			! is_array( $requirement )
+			|| 2 !== count( $requirement )
+			|| ! nvx_tariff_public_row_is_complete( $tariffs, (string) $requirement[0], (string) $requirement[1] )
+		) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 /** Neutral copy shared by fail-closed output surfaces. */

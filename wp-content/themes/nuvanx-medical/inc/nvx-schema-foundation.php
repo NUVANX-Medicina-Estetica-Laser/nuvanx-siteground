@@ -10,6 +10,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Schema foundation depends on JSON catalog parsing to ensure SSOT truth.
+require_once __DIR__ . '/nvx-catalog-json.php';
+
 if ( ! defined( 'NVX_CONTACT_EMAIL' ) ) {
 	define( 'NVX_CONTACT_EMAIL', function_exists( 'nvx_business_contact_email' ) ? nvx_business_contact_email() : '' );
 }
@@ -39,21 +42,28 @@ function nvxTariffItem( string $label, float $pvp, string $group ): array {
 }
 
 /**
- * Load tariff catalog from JSON
+ * Load the tariff catalog exclusively through the canonical catalog owner.
+ *
+ * Schema must never open tariff-catalog.json independently: doing so creates a
+ * second parser/cache/error policy and can diverge from the public tariff SSOT.
+ * Missing or malformed tariff truth fails closed as an empty catalog.
+ *
+ * @return array<mixed>
  */
-function nvx_get_tariff_catalog() {
-	$catalog_file = get_template_directory() . '/inc/data/tariff-catalog.json';
-	if ( file_exists( $catalog_file ) ) {
-		$catalog = json_decode( file_get_contents( $catalog_file ), true );
-		return is_array( $catalog ) ? $catalog : array();
+function nvx_get_tariff_catalog(): array {
+	$catalog = nvx_catalog_json_load( 'tariff-catalog.json' );
+	if ( ! is_array( $catalog ) || ! empty( $catalog['_error'] ) ) {
+		return array();
 	}
-	return array();
+
+	unset( $catalog['_error'] );
+	return $catalog;
 }
 
 /**
  * Official public PVP catalogue (EUR, IVA 21% included).
  * Source: clinic tariff sheet. Never publish commission / internal cost notes.
- * Now loaded from JSON tariff-catalog.json for single source of truth.
+ * Hydrated only through the canonical tariff-catalog.json loader.
  *
  * @return array{
  *   Endolift®: array<string, array{label:string,pvp:float,group:string}>,
@@ -61,14 +71,28 @@ function nvx_get_tariff_catalog() {
  *   laser_co2: array<string, array{label:string,pvp:float,group:string}>
  * }
  */
-function nvx_tariff_catalog() {
+function nvx_tariff_catalog(): array {
 	$catalog = nvx_get_tariff_catalog();
+	$result  = array();
 
-	// Convert JSON format to legacy PHP format for backward compatibility
-	$result = array();
 	foreach ( $catalog as $category => $items ) {
+		if ( ! is_string( $category ) || ! is_array( $items ) ) {
+			continue;
+		}
+
 		$result[ $category ] = array();
 		foreach ( $items as $key => $item ) {
+			if (
+				! is_string( $key )
+				|| ! is_array( $item )
+				|| ! isset( $item['label'], $item['pvp'], $item['group'] )
+				|| ! is_string( $item['label'] )
+				|| ! is_numeric( $item['pvp'] )
+				|| ! is_string( $item['group'] )
+			) {
+				continue;
+			}
+
 			$result[ $category ][ $key ] = nvxTariffItem(
 				$item['label'],
 				(float) $item['pvp'],
@@ -83,68 +107,65 @@ function nvx_tariff_catalog() {
 /**
  * Lowest public Endolift® PVP (facial ojeras) — used for “desde” GEO copy/schema.
  *
- * @return float
+ * @return float|null Canonical PVP, or null when tariff truth is unavailable.
  */
-function nvx_endolift_price_from_eur() {
-	$pvp = function_exists( 'nvx_tariff_pvp' ) ? nvx_tariff_pvp( 'Endolift®', 'ojeras' ) : null;
-	return null !== $pvp ? $pvp : 798.60;
+function nvx_endolift_price_from_eur(): ?float {
+	return function_exists( 'nvx_tariff_pvp' ) ? nvx_tariff_pvp( 'Endolift®', 'ojeras' ) : null;
 }
 
 /**
  * Reference PVP for papada / marcación mandibular (page core indication).
  *
- * @return float
+ * @return float|null Canonical PVP, or null when tariff truth is unavailable.
  */
-function nvx_endolift_price_papada_eur() {
-	$pvp = function_exists( 'nvx_tariff_pvp' ) ? nvx_tariff_pvp( 'Endolift®', 'papada' ) : null;
-	return null !== $pvp ? $pvp : 1064.80;
+function nvx_endolift_price_papada_eur(): ?float {
+	return function_exists( 'nvx_tariff_pvp' ) ? nvx_tariff_pvp( 'Endolift®', 'papada' ) : null;
 }
 
 /**
  * Reference PVP for Láser CO₂ facial session — used for "desde" schema/copy.
- * Source of truth: nvx_tariff_catalog()['laser_co2']['facial']['pvp'].
  *
- * Restored Jul-2026: function was never defined; two call sites were silently
- * skipped via function_exists() guards in nvx_schema_treatment_node_laser()
- * and nvx_schema_offer_catalog(), leaving CO2 schema prices permanently empty.
- *
- * @return float
+ * @return float|null Canonical PVP, or null when tariff truth is unavailable.
  */
-function nvx_co2_price_facial_eur(): float {
-	$catalog = nvx_tariff_catalog();
-	return (float) ( $catalog['laser_co2']['facial']['pvp'] ?? 330.00 );
+function nvx_co2_price_facial_eur(): ?float {
+	return function_exists( 'nvx_tariff_pvp' ) ? nvx_tariff_pvp( 'laser_co2', 'facial' ) : null;
 }
 
 /**
  * Reference PVP for Láser CO₂ corporal session.
- * Source of truth: nvx_tariff_catalog()['laser_co2']['corporal']['pvp'].
  *
- * @return float
+ * @return float|null Canonical PVP, or null when tariff truth is unavailable.
  */
-function nvx_co2_price_body_eur(): float {
-	$catalog = nvx_tariff_catalog();
-	return (float) ( $catalog['laser_co2']['corporal']['pvp'] ?? 450.00 );
+function nvx_co2_price_body_eur(): ?float {
+	return function_exists( 'nvx_tariff_pvp' ) ? nvx_tariff_pvp( 'laser_co2', 'corporal' ) : null;
 }
-
 
 /**
  * Format a EUR amount for Spanish locale display (2 decimals: 1.064,80).
  *
- * @param int|float|string $amount   Amount in euros.
- * @param int              $decimals Decimal places.
- * @return string
+ * @param int|float|string|null $amount   Amount in euros.
+ * @param int                   $decimals Decimal places.
+ * @return string Empty string when no canonical numeric amount exists.
  */
-function nvx_format_price_eur( $amount, $decimals = 2 ) {
+function nvx_format_price_eur( $amount, $decimals = 2 ): string {
+	if ( ! is_numeric( $amount ) ) {
+		return '';
+	}
+
 	return number_format_i18n( (float) $amount, (int) $decimals );
 }
 
 /**
  * Schema.org price string (dot decimal, two places).
  *
- * @param int|float|string $amount Amount in euros.
- * @return string
+ * @param int|float|string|null $amount Amount in euros.
+ * @return string Empty string when no canonical numeric amount exists.
  */
-function nvx_schema_price_string( $amount ) {
+function nvx_schema_price_string( $amount ): string {
+	if ( ! is_numeric( $amount ) ) {
+		return '';
+	}
+
 	return number_format( (float) $amount, 2, '.', '' );
 }
 
@@ -472,7 +493,7 @@ function nvx_schema_clinics() {
 			'@type'     => 'OpeningHoursSpecification',
 			'dayOfWeek' => $spec['days'] ?? array(),
 			'opens'     => $spec['opens'] ?? '',
-	        'closes'    => $spec['closes'] ?? '',
+			'closes'    => $spec['closes'] ?? '',
 		);
 	}
 
