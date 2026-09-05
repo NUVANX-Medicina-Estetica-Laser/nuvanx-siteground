@@ -30,20 +30,15 @@ function get_queried_object_id(): int {
 function __( string $text, string $domain = 'default' ): string {
 	return $text;
 }
-function nvx_format_price_eur( float $price ): string {
-	return number_format( $price, 2, ',', '.' );
-}
-function nvx_endolift_price_from_eur(): float {
-	return 798.60;
-}
 function add_action( ...$args ): bool { unset( $args ); return true; }
 function add_filter( ...$args ): bool { unset( $args ); return true; }
 function esc_html( string $text = '' ): string { return $text; }
 function esc_attr( string $text = '' ): string { return $text; }
 function esc_url( string $url = '' ): string { return $url; }
 
-require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php';
-require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-schema-faq.php';
+$root = dirname( __DIR__, 2 );
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-catalog-json.php';
+require_once $root . '/wp-content/themes/nuvanx-medical/inc/nvx-schema-faq.php';
 
 $catalog = nvx_schema_faq_catalog();
 
@@ -73,14 +68,26 @@ foreach ( $required_keys as $key ) {
 	}
 }
 
-// Assert specific high-intent transactional questions exist
+// Assert specific high-intent transactional questions exist.
 $endolift_faqs = json_encode( $catalog['endolift_facial'], JSON_UNESCAPED_UNICODE );
 if ( ! str_contains( $endolift_faqs, 'cuánto cuesta' ) && ! str_contains( $endolift_faqs, 'Cuánto cuesta' ) ) {
 	fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL Endolift missing pricing question\n" );
 	exit( 1 );
 }
 
-if ( ! str_contains( $endolift_faqs, '798,60 €' ) || ! str_contains( $endolift_faqs, '1.064,80 €' ) ) {
+// Expected FAQ prices must be derived from the canonical tariff SSOT, never
+// duplicated as fixture literals. This keeps the contract valid after a
+// governed tariff update and prevents tests from becoming a second price owner.
+$tariffs     = nvx_catalog_json_load( 'tariff-catalog.json' );
+$ojeras_pvp  = nvx_catalog_get_tariff_pvp( $tariffs, 'Endolift®', 'ojeras' );
+$papada_pvp  = nvx_catalog_get_tariff_pvp( $tariffs, 'Endolift®', 'papada' );
+if ( null === $ojeras_pvp || null === $papada_pvp ) {
+	fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL canonical Endolift tariff missing\n" );
+	exit( 1 );
+}
+$ojeras_label = number_format( $ojeras_pvp, 2, ',', '.' ) . ' €';
+$papada_label = number_format( $papada_pvp, 2, ',', '.' ) . ' €';
+if ( ! str_contains( $endolift_faqs, $ojeras_label ) || ! str_contains( $endolift_faqs, $papada_label ) ) {
 	fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL Endolift pricing FAQ not synchronized with tariff catalog\n" );
 	exit( 1 );
 }
@@ -122,7 +129,6 @@ foreach ( $aesthetic_pages as $json_key => $entry ) {
 	}
 }
 
-
 // Assert that nvx_schema_faq_node resolves correctly for acido_hialuronico.
 function nvx_schema_resolve_treatment_key( $page_id ) {
 	if ( 3602 === $page_id ) return 'acido_hialuronico';
@@ -133,4 +139,4 @@ if ( empty( $node ) || 'FAQPage' !== $node['@type'] ) {
 	fwrite( STDERR, "TREATMENT_FAQPAGE_CONTRACT=FAIL nvx_schema_faq_node failed to emit FAQPage for acido_hialuronico\n" );
 	exit( 1 );
 }
-echo "TREATMENT_FAQPAGE_CONTRACT=PASS verified_keys=" . count( $required_keys ) . "\n";
+echo "TREATMENT_FAQPAGE_CONTRACT=PASS verified_keys=" . count( $required_keys ) . " tariff_expectations=ssot-derived\n";

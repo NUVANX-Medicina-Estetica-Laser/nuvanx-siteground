@@ -17,6 +17,20 @@ function nvx_schema_treatment_node_laser( string $key, string $permalink, string
 	$label_b      = function_exists( 'nvx_co2_price_body_eur' ) ? nvx_format_price_eur( nvx_co2_price_body_eur() ) : '';
 
 	if ( 'endolift_facial' === $key ) {
+		$price_claims = array();
+		if ( '' !== $label_papada ) {
+			$price_claims[] = 'papada/marcación mandibular desde ' . $label_papada . ' €';
+		}
+		if ( '' !== $label_from ) {
+			$price_claims[] = 'tarifas faciales desde ' . $label_from . ' €';
+		}
+
+		$desc = 'Endolift® premium con dirección médica especializada en láser intersticial. Procedimiento médico mínimamente invasivo con microfibra láser subdérmica para lipólisis selectiva y retracción térmica en papada, contorno mandibular y cuello. Valoración anatómica exhaustiva por Dr. Javier Rivera Tejeda (Máster Universitario en Medicina Estética UCM).';
+		if ( ! empty( $price_claims ) ) {
+			$desc .= ' PVP ' . implode( '; ', $price_claims ) . '.';
+		}
+		$desc .= ' Tarifa premium por autoridad clínica y protocolo médico personalizado.';
+
 		return array(
 			'@type'             => array( 'MedicalProcedure', 'Service' ),
 			'@id'               => $permalink . NVX_SD_ID_MEDICAL_PROCEDURE,
@@ -25,7 +39,7 @@ function nvx_schema_treatment_node_laser( string $key, string $permalink, string
 			'url'               => $permalink,
 			'mainEntityOfPage'  => array( '@id' => $permalink ),
 			'provider'          => array( '@id' => $organization_id ),
-			'description'       => 'Endolift® premium con dirección médica especializada en láser intersticial. Procedimiento médico mínimamente invasivo con microfibra láser subdérmica para lipólisis selectiva y retracción térmica en papada, contorno mandibular y cuello. Valoración anatómica exhaustiva por Dr. Javier Rivera Tejeda (Máster Universitario en Medicina Estética UCM). PVP papada/marcación mandibular desde ' . $label_papada . ' €; tarifas faciales desde ' . $label_from . ' €. Tarifa premium por autoridad clínica y protocolo médico personalizado.',
+			'description'       => $desc,
 			'bodyLocation'      => array( 'Papada', 'Línea mandibular', 'Cuello', 'Óvalo facial' ),
 			'procedureType'     => 'https://schema.org/PercutaneousProcedure',
 			'preparation'       => 'Valoración médica presencial exhaustiva de anatomía, calidad de piel, grasa submentoniana, ptosis y expectativas. Exclusión de ptosis severa con exceso cutáneo que requiera cirugía. Planificación individualizada por médico especialista.',
@@ -93,6 +107,19 @@ function nvx_schema_treatment_node_laser( string $key, string $permalink, string
 	}
 
 	if ( 'laser_co2' === $key ) {
+		$price_claims_co2 = array();
+		if ( '' !== $label_f ) {
+			$price_claims_co2[] = 'sesión facial desde ' . $label_f . ' €';
+		}
+		if ( '' !== $label_b ) {
+			$price_claims_co2[] = 'corporal ' . $label_b . ' €';
+		}
+
+		$desc_co2 = 'Ablación fraccionada con microcolumnas de vaporización y tejido sano peri-lesional. Indicado en cicatrices atróficas de acné, poros, textura irregular y fotodaño. Downtime típico 4–7 días; remodelación colagénica 4–6 semanas.';
+		if ( ! empty( $price_claims_co2 ) ) {
+			$desc_co2 .= ' PVP ' . implode( '; ', $price_claims_co2 ) . ' (IVA incl.).';
+		}
+
 		return array(
 			'@type'             => array( 'MedicalProcedure', 'Service' ),
 			'@id'               => $permalink . NVX_SD_ID_MEDICAL_PROCEDURE,
@@ -101,7 +128,7 @@ function nvx_schema_treatment_node_laser( string $key, string $permalink, string
 			'url'               => $permalink,
 			'mainEntityOfPage'  => array( '@id' => $permalink ),
 			'provider'          => array( '@id' => $organization_id ),
-			'description'       => 'Ablación fraccionada con microcolumnas de vaporización y tejido sano peri-lesional. Indicado en cicatrices atróficas de acné, poros, textura irregular y fotodaño. Downtime típico 4–7 días; remodelación colagénica 4–6 semanas. PVP sesión facial desde ' . $label_f . ' €; corporal ' . $label_b . ' € (IVA incl.).',
+			'description'       => $desc_co2,
 			'bodyLocation'      => 'Piel facial y zonas cutáneas seleccionadas',
 			'procedureType'     => 'https://schema.org/PercutaneousProcedure',
 			'preparation'       => 'Evaluación de fototipo, inflamación, bronceado, medicación y objetivo (cicatriz, textura, fotodaño). Compromiso con downtime y fotoprotección.',

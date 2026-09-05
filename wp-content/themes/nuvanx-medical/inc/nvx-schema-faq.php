@@ -48,7 +48,7 @@ function nvx_schema_faq_load_map_catalog_with_resolver( string $file, callable $
 
 /** Load FAQ items from Signature Phase catalog JSON. */
 function nvx_schema_faq_load_signature_phase(): array {
-	$json = nvx_catalog_json_resolved( 'nvx-signature-phase-catalog.json' );
+	$json    = nvx_catalog_json_resolved( 'nvx-signature-phase-catalog.json' );
 	$catalog = array();
 	if ( ! is_array( $json ) ) {
 		return $catalog;
@@ -75,11 +75,11 @@ function nvx_schema_faq_load_signature_phase(): array {
 	// This ensures nvx_schema_faq_node() can look up FAQs when the treatment
 	// registry resolves a schema_id like 'double_chin' instead of 'profile-definition'.
 	$schema_id_map = array(
-		'double_chin'      => 'profile-definition',
-		'acne_scars'       => 'surface-renewal',
-		'pigmentation'     => 'tone-correction',
-		'local_fat_abdomen'=> 'abdomen-flancos',
-		'postpartum'       => 'post-maternity',
+		'double_chin'       => 'profile-definition',
+		'acne_scars'        => 'surface-renewal',
+		'pigmentation'      => 'tone-correction',
+		'local_fat_abdomen' => 'abdomen-flancos',
+		'postpartum'        => 'post-maternity',
 	);
 	foreach ( $schema_id_map as $schema_id => $catalog_key ) {
 		if ( ! empty( $catalog[ $catalog_key ] ) ) {
@@ -89,7 +89,6 @@ function nvx_schema_faq_load_signature_phase(): array {
 
 	return $catalog;
 }
-
 
 /** Implementation for FAQ catalog loading from mapped JSON files. */
 function nvx_schema_faq_load_map_catalog_impl( string $file, ?callable $resolver ): array {
@@ -151,9 +150,9 @@ function nvx_schema_faq_catalog() {
 		$alias_map      = array(
 			'rhinomodeling_ha' => 'rinomodelacion',
 			'tear_trough_ha'   => 'dark_circles_ha',
-			'biostimulators'   => 'collagen_bio',
-			'neuromodulators'  => 'neuromodulador',
-			'facial_ha'        => 'acido_hialuronico',
+			'biostimulators'    => 'collagen_bio',
+			'neuromodulators'   => 'neuromodulador',
+			'facial_ha'         => 'acido_hialuronico',
 		);
 		foreach ( $alias_map as $json_key => $schema_key ) {
 			if ( ! empty( $aesthetic_faqs[ $json_key ] ) ) {
@@ -185,16 +184,17 @@ function nvx_schema_faq_catalog() {
 		$catalog = array_merge( $catalog, $aesthetic_faqs );
 		// Load Signature Phase FAQs
 		$signature_faqs = nvx_schema_faq_load_signature_phase();
-		$catalog = array_merge( $catalog, $signature_faqs );
+		$catalog        = array_merge( $catalog, $signature_faqs );
 	}
 
 	if ( empty( $catalog['endolift_facial'] ) ) {
-		$from                       = function_exists( 'nvx_format_price_eur' ) && function_exists( 'nvx_endolift_price_from_eur' ) ? nvx_format_price_eur( nvx_endolift_price_from_eur() ) : '798,60';
-		$papada                     = function_exists( 'nvx_format_price_eur' ) && function_exists( 'nvx_endolift_price_papada_eur' ) ? nvx_format_price_eur( nvx_endolift_price_papada_eur() ) : '1.064,80';
+		$neutral_price_copy = function_exists( 'nvx_tariff_public_neutral_copy' )
+			? nvx_tariff_public_neutral_copy()
+			: __( 'Presupuesto individualizado tras valoración médica. Consulta la tarifa vigente con el equipo antes de confirmar el tratamiento.', 'nuvanx-medical' );
 		$catalog['endolift_facial'] = array(
 			array(
 				'q' => '¿Cuánto cuesta el Endolift® facial en NUVANX Madrid?',
-				'a' => 'La tarifa de referencia parte desde ' . $from . ' € (ojeras). Papada y marcación mandibular: ' . $papada . ' € cada una. El presupuesto definitivo se documenta tras valoración anatómica presencial.',
+				'a' => $neutral_price_copy,
 			),
 			array(
 				'q' => '¿Endolift® es para cualquier papada o flacidez?',
@@ -230,12 +230,12 @@ function nvx_schema_faq_catalog() {
 
 	// Post-Maternity hub FAQs (PHP-based, not in JSON)
 	if ( empty( $catalog['post-maternity'] ) ) {
-		$clinics = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
+		$clinics      = function_exists( 'nvx_get_clinics_config' ) ? nvx_get_clinics_config() : array();
 		$chamberi_reg = (string) ( $clinics['chamberi']['reg'] ?? '' );
-		$goya_reg = (string) ( $clinics['goya']['reg'] ?? '' );
+		$goya_reg     = (string) ( $clinics['goya']['reg'] ?? '' );
 		$chamberi_name = (string) ( $clinics['chamberi']['short_name'] ?? '' );
-		$goya_name = (string) ( $clinics['goya']['short_name'] ?? '' );
-		$faq_where = 'Valoración en ' . $chamberi_name . ' (' . $chamberi_reg . ') y ' . $goya_name . ' (' . $goya_reg . '), con plan documentado si procede.';
+		$goya_name     = (string) ( $clinics['goya']['short_name'] ?? '' );
+		$faq_where     = 'Valoración en ' . $chamberi_name . ' (' . $chamberi_reg . ') y ' . $goya_name . ' (' . $goya_reg . '), con plan documentado si procede.';
 
 		$catalog['post-maternity'] = array(
 			array(
