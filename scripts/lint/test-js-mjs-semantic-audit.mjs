@@ -157,7 +157,7 @@ function commandReferencesTarget(source, candidates) {
     const tail = `(?=[\\s;|&)]|$)`;
     const nodeCommand = new RegExp(`(?:^|[\\s:;|&])(?:node|tsx|bun)\\s+(?:--[^\\s]+\\s+)*["']?${rootedTarget}["']?${tail}`, 'm');
     const denoCommand = new RegExp(`(?:^|[\\s:;|&])deno\\s+run(?:\\s+--[^\\s]+)*\\s+["']?${rootedTarget}["']?${tail}`, 'm');
-    const directCommand = new RegExp(`(?:^|[\\s:;|&])["']?${rootedTarget}["']?${tail}`, 'm');
+    const directCommand = new RegExp(`(?:^|[;|&]\\s*)["']?${rootedTarget}["']?${tail}`, 'm');
     if (nodeCommand.test(executableSource) || denoCommand.test(executableSource) || directCommand.test(executableSource)) return true;
 
     const assignment = new RegExp(`(?:^|\\n)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*["']?${rootedTarget}["']?${tail}`, 'g');
@@ -166,7 +166,7 @@ function commandReferencesTarget(source, candidates) {
       const variableRef = `\\$\\{?${variableName}\\}?`;
       const nodeVariable = new RegExp(`(?:^|[\\s:;|&])(?:node|tsx|bun)\\s+(?:--[^\\s]+\\s+)*["']?${variableRef}["']?${tail}`, 'm');
       const denoVariable = new RegExp(`(?:^|[\\s:;|&])deno\\s+run(?:\\s+--[^\\s]+)*\\s+["']?${variableRef}["']?${tail}`, 'm');
-      const directVariable = new RegExp(`(?:^|[\\s:;|&])["']?${variableRef}["']?${tail}`, 'm');
+      const directVariable = new RegExp(`(?:^|[;|&]\\s*)["']?${variableRef}["']?${tail}`, 'm');
       if (nodeVariable.test(executableSource) || denoVariable.test(executableSource) || directVariable.test(executableSource)) return true;
     }
   }
