@@ -463,27 +463,18 @@ if ( ! function_exists( 'nvx_attribution_log_direct_relay' ) ) {
 			'DEAD',
 		);
 
-		if ( ! in_array( $outcome, $allowed, true ) ) {
+		if ( ! in_array( $outcome, $allowed, true ) || ! function_exists( 'nvx_observability_log' ) ) {
 			return;
 		}
 
-		$line =
-			'NVX_ATTRIBUTION_DIRECT_RELAY='
-			. $outcome;
-
-		if ( $status > 0 ) {
-			$line .= ' status=' . absint( $status );
-		}
-
-		if ( '' !== $reason ) {
-			$safe_reason = sanitize_key( $reason );
-
-			if ( '' !== $safe_reason ) {
-				$line .= ' reason=' . $safe_reason;
-			}
-		}
-
-		error_log( $line );
+		nvx_observability_log(
+			'attribution_relay',
+			strtolower( $outcome ),
+			array(
+				'http_status' => $status > 0 ? absint( $status ) : null,
+				'reason'      => '' !== $reason ? sanitize_key( $reason ) : null,
+			)
+		);
 	}
 }
 
