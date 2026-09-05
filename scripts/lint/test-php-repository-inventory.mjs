@@ -69,6 +69,31 @@ const directReviewProvenanceFiles = [...themeSources]
   .filter(([, source]) => /\[['"](?:reviewedBy|lastReviewed)['"]\]\s*=/.test(source))
   .map(([file]) => file);
 
+const observabilityOwner = 'wp-content/themes/nuvanx-medical/inc/nvx-observability.php';
+const provenanceOwner = 'wp-content/themes/nuvanx-medical/inc/nvx-medical-review.php';
+assert.deepEqual(
+  directErrorLogFiles,
+  [observabilityOwner],
+  `Direct runtime error_log ownership drifted; expected only ${observabilityOwner}, found: ${directErrorLogFiles.join(', ')}`,
+);
+assert.deepEqual(
+  directReviewProvenanceFiles,
+  [provenanceOwner],
+  `Medical reviewedBy/lastReviewed ownership drifted; expected only ${provenanceOwner}, found: ${directReviewProvenanceFiles.join(', ')}`,
+);
+assert.ok(
+  strictTypesFiles.length >= 24,
+  `strict_types ratchet regressed below accepted safe boundary: ${strictTypesFiles.length} < 24`,
+);
+
+const phpstanPath = 'wp-content/themes/nuvanx-medical/phpstan.neon';
+const phpstan = fs.readFileSync(phpstanPath, 'utf8');
+assert.match(
+  phpstan,
+  /^\s*phpVersion:\s*80000\s*$/m,
+  'PHPStan must analyze the theme against the minimum supported PHP 8.0 platform',
+);
+
 console.log(
   `PHP_REPOSITORY_INVENTORY=PASS total=${tracked.length}`
   + ` theme=${buckets.theme.length}`
@@ -80,10 +105,11 @@ console.log(
 );
 console.log(`PHP_REPOSITORY_SYNTAX=PASS files=${tracked.length}`);
 console.log(
-  `PHP_RESIDUAL_AUDIT_METRICS=REPORT theme=${buckets.theme.length}`
+  `PHP_RESIDUAL_RATCHET=PASS theme=${buckets.theme.length}`
   + ` strict_types=${strictTypesFiles.length}`
   + ` direct_error_log_files=${directErrorLogFiles.length}`
   + ` direct_review_provenance_files=${directReviewProvenanceFiles.length}`
+  + ` php_platform=8.0`
 );
 console.log(`PHP_STRICT_TYPES_FILES=${strictTypesFiles.join(',')}`);
 console.log(`PHP_DIRECT_ERROR_LOG_FILES=${directErrorLogFiles.join(',')}`);
