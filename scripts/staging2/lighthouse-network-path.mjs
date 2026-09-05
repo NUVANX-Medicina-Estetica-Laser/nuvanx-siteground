@@ -35,15 +35,9 @@ export function classifyStagingEgressFailure(error, diagnostic = '') {
   const message = `${String(error?.message || error || '')}\n${String(diagnostic || '')}`.trim();
 
   if (
-    /sudo:.*(?:password|not allowed|command not found)|identity file .* not accessible|no such file or directory|bad configuration option|cannot bind.*permission denied|address already in use/i.test(message)
+    /sudo:.*(?:password|not allowed|command not found)|identity file .* not accessible|no such file or directory|bad configuration option|cannot bind.*permission denied|address already in use|Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|Permission denied \(publickey|Authentication failed|Too many authentication failures|No more authentication methods to try/i.test(message)
   ) {
     return typedError('configuration', message || 'Authenticated Staging egress configuration failed', error);
-  }
-
-  if (
-    /Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|Permission denied \(publickey|Authentication failed|Too many authentication failures|No more authentication methods to try/i.test(message)
-  ) {
-    return typedError('deterministic_failure', message || 'Authenticated Staging SSH identity verification failed', error);
   }
 
   if (
@@ -144,6 +138,104 @@ function waitForListeningPort(port, child, timeoutMs = 12000) {
     };
 
     probe();
+  });
+}
+
+function signalProcessGroup(child, signal) {
+  if (!child?.pid) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch (error) {
+    if (error?.code === 'ESRCH') return;
+    try {
+      child.kill(signal);
+    } catch (fallbackError) {
+      if (fallbackError?.code !== 'ESRCH') throw fallbackError;
+    }
+  }
+}
+
+export function runBoundedProcessTree(command, args, {
+  env = process.env,
+  timeoutMs = 29 * 60 * 1000,
+  killGraceMs = 5000,
+  signal,
+} = {}) {
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1000) {
+    throw typedError('configuration', 'Bounded process-tree timeout must be at least 1000 ms');
+  }
+  if (!Number.isInteger(killGraceMs) || killGraceMs < 0 || killGraceMs > 30000) {
+    throw typedError('configuration', 'Bounded process-tree kill grace must be between 0 and 30000 ms');
+  }
+
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      stdio: 'inherit',
+      env,
+      detached: true,
+    });
+    let settled = false;
+    let timedOut = false;
+    let aborted = false;
+    let terminationStarted = false;
+    let timeoutTimer = null;
+    let killTimer = null;
+
+    const cleanupTimers = () => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (killTimer) clearTimeout(killTimer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+    };
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      cleanupTimers();
+      resolve(result);
+    };
+
+    const terminateTree = (reason) => {
+      if (settled || terminationStarted) return;
+      terminationStarted = true;
+      timedOut = reason === 'timeout';
+      aborted = reason === 'abort';
+      try {
+        signalProcessGroup(child, 'SIGTERM');
+      } catch (error) {
+        finish({ error, timedOut, aborted });
+        return;
+      }
+      killTimer = setTimeout(() => {
+        try {
+          signalProcessGroup(child, 'SIGKILL');
+        } catch (error) {
+          finish({ error, timedOut, aborted });
+        }
+      }, killGraceMs);
+    };
+
+    const onAbort = () => terminateTree('abort');
+    if (signal) {
+      if (signal.aborted) terminateTree('abort');
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    child.once('error', (error) => finish({ error, timedOut, aborted }));
+    child.once('exit', (code, childSignal) => {
+      if (terminationStarted) {
+        // The parent may exit before a Lighthouse grandchild. Kill the detached
+        // process group once more before allowing network cleanup/artifact upload.
+        try {
+          signalProcessGroup(child, 'SIGKILL');
+        } catch (error) {
+          finish({ error, timedOut, aborted });
+          return;
+        }
+      }
+      finish({ code, signal: childSignal, timedOut, aborted });
+    });
+
+    timeoutTimer = setTimeout(() => terminateTree('timeout'), timeoutMs);
   });
 }
 
