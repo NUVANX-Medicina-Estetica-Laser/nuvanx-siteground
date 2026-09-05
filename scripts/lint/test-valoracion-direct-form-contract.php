@@ -32,6 +32,7 @@ function esc_html__( $value, $domain = null ): string { unset( $domain ); return
 function esc_attr( $value ): string { return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' ); }
 function sanitize_key( $value ): string { return strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) $value ) ?? '' ); }
 function sanitize_text_field( $value ): string { return trim( (string) $value ); }
+function absint( $value ): int { return abs( (int) $value ); }
 function wp_unslash( $value ) { return $value; }
 function wp_nonce_field( $action, $name, $referer, $display ): string {
 	unset( $action, $referer, $display );
