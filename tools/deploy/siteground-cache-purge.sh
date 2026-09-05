@@ -17,21 +17,57 @@ siteground_cache_purge() {
 
   (
     set -Eeuo pipefail
-    # Callers may themselves run under errtrace or invoke this function from a
-    # conditional shell context. Clear inherited ERR handlers and propagate
-    # critical command failures explicitly instead of relying on errexit alone.
     trap - ERR
 
     cd "$wp_root" || exit $?
     command -v wp >/dev/null 2>&1 \
       || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=wp_cli_missing' >&2; exit 1; }
 
+    # Read optimizer state explicitly. `wp plugin is-active` intentionally uses
+    # a non-zero exit for the ordinary inactive state, which makes it unsuitable
+    # as a fail-closed state probe because operational WP-CLI/DB failures are also
+    # non-zero. `plugin get --field=status` separates data from process failure.
+    optimizer_observed_state() {
+      local observed=''
+      observed="$(wp plugin get "$plugin_slug" --field=status 2>/dev/null)" || return $?
+      case "$observed" in
+        active|active-network) printf 'active\n' ;;
+        inactive) printf 'inactive\n' ;;
+        *) return 10 ;;
+      esac
+    }
+
+    # Plugin mutations and their verification occur in separate WP-CLI
+    # processes. Persistent object cache can otherwise expose the pre-mutation
+    # `active_plugins` option to the verifier. Flush after the mutation, then
+    # require an explicit state read; mutation, flush, and verification are all
+    # fail-closed.
+    optimizer_set_state_coherent() {
+      local requested="$1"
+      local current=''
+      local observed=''
+      [[ "$requested" == 'active' || "$requested" == 'inactive' ]] || return 10
+
+      current="$(optimizer_observed_state)" || return $?
+      if [[ "$current" == "$requested" ]]; then
+        return 0
+      fi
+
+      if [[ "$requested" == 'active' ]]; then
+        wp plugin activate "$plugin_slug" --quiet || return $?
+      else
+        wp plugin deactivate "$plugin_slug" --quiet || return $?
+      fi
+
+      wp cache flush >/dev/null || return $?
+      observed="$(optimizer_observed_state)" || return $?
+      [[ "$observed" == "$requested" ]]
+    }
+
     if wp plugin is-installed "$plugin_slug" >/dev/null 2>&1; then
       plugin_installed=1
-      initial_state='inactive'
-      if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-        initial_state='active'
-      fi
+      initial_state="$(optimizer_observed_state)" \
+        || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_state_probe_failed' >&2; exit 1; }
     fi
 
     # SiteGround can expose `wp sg` as a host capability even when WP-CLI does
@@ -49,23 +85,6 @@ siteground_cache_purge() {
       echo 'SITEGROUND_CACHE_PURGE=FAIL reason=no_siteground_purge_capability' >&2
       exit 1
     fi
-
-    # Every optimizer activation/deactivation is performed by one WP-CLI process
-    # and verified by a later process. SiteGround persistent object cache can
-    # otherwise serve the later process a stale `active_plugins` option even
-    # though the mutation committed successfully. Flush after each state mutation
-    # before verification; a real failed mutation or failed flush remains fatal.
-    optimizer_activate_coherent() {
-      wp plugin activate "$plugin_slug" --quiet || return $?
-      wp cache flush >/dev/null || return $?
-      wp plugin is-active "$plugin_slug" >/dev/null 2>&1
-    }
-
-    optimizer_deactivate_coherent() {
-      wp plugin deactivate "$plugin_slug" --quiet || return $?
-      wp cache flush >/dev/null || return $?
-      ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1
-    }
 
     restore_requested_state_on_failure() {
       local rc=$?
@@ -85,22 +104,9 @@ siteground_cache_purge() {
           if wp plugin is-installed "$plugin_slug" >/dev/null 2>&1; then
             restore_rc=10
           fi
-        elif [[ "$expected_state" == 'active' ]]; then
-          if ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-            optimizer_activate_coherent
-            restore_rc=$?
-          fi
-          if [[ "$restore_rc" -eq 0 ]] && ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-            restore_rc=10
-          fi
         else
-          if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-            optimizer_deactivate_coherent
-            restore_rc=$?
-          fi
-          if [[ "$restore_rc" -eq 0 ]] && wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-            restore_rc=10
-          fi
+          optimizer_set_state_coherent "$expected_state"
+          restore_rc=$?
         fi
         set -e
 
@@ -119,15 +125,11 @@ siteground_cache_purge() {
     wp cache flush || exit $?
 
     if [[ "$sg_command_available" -eq 0 ]]; then
-      if [[ "$initial_state" != 'active' ]]; then
-        optimizer_activate_coherent \
-          || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_activation_failed' >&2; exit 1; }
-      fi
-      wp plugin is-active "$plugin_slug" >/dev/null 2>&1 \
+      optimizer_set_state_coherent active \
         || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_activation_failed' >&2; exit 1; }
 
-      # Plugin activation occurs in a different WP-CLI process; check again so
-      # the newly registered SiteGround command is authoritative before purge.
+      # Activation occurs in a different WP-CLI process; after coherent state
+      # verification, require the command registered by the active plugin.
       wp help sg >/dev/null 2>&1 \
         || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=sg_command_missing_after_activation' >&2; exit 1; }
     fi
@@ -150,30 +152,15 @@ siteground_cache_purge() {
           if wp plugin is-installed "$plugin_slug" >/dev/null 2>&1; then
             exit 1
           fi
-        elif [[ "$initial_state" == 'active' ]]; then
-          wp plugin is-active "$plugin_slug" >/dev/null 2>&1 || exit $?
         else
-          if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-            optimizer_deactivate_coherent || exit $?
-          fi
-          if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-            exit 1
-          fi
+          optimizer_set_state_coherent "$initial_state" || exit $?
         fi
         ;;
       active)
-        if ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-          optimizer_activate_coherent || exit $?
-        fi
-        wp plugin is-active "$plugin_slug" >/dev/null 2>&1 || exit $?
+        optimizer_set_state_coherent active || exit $?
         ;;
       inactive)
-        if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-          optimizer_deactivate_coherent || exit $?
-        fi
-        if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-          exit 1
-        fi
+        optimizer_set_state_coherent inactive || exit $?
         ;;
     esac
 
