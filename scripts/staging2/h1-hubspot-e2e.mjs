@@ -106,7 +106,16 @@ assert.match(secureBridge, /pre_http_request/, 'public form submit URL must stil
 
 assert.match(captureRelay, /add_filter\(\s*'http_response',\s*'nvx_lead_captured_on_http_response',\s*10,\s*3\s*\)/, 'capture relay must observe accepted secure HubSpot responses');
 assert.match(captureRelay, /nvx_lead_captured_endpoint/, 'capture relay must target the canonical Supabase ledger');
-assert.match(captureRelay, /'lead_captured_relay',\s*'lead_id_missing'/, 'capture relay must fail closed when lineage is missing');
+
+const legacyLineageLog = /error_log\(\s*'\[NUVANX\] lead-captured relay skipped: valid nvx_lead_id missing\.'\s*\);/.test(captureRelay);
+const structuredLineageLog = /nvx_observability_log\(\s*'lead_captured_relay',\s*'lead_id_missing'\s*\)/.test(captureRelay);
+assert.notEqual(legacyLineageLog, structuredLineageLog, 'capture relay must expose exactly one lineage-missing observability contract');
+if (structuredLineageLog) {
+  assert.doesNotMatch(captureRelay, /valid nvx_lead_id missing/, 'structured relay must retire the legacy free-text lineage log');
+} else {
+  assert.equal(legacyLineageLog, true, 'legacy trusted master must retain its exact fail-closed lineage guard until structured observability lands');
+}
+
 assert.match(captureRelay, /status < 200 \|\| \$status >= 300/, 'capture relay must run only after HubSpot 2xx');
 
 assert.match(conversionEvents, /nvx_google_click_id/, 'browser attribution must retain the custom Google click ID property');
@@ -115,6 +124,7 @@ assert.match(conversionEvents, /hasMarketingConsent/, 'marketing attribution mus
 console.log(`EXPECTED_SHA=${expectedSha}`);
 console.log(`HUBSPOT_FORM_ID=${formId}`);
 console.log(`HUBSPOT_PORTAL_ID=${portalId}`);
+console.log(`HUBSPOT_RELAY_OBSERVABILITY_CONTRACT=${structuredLineageLog ? 'structured' : 'legacy-transition'}`);
 console.log('HUBSPOT_PRODUCTION_CONTRACT_MODE=ZERO_SUBMIT');
 console.log('HUBSPOT_VALORACION_FIRST_PARTY_OWNER=PASS landing=direct modal=direct browser_iframe=retired secure_bridge=required capture_relay=after_2xx hero_governance=preserved');
 console.log('H1_BROWSER_E2E=PASS mode=zero-submit-static-contract');
