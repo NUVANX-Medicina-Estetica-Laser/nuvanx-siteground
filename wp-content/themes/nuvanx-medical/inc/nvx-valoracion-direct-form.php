@@ -158,7 +158,9 @@ function nvx_valoracion_is_uuid_v4( string $value ): bool {
  */
 function nvx_valoracion_lead_id(): string {
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- called only after the direct-form nonce is validated.
-	$posted = isset( $_POST['nvx_lead_id'] ) ? strtolower( trim( sanitize_text_field( wp_unslash( (string) $_POST['nvx_lead_id'] ) ) ) : '';
+	$posted = isset( $_POST['nvx_lead_id'] )
+		? strtolower( trim( sanitize_text_field( wp_unslash( (string) $_POST['nvx_lead_id'] ) ) ) )
+		: '';
 	if ( '' !== $posted && nvx_valoracion_is_uuid_v4( $posted ) ) {
 		return $posted;
 	}
