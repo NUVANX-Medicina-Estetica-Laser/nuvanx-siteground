@@ -201,7 +201,14 @@ nvx_tariff_ssot_assert( false !== strpos( $guard_source, "add_filter( 'the_conte
 nvx_tariff_ssot_assert( false !== strpos( $constants_source, 'NVX_HOOK_PRIO_TARIFF_OUTPUT_GUARD = 221' ), 'VISIBLE_OUTPUT_PRIORITY_REGISTERED' );
 nvx_tariff_ssot_assert( false !== strpos( $guard_source, "add_filter( 'wpseo_schema_graph', 'nvx_tariff_guard_schema_graph', 900 )" ), 'SCHEMA_OUTPUT_FINAL_FENCE_REGISTERED' );
 nvx_tariff_ssot_assert( false !== strpos( $structured_source, "require_once __DIR__ . '/nvx-tariff-output-guard.php';" ), 'SCHEMA_BOOTSTRAP_LOADS_TARIFF_FENCE' );
-nvx_tariff_ssot_assert( false !== strpos( $catalog_source, "error_log( 'NUVANX catalog: ' . \$message )" ), 'PRODUCTION_INTEGRITY_LOGGING_PRESENT' );
+
+// Production integrity failures remain observable, but the catalog is not
+// allowed to own a raw logging sink. It emits a bounded fingerprint through the
+// canonical observability owner loaded by the theme bootstrap.
+nvx_tariff_ssot_assert( false !== strpos( $catalog_source, "nvx_observability_log(" ), 'PRODUCTION_INTEGRITY_CANONICAL_LOGGING_PRESENT' );
+nvx_tariff_ssot_assert( false !== strpos( $catalog_source, "'catalog'" ) && false !== strpos( $catalog_source, "'integrity_failure'" ), 'PRODUCTION_INTEGRITY_EVENT_IDENTITY_PRESENT' );
+nvx_tariff_ssot_assert( false !== strpos( $catalog_source, "hash( 'sha256', \$message )" ), 'PRODUCTION_INTEGRITY_MESSAGE_FINGERPRINTED' );
+nvx_tariff_ssot_assert( 0 === preg_match( '/\berror_log\s*\(/', $catalog_source ), 'PRODUCTION_INTEGRITY_DIRECT_LOG_SINK_ABSENT' );
 
 // Source-level ownership ratchet: tariff-catalog.json is the only production
 // owner of these public PVPs. Schema/renderers may consume the canonical owner
@@ -215,4 +222,4 @@ nvx_tariff_ssot_assert( false === strpos( $schema_faq_source, "'798,60'" ) && fa
 nvx_tariff_ssot_assert( false === strpos( $endolift_page_source, '798.60' ), 'ENDOLIFT_VISIBLE_NUMERIC_FALLBACK_REMOVED' );
 nvx_tariff_ssot_assert( false !== strpos( $endolift_page_source, 'nvx_tariff_public_truth_is_complete' ), 'ENDOLIFT_VISIBLE_OUTPUT_FAILS_CLOSED' );
 
-echo 'TARIFF_SSOT_RUNTIME=PASS source=tariff-catalog faq=semantic-identity reorder=pass duplicate=fail-closed anatomy=independent output=html+schema-fenced aesthetic=reorder-safe hook=registered source_fallbacks=blocked row_shape=fail-closed' . PHP_EOL;
+echo 'TARIFF_SSOT_RUNTIME=PASS source=tariff-catalog faq=semantic-identity reorder=pass duplicate=fail-closed anatomy=independent output=html+schema-fenced aesthetic=reorder-safe hook=registered source_fallbacks=blocked row_shape=fail-closed observability=canonical' . PHP_EOL;
