@@ -246,8 +246,8 @@ function isBlockHeader(value) {
 
 function assertCanonicalMapping(mapping, label, lineNo) {
   const maskedValue = maskGithubExpressions(mapping.value).trim();
-  if (maskedValue.startsWith('{')) {
-    fail(`${label}:${lineNo}: YAML flow mappings are forbidden in canonical workflows`);
+  if (maskedValue.startsWith('{') && maskedValue !== '{}') {
+    fail(`${label}:${lineNo}: non-empty YAML flow mappings are forbidden in canonical workflows`);
   }
   if (/^<<\s*:/.test(maskedValue) || mapping.key === '<<') {
     fail(`${label}:${lineNo}: YAML merge keys are forbidden`);
@@ -548,10 +548,10 @@ function runSelfTests() {
   expectFailure(() => scanJsonRaw('{"a":1,\u00a0"b":2}', 'selftest-json-nbsp-middle'), /expected JSON string|invalid JSON token|expected ','/, 'NBSP between JSON tokens');
   expectFailure(() => scanJsonRaw('{"a":1}\u00a0', 'selftest-json-nbsp-tail'), /trailing content/, 'NBSP after JSON root');
 
-  scanYamlDuplicateKeys('jobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - name: one\n        run: |\n          echo "http://example.test:a"\n          x="${value:-fallback}"\n      - name: two\n        run: echo two\n', 'selftest-yaml-shell-block');
+  scanYamlDuplicateKeys('permissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - name: one\n        run: |\n          echo "http://example.test:a"\n          x="${value:-fallback}"\n      - name: two\n        run: echo two\n', 'selftest-yaml-shell-block');
   expectFailure(() => scanYamlDuplicateKeys('jobs:\n  a:\n    name: A\n    name: B\n', 'selftest-yaml-dup'), /duplicate YAML key 'name'/, 'duplicate YAML key');
   expectFailure(() => scanYamlDuplicateKeys('jobs:\n  "a":\n    runs-on: ubuntu-latest\n', 'selftest-yaml-quoted'), /non-canonical YAML mapping key/, 'quoted key accepted');
-  expectFailure(() => scanYamlDuplicateKeys('root: {a: 1, a: 2}\n', 'selftest-yaml-flow-map'), /flow mappings are forbidden/, 'flow map accepted');
+  expectFailure(() => scanYamlDuplicateKeys('root: {a: 1, a: 2}\n', 'selftest-yaml-flow-map'), /non-empty YAML flow mappings are forbidden/, 'non-empty flow map accepted');
 
   const live = ['on:', '  workflow_dispatch:', '    inputs:', '      live:', '        description: Live', 'jobs:', '  a:', "    if: inputs.live == 'yes'", '    runs-on: ubuntu-latest'].join('\n');
   workflowDispatchInputs(live, 'selftest-input-live');
