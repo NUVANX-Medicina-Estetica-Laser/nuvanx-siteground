@@ -207,26 +207,24 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_unschedule_cron' ) ) {
 }
 add_action( 'switch_theme', 'nvx_supabase_relay_queue_unschedule_cron' );
 
-/** Emit bounded non-PII telemetry. */
+/** Emit bounded non-PII telemetry through the canonical observability sink. */
 if ( ! function_exists( 'nvx_supabase_relay_log' ) ) {
 	function nvx_supabase_relay_log( string $endpoint, string $outcome, int $status = 0, string $reason = '' ): void {
 		$endpoint = sanitize_key( $endpoint );
 		$outcome  = strtoupper( $outcome );
 		$allowed  = array( 'SUCCESS', 'HTTP_4XX', 'HTTP_429', 'HTTP_5XX', 'TRANSPORT', 'QUEUED', 'DRAINED', 'DEAD' );
-		if ( '' === $endpoint || ! in_array( $outcome, $allowed, true ) ) {
+		if ( '' === $endpoint || ! in_array( $outcome, $allowed, true ) || ! function_exists( 'nvx_observability_log' ) ) {
 			return;
 		}
-		$line = 'NVX_SUPABASE_RELAY=' . $outcome . ' endpoint=' . $endpoint;
-		if ( $status > 0 ) {
-			$line .= ' status=' . absint( $status );
-		}
-		if ( '' !== $reason ) {
-			$safe_reason = sanitize_key( $reason );
-			if ( '' !== $safe_reason ) {
-				$line .= ' reason=' . $safe_reason;
-			}
-		}
-		error_log( $line );
+		nvx_observability_log(
+			'supabase_relay',
+			strtolower( $outcome ),
+			array(
+				'endpoint'    => $endpoint,
+				'http_status' => $status > 0 ? absint( $status ) : null,
+				'reason'      => '' !== $reason ? sanitize_key( $reason ) : null,
+			)
+		);
 	}
 }
 
@@ -494,7 +492,7 @@ if ( ! function_exists( 'nvx_supabase_relay_google_click_hmac_key' ) ) {
 
 /** Ensure Supabase runtime signing state exists. */
 if ( ! function_exists( 'nvx_supabase_relay_ensure_runtime_bootstrap' ) ) {
-	function nvx_supabase_relay_ensure_runtime_bootstrap( string $token, bool $force = false ): true|WP_Error {
+	function nvx_supabase_relay_ensure_runtime_bootstrap( string $token, bool $force = false ): bool|WP_Error {
 		if ( '' === $token ) {
 			return new WP_Error( 'nvx_relay_signing_key_missing', 'Relay signing key is unavailable.' );
 		}
@@ -1288,7 +1286,20 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_record_existing_attempt' ) ) {
 		$new_attempts = nvx_supabase_relay_queue_atomic_add_attempts( $existing, $attempts );
 		if ( null === $new_attempts ) {
 			nvx_supabase_relay_log( $endpoint, 'QUEUED', 0, 'attempt_state_write_failed' );
+			if ( function_exists( 'nvx_observability_log' ) ) {
+				nvx_observability_log( 'supabase_relay_ops', 'retry_state_conflict', array( 'endpoint' => sanitize_key( $endpoint ), 'phase' => 'attempts' ) );
+			}
 			return $existing;
+		}
+		if ( function_exists( 'nvx_observability_log' ) ) {
+			nvx_observability_log(
+				'supabase_relay_ops',
+				'dedupe_reused',
+				array(
+					'endpoint' => sanitize_key( $endpoint ),
+					'attempts' => $new_attempts,
+				)
+			);
 		}
 		if ( $new_attempts >= (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES ) {
 			nvx_supabase_relay_queue_mark_dead( $existing, $endpoint, 0, 'max_retries_exceeded' );
@@ -1296,6 +1307,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_record_existing_attempt' ) ) {
 			$next_attempt = time() + nvx_supabase_relay_queue_backoff_seconds( $new_attempts );
 			if ( ! nvx_supabase_relay_queue_set_next_attempt_monotonic( $existing, $next_attempt ) ) {
 				nvx_supabase_relay_log( $endpoint, 'QUEUED', 0, 'next_attempt_write_failed' );
+				if ( function_exists( 'nvx_observability_log' ) ) {
+					nvx_observability_log( 'supabase_relay_ops', 'retry_state_conflict', array( 'endpoint' => sanitize_key( $endpoint ), 'phase' => 'next_attempt' ) );
+				}
 				return $existing;
 			}
 		}
@@ -1627,7 +1641,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_clean_terminal_caches' ) ) {
 		}
 		if ( function_exists( 'wp_cache_delete' ) ) {
 			wp_cache_delete( absint( $post_id ), 'posts' );
-			wp_cache_delete( absint( $post_id ), 'post_meta' );
+			wp_cache_delete( absint( $post_id, 'post_meta' );
 			wp_cache_delete( $claim_key, 'options' );
 		}
 	}
@@ -1817,6 +1831,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 					$delivery_attempts = ( is_wp_error( $retry_response ) && 'nvx_runtime_bootstrap_unavailable' === $retry_response->get_error_code() ) ? 1 : 2;
 				}
 				if ( ! nvx_supabase_relay_queue_lock_owned( $lock ) ) {
+					if ( function_exists( 'nvx_observability_log' ) ) {
+						nvx_observability_log( 'supabase_relay_ops', 'drain_lease_lost', array( 'endpoint' => $endpoint ) );
+					}
 					break;
 				}
 				if ( 'SUCCESS' === $class['outcome'] ) {
@@ -1826,6 +1843,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 				$new_attempts = nvx_supabase_relay_queue_atomic_add_attempts( $post_id, $delivery_attempts );
 				if ( null === $new_attempts ) {
 					nvx_supabase_relay_log( $endpoint, $class['outcome'], $class['status'], 'retry_state_write_failed' );
+					if ( function_exists( 'nvx_observability_log' ) ) {
+						nvx_observability_log( 'supabase_relay_ops', 'retry_state_conflict', array( 'endpoint' => $endpoint, 'phase' => 'retry_attempts' ) );
+					}
 					break;
 				}
 				if ( ! $class['retryable'] || $new_attempts >= (int) NVX_SUPABASE_RELAY_QUEUE_MAX_TRIES ) {
@@ -1835,6 +1855,9 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_drain' ) ) {
 				$next_attempt = time() + nvx_supabase_relay_queue_backoff_seconds( $new_attempts );
 				if ( ! nvx_supabase_relay_queue_set_next_attempt_monotonic( $post_id, $next_attempt ) ) {
 					nvx_supabase_relay_log( $endpoint, $class['outcome'], $class['status'], 'next_attempt_write_failed' );
+					if ( function_exists( 'nvx_observability_log' ) ) {
+						nvx_observability_log( 'supabase_relay_ops', 'retry_state_conflict', array( 'endpoint' => $endpoint, 'phase' => 'next_attempt' ) );
+					}
 					break;
 				}
 				nvx_supabase_relay_log( $endpoint, $class['outcome'], $class['status'], 'retry_scheduled' );
