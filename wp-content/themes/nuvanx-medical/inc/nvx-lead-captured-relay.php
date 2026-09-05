@@ -157,14 +157,15 @@ if ( ! function_exists( 'nvx_lead_captured_bootstrap_runtime' ) ) {
 		);
 
 		if ( is_wp_error( $response ) ) {
-			error_log(
-				sprintf(
-					'[NUVANX] runtime bootstrap transport failure; wp_error_code=%s.',
-					sanitize_key(
-						(string) $response->get_error_code()
+			if ( function_exists( 'nvx_observability_log' ) ) {
+				nvx_observability_log(
+					'lead_captured_bootstrap',
+					'transport_failure',
+					array(
+						'code' => sanitize_key( (string) $response->get_error_code() ),
 					)
-				)
-			);
+				);
+			}
 
 			return false;
 		}
@@ -174,12 +175,15 @@ if ( ! function_exists( 'nvx_lead_captured_bootstrap_runtime' ) ) {
 		);
 
 		if ( $status < 200 || $status >= 300 ) {
-			error_log(
-				sprintf(
-					'[NUVANX] runtime bootstrap HTTP failure; status=%d.',
-					$status
-				)
-			);
+			if ( function_exists( 'nvx_observability_log' ) ) {
+				nvx_observability_log(
+					'lead_captured_bootstrap',
+					'http_failure',
+					array(
+						'http_status' => $status,
+					)
+				);
+			}
 
 			return false;
 		}
@@ -658,9 +662,12 @@ if ( ! function_exists( 'nvx_lead_captured_build_relay_body' ) ) {
 		);
 
 		if ( ! nvx_lead_captured_is_uuid_v4( $lead_id ) ) {
-			error_log(
-				'[NUVANX] lead-captured relay skipped: valid nvx_lead_id missing.'
-			);
+			if ( function_exists( 'nvx_observability_log' ) ) {
+				nvx_observability_log(
+					'lead_captured_relay',
+					'lead_id_missing'
+				);
+			}
 			return '';
 		}
 
@@ -861,9 +868,12 @@ if ( ! function_exists( 'nvx_lead_captured_on_http_response' ) ) {
 		}
 
 		if ( ! function_exists( 'nvx_supabase_relay_dispatch' ) ) {
-			error_log(
-				'[NUVANX] lead-captured relay failure: persistent outbox owner unavailable.'
-			);
+			if ( function_exists( 'nvx_observability_log' ) ) {
+				nvx_observability_log(
+					'lead_captured_relay',
+					'outbox_unavailable'
+				);
+			}
 
 			return $response;
 		}
@@ -876,9 +886,12 @@ if ( ! function_exists( 'nvx_lead_captured_on_http_response' ) ) {
 		} catch ( Throwable $error ) {
 			unset( $error );
 
-			error_log(
-				'[NUVANX] lead-captured relay failure: unexpected outbox exception.'
-			);
+			if ( function_exists( 'nvx_observability_log' ) ) {
+				nvx_observability_log(
+					'lead_captured_relay',
+					'outbox_exception'
+				);
+			}
 		}
 
 		return $response;
