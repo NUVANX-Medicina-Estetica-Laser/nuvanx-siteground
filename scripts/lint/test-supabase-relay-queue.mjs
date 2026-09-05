@@ -3,28 +3,32 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const queuePath = 'wp-content/themes/nuvanx-medical/inc/nvx-supabase-relay-queue.php';
+const observabilityPath = 'wp-content/themes/nuvanx-medical/inc/nvx-observability.php';
 const gtmPath = 'wp-content/themes/nuvanx-medical/inc/nvx-gtm-integration.php';
 const integrationPath = 'wp-content/themes/nuvanx-medical/inc/nvx-attribution-integration.php';
 const relayPath = 'wp-content/themes/nuvanx-medical/inc/nvx-lead-captured-relay.php';
 const stagingPath = '.github/workflows/staging.yml';
 const bootstrapPath = 'wp-content/themes/nuvanx-medical/inc/nvx-theme-bootstrap.php';
 
-for (const path of [queuePath, gtmPath, integrationPath, relayPath, stagingPath]) {
+for (const path of [queuePath, observabilityPath, gtmPath, integrationPath, relayPath, stagingPath, bootstrapPath]) {
   assert.equal(fs.existsSync(path), true, `Missing relay-queue contract file: ${path}`);
 }
 
 const queue = fs.readFileSync(queuePath, 'utf8');
+const observability = fs.readFileSync(observabilityPath, 'utf8');
 const gtm = fs.readFileSync(gtmPath, 'utf8');
 const integration = fs.readFileSync(integrationPath, 'utf8');
 const relay = fs.readFileSync(relayPath, 'utf8');
 const staging = fs.readFileSync(stagingPath, 'utf8');
 const bootstrap = fs.readFileSync(bootstrapPath, 'utf8');
 
-// With centralized bootstrap, verify both modules are in manifest in correct order
+const observabilityIndex = bootstrap.indexOf("'inc/nvx-observability.php'");
 const queueIndex = bootstrap.indexOf("'inc/nvx-supabase-relay-queue.php'");
 const leadIndex = bootstrap.indexOf("'inc/nvx-lead-captured-relay.php'");
+assert.ok(observabilityIndex >= 0, 'Canonical observability owner must be in bootstrap manifest');
 assert.ok(queueIndex >= 0, 'Supabase relay queue must be in bootstrap manifest');
 assert.ok(leadIndex >= 0, 'Lead-captured relay must be in bootstrap manifest');
+assert.ok(queueIndex > observabilityIndex, 'Queue must load after canonical observability owner');
 assert.ok(leadIndex > queueIndex, 'Lead-captured relay must load after the queue in manifest');
 assert.doesNotMatch(gtm, /require_once.*nvx-supabase-relay-queue/,
   'GTM integration must not laterally load queue (bootstrap manifest owns this)');
@@ -36,7 +40,20 @@ assert.match(queue, /'public'\s*=>\s*false/);
 assert.match(queue, /'publicly_queryable'\s*=>\s*false/);
 assert.match(queue, /'show_ui'\s*=>\s*false/);
 assert.match(queue, /'show_in_rest'\s*=>\s*false/);
-assert.match(queue, /(?:NVX_SUPABASE_RELAY=[\s\S]*endpoint=|nvx_observability_log\(\s*['"]supabase_relay['"][\s\S]*'endpoint')/);
+assert.match(queue, /nvx_observability_log\(\s*['"]supabase_relay['"][\s\S]*?'endpoint'/,
+  'Relay logger must route bounded metadata through canonical observability');
+assert.doesNotMatch(queue, /\berror_log\s*\(/,
+  'Queue must not own a direct runtime log sink');
+assert.match(observability, /function\s+nvx_observability_log\(/,
+  'Canonical observability function must exist');
+assert.match(observability, /\berror_log\s*\(\s*\$line\s*\)/,
+  'Canonical observability owner must own the runtime sink');
+assert.match(queue, /['"]dedupe_reused['"]/,
+  'Canonical dedupe reuse must emit an explicit bounded event');
+assert.match(queue, /['"]drain_lease_lost['"]/,
+  'Post-I/O lease loss must emit an explicit bounded event');
+assert.ok((queue.match(/['"]retry_state_conflict['"]/g) || []).length >= 3,
+  'All retry-state conflict paths must emit explicit bounded telemetry');
 assert.match(queue, /SUCCESS[\s\S]*HTTP_4XX[\s\S]*HTTP_429[\s\S]*HTTP_5XX[\s\S]*TRANSPORT[\s\S]*QUEUED[\s\S]*DRAINED[\s\S]*DEAD/);
 assert.match(queue, /function nvx_supabase_relay_dispatch\(/);
 assert.match(queue, /wp_schedule_event\(\s*time\(\) \+ (60|MINUTE_IN_SECONDS),\s*'nvx_relay_outbox_5min'/);
@@ -56,7 +73,6 @@ assert.match(queue, /if \( 'google_click' === \$endpoint \)/,
 assert.match(queue, /nvx_supabase_relay_google_click_post_signed\(\s*\$url,\s*\$body,\s*\$origin,\s*\$token\s*\)/,
   'Google click retries must be signed at send time instead of persisting signatures');
 
-// Bloque 1C-1 Negative Test Assertions
 assert.match(queue, /nvx_supabase_relay_queue_backoff_seconds\(/, 'ENQUEUE_NEXT_ATTEMPT_BACKOFF');
 assert.match(queue, /\$next_attempt = time\(\)\s*\+\s*nvx_supabase_relay_queue_backoff_seconds/, 'NO_IMMEDIATE_SHUTDOWN_RETRY');
 assert.match(queue, /add_option\(\s*\$key,\s*\$value,\s*'',\s*false\s*\)/, 'DRAIN_GLOBAL_LOCK');
@@ -85,7 +101,6 @@ assert.match(integration, /nvx_supabase_relay_dispatch\(\s*'google_click'/);
 assert.match(queue, /'timeout'\s*=>\s*5/);
 assert.match(queue, /'blocking'\s*=>\s*true/);
 assert.match(relay, /nvx_supabase_relay_dispatch\(\s*'lead_captured'/);
-
 assert.match(staging, /attribution-lineage-e2e\.mjs/, 'Staging must own a dedicated attribution lineage phase');
 
 const idHarness = spawnSync('php', ['scripts/lint/test-attribution-submission-id.php'], { encoding: 'utf8' });
@@ -104,4 +119,4 @@ assert.equal(
 );
 assert.match(recoveryHarness.stdout, /RELAY_TOKEN_ROTATION_RECOVERY=PASS/);
 
-console.log('SUPABASE_RELAY_QUEUE=PASS blocking=1 outbox=1 telemetry=1 google_click_hmac=1 submission_id=deterministic 401_recovery=1');
+console.log('SUPABASE_RELAY_QUEUE=PASS blocking=1 outbox=1 telemetry=structured google_click_hmac=1 submission_id=deterministic 401_recovery=1');
