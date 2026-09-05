@@ -8,7 +8,7 @@ export function resolvePerformanceGateMode({ eventName = '', requestedMode = '' 
   if (event === 'push') return 'enforce';
 
   // Baseline capture remains an explicit calibration tool for manual runs.
-  if (requested === 'baseline' || requested === 'enforce') return requested;
+  if (requested === 'baseline') return requested;
 
   // Missing mode fails safe to enforcement. Invalid non-empty modes are passed
   // through so the core's configuration validator rejects them with EX_CONFIG.

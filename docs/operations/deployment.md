@@ -55,19 +55,12 @@ The Staging job `Exact-SHA Staging Lighthouse performance gate` runs only after 
 
 Modes:
 
-- `baseline` — current push default. Captures metrics and SHA-bound artifacts; never blocks release eligibility.
-- `enforce` — fail-closed on material regression beyond bounded LCP/CLS/TBT/TTFB/performance-score budgets.
+- `enforce` — current push default. Fails closed on material regression beyond bounded LCP/CLS/TBT/TTFB/performance-score budgets. Blocks release eligibility on regression.
+- `baseline` — optional manual calibration mode. Captures metrics and SHA-bound artifacts without blocking release eligibility.
 
 SiteGround/transport transients are classified separately from Lighthouse or application regressions. A transient does not prove a performance defect. Incomplete evidence also does not become Production eligibility.
 
-Do not change the push default from `baseline` to `enforce` until all of the following are true:
-
-1. an exact-SHA Staging acceptance has actually reached the performance job;
-2. enough valid per-route/mode runs exist to quantify SiteGround/CI variability;
-3. budgets are reviewed against that empirical baseline rather than only the generic defaults in `scripts/staging2/lighthouse-performance-gate.mjs`;
-4. a real regression is shown to block eligibility while a verified transient does not.
-
-Manual `workflow_dispatch` may select `enforce` for a specific SHA once a baseline exists. Load/concurrency testing is a separate Staging-only front and must not run against Production from CI.
+The Staging push workflow automatically enforces budgets. Manual `workflow_dispatch` may select `baseline` when empirical recalibration of budgets is required due to known, intentional performance footprint changes. Load/concurrency testing is a separate Staging-only front and must not run against Production from CI.
 
 The optional Production Lighthouse job (`run_performance`, default false) is a post-release matrix. It is not a Staging acceptance gate and does not authorize or block cutover.
 

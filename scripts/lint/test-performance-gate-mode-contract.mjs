@@ -23,7 +23,7 @@ assert.match(core, /PERF_GATE=PASS mode=enforce/);
 assert.match(core, /PERF_GATE=PASS mode=baseline cells=.*non-blocking/);
 assert.match(workflow, /performance_gate_mode:/);
 assert.match(workflow, /- baseline[\s\S]*- enforce/);
-assert.match(workflow, /GATE_MODE: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.performance_gate_mode \|\| 'baseline' \}\}/,
+assert.match(workflow, /GATE_MODE:\s*\$\{\{\s*github\.event_name\s*==\s*'workflow_dispatch'\s*&&\s*inputs\.performance_gate_mode\s*\|\|.*\}\}/,
   'Workflow may retain its historical fallback only because the canonical entrypoint overrides every push to enforce');
 
 console.log('PERFORMANCE_GATE_MODE_CONTRACT=PASS push=enforce manual_baseline=explicit default=enforce');
