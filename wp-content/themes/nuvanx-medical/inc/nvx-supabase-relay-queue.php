@@ -1641,7 +1641,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_clean_terminal_caches' ) ) {
 		}
 		if ( function_exists( 'wp_cache_delete' ) ) {
 			wp_cache_delete( absint( $post_id ), 'posts' );
-			wp_cache_delete( absint( $post_id, 'post_meta' );
+			wp_cache_delete( absint( $post_id ), 'post_meta' );
 			wp_cache_delete( $claim_key, 'options' );
 		}
 	}

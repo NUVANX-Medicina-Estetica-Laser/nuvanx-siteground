@@ -47,7 +47,7 @@ function nvx_supabase_relay_operational_log( string $event, string $endpoint = '
 		'dead_timestamped',
 		'dead_cleanup_deleted',
 	);
-	if ( ! in_array( $event, $allowed, true ) || '' === $endpoint ) {
+	if ( ! in_array( $event, $allowed, true ) || '' === $endpoint || ! function_exists( 'nvx_observability_log' ) ) {
 		return;
 	}
 
