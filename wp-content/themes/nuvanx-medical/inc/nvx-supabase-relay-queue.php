@@ -1059,7 +1059,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_building_item' ) ) {
 					&& ( nvx_supabase_relay_queue_is_valid_pending_item( $current_post_id, $dedupe_key ) || nvx_supabase_relay_queue_is_valid_prepared_item( $current_post_id, $dedupe_key ) )
 				) {
 					if ( nvx_supabase_relay_queue_compare_and_swap_status( $post_id, NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS, 'draft' ) ) {
-						update_post_meta( $post_id, '_nvx_relay_dead_at', (string) nvx_supabase_relay_time() );
 						nvx_supabase_relay_log( $endpoint, 'DEAD', 0, 'building_superseded' );
 					}
 					return false;
@@ -1075,7 +1074,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_building_item' ) ) {
 		if ( ! nvx_supabase_relay_queue_compare_and_swap_status( $post_id, NVX_SUPABASE_RELAY_QUEUE_BUILDING_STATUS, 'draft' ) ) {
 			return false;
 		}
-		update_post_meta( $post_id, '_nvx_relay_dead_at', (string) nvx_supabase_relay_time() );
 		if ( $dedupe_ok && '' !== $publish_claim ) {
 			nvx_supabase_relay_queue_release_claim( $dedupe_key, $publish_claim );
 		}
@@ -1129,7 +1127,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 		}
 
 		if ( 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe_key ) ) {
-			update_post_meta( $post_id, '_nvx_relay_dead_at', (string) nvx_supabase_relay_time() );
 			$updated = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
 			if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
 				nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'quarantine_transition_failed' );
@@ -1140,7 +1137,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_recover_prepared_without_due' 
 		}
 
 		if ( ! nvx_supabase_relay_queue_item_ready( $post_id ) ) {
-			update_post_meta( $post_id, '_nvx_relay_dead_at', (string) nvx_supabase_relay_time() );
 			$updated = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
 			if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
 				nvx_supabase_relay_log( $endpoint, 'TRANSPORT', 0, 'quarantine_transition_failed' );
@@ -1628,7 +1624,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_complete_terminal_state' ) ) {
 			if ( $delete_post ) {
 				wp_delete_post( $post_id, true );
 			} else {
-				update_post_meta( $post_id, '_nvx_relay_dead_at', (string) nvx_supabase_relay_time() );
 				$updated = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
 				if ( is_wp_error( $updated ) || absint( $updated ) !== $post_id ) {
 					return false;
@@ -1667,7 +1662,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_complete_terminal_state' ) ) {
 					if ( $delete_post ) {
 						$transitioned = false !== wp_delete_post( $post_id, true );
 					} else {
-						update_post_meta( $post_id, '_nvx_relay_dead_at', (string) nvx_supabase_relay_time() );
 						$updated      = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
 						$transitioned = ! is_wp_error( $updated ) && absint( $updated ) === $post_id;
 					}
@@ -1717,7 +1711,6 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_complete_terminal_state' ) ) {
 		if ( $delete_post ) {
 			$transitioned = false !== wp_delete_post( $post_id, true );
 		} else {
-			update_post_meta( $post_id, '_nvx_relay_dead_at', (string) nvx_supabase_relay_time() );
 			$updated      = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
 			$transitioned = ! is_wp_error( $updated ) && absint( $updated ) === $post_id;
 		}
