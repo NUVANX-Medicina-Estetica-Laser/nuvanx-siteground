@@ -195,12 +195,11 @@ verify_pr_preview_authority_if_applicable() {
 
   [[ "$pr_state" == 'open' && -z "$merged_at" ]] || superseded_pr_preview 'pr_not_open'
   [[ "$base_ref" == 'master' ]] || superseded_pr_preview 'pr_base_changed'
-  [[ "$current_pr_sha" == "$run_head_sha" ]] || superseded_pr_preview 'pr_head_superseded'
-  [[ "$run_pr_head_sha" == "$run_head_sha" ]] || superseded_pr_preview 'pr_head_superseded'
+  [[ "$current_pr_sha" == "$run_pr_head_sha" ]] || superseded_pr_preview 'pr_head_superseded'
 
   printf '%s\n' "$run_id" > "$PREVIEW_OWNER_FILE"
 
-  echo "PR_PREVIEW_AUTHORITY=PASS pr=$pr_number pr_sha=$run_head_sha preview_sha=$preview_sha run_id=$run_id run_attempt=$run_attempt stage=deploy-boundary"
+  echo "PR_PREVIEW_AUTHORITY=PASS pr=$pr_number pr_sha=$run_pr_head_sha preview_sha=$preview_sha run_id=$run_id run_attempt=$run_attempt stage=deploy-boundary"
 }
 
 provision_staging_hubspot_identity() {

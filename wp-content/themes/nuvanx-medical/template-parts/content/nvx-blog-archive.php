@@ -42,10 +42,14 @@ function nvx_blog_archive_semantic_image( array $args = array() ): string {
 		}
 	}
 
-	$lower = static function ( string $value ): string {
-		return function_exists( 'mb_strtolower' ) ? mb_strtolower( $value, 'UTF-8' ) : strtolower( $value );
+	$normalize = static function ( string $value ): string {
+		$value = function_exists( 'mb_strtolower' ) ? mb_strtolower( $value, 'UTF-8' ) : strtolower( $value );
+		if ( function_exists( 'remove_accents' ) ) {
+			$value = remove_accents( $value );
+		}
+		return strtr( $value, array( '₂' => '2', '₁' => '1', '₃' => '3' ) );
 	};
-	$haystack   = strtr( $lower( implode( ' ', $parts ) ), array( '-' => ' ', '_' => ' ', '/' => ' ' ) );
+	$haystack   = strtr( $normalize( implode( ' ', $parts ) ), array( '-' => ' ', '_' => ' ', '/' => ' ' ) );
 	$best       = null;
 	$best_score = 0;
 
@@ -58,13 +62,14 @@ function nvx_blog_archive_semantic_image( array $args = array() ): string {
 			continue;
 		}
 
-		$score = 0;
+		$matched = array();
 		foreach ( (array) ( $asset['keys'] ?? array() ) as $key ) {
-			$key = trim( (string) $key );
-			if ( '' !== $key && false !== strpos( $haystack, $lower( $key ) ) ) {
-				++$score;
+			$norm_key = trim( $normalize( (string) $key ) );
+			if ( '' !== $norm_key && false !== strpos( $haystack, $norm_key ) ) {
+				$matched[ $norm_key ] = true;
 			}
 		}
+		$score = count( $matched );
 
 		if ( $score > $best_score ) {
 			$best       = $asset;

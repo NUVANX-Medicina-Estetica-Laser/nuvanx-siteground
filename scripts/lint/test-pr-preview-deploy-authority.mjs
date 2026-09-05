@@ -12,8 +12,7 @@ assert.match(source, /pulls\/\$pr_number/, 'deployer must re-read current PR aut
 assert.match(source, /run_event.*pull_request_target/s, 'only pull_request_target runs may exercise preview authority');
 assert.match(source, /run_head_sha="\$\(printf '%s' "\$run_json" \| jq -r '\.head_sha \/\/ ""'\)"/, 'deployer must extract immutable workflow run head_sha');
 assert.match(source, /select\(\.number == \$pr\) \| \.head\.sha \/\/ empty/, 'run-associated PR head must be extracted from the pull request payload');
-assert.match(source, /current_pr_sha" == "\$run_head_sha/, 'current PR head must still equal the immutable triggering run head');
-assert.match(source, /run_pr_head_sha" == "\$run_head_sha/, 'run-associated PR head must not deviate from the immutable triggering run head');
+assert.match(source, /current_pr_sha" == "\$run_pr_head_sha/, 'current PR head must still equal the run-associated PR head');
 assert.match(source, /base_ref.*master/s, 'preview PR must still target master');
 assert.match(source, /MUTATION_FIFO=SUPERSEDED[\s\S]*stage=deploy-boundary[\s\S]*mutation=forbidden/, 'superseded previews must fail closed at deploy boundary');
 assert.match(source, /PREVIEW_OWNER_FILE="\$\(dirname "\$WP_ROOT"\)\/\.nvx-preview-owner"/, 'deployer must define server-side preview owner marker');
@@ -72,7 +71,7 @@ const baseSha = '1'.repeat(40);
 const prHeadSha = '2'.repeat(40);
 const fixture = {
   event: 'pull_request_target',
-  head_sha: prHeadSha,
+  head_sha: baseSha,
   run_attempt: 1,
   pull_requests: [
     { number: 1094, head: { sha: prHeadSha } },

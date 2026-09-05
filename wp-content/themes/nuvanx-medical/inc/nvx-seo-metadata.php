@@ -290,10 +290,8 @@ function nvx_seo_current_path(): string {
 		return (string) nvx_schema_current_path( (int) get_queried_object_id() );
 	}
 
-	$uri     = function_exists( 'nvx_theme_request_context' ) ? nvx_theme_request_context()['uri'] : '/';
-	$uri     = (string) strtok( $uri, '?' );
-	$trimmed = trim( $uri, '/' );
-	return '' !== $trimmed ? '/' . $trimmed . '/' : '/';
+	$path = function_exists( 'nvx_theme_request_path' ) ? nvx_theme_request_path() : '';
+	return '' !== $path ? $path : '/';
 }
 
 /**

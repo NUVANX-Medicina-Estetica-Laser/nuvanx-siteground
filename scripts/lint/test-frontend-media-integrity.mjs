@@ -68,8 +68,9 @@ for (const clinicalCase of cases) {
 
   for (const [role, relative] of [['before', before], ['after', after]]) {
     const absolute = path.join(theme, relative.replace(/^\/+/, ''));
-    requireInvariant(fs.existsSync(absolute), `APPROVED_CASE_FILE_EXISTS_${id}_${role}`);
-    if (!fs.existsSync(absolute)) continue;
+    const fileExists = fs.existsSync(absolute);
+    requireInvariant(fileExists, `APPROVED_CASE_FILE_EXISTS_${id}_${role}`);
+    if (!fileExists) continue;
     requireInvariant(!approvedPaths.has(relative), `APPROVED_CASE_PATH_UNIQUE_${id}_${role}`);
     approvedPaths.set(relative, `${id}:${role}`);
     const hash = crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');

@@ -75,19 +75,19 @@ function nvx_blog_named_image_catalog(): array {
 	return array(
 		array(
 			'id'   => 'laser-detalle',
-			'keys' => array( 'laser', 'láser', 'co2', 'co₂', 'fraccionad' ),
+			'keys' => array( 'laser', 'co2', 'fraccionad' ),
 			'file' => 'assets/images/clinics/chamberi/05-laser-detalle.jpg',
 			'alt'  => 'Detalle de un procedimiento láser en consulta NUVANX',
 		),
 		array(
 			'id'   => 'laser-piel',
-			'keys' => array( 'laser', 'láser', 'piel', 'mancha', 'cicatriz' ),
+			'keys' => array( 'laser', 'piel', 'mancha', 'cicatriz' ),
 			'file' => 'assets/images/clinics/chamberi/10-laser-piel.jpg',
 			'alt'  => 'Aplicación láser sobre la piel en NUVANX',
 		),
 		array(
 			'id'   => 'consulta',
-			'keys' => array( 'consulta', 'valoracion', 'valoración', 'diagnost', 'bioestimul', 'colageno', 'colágeno' ),
+			'keys' => array( 'consulta', 'valoracion', 'diagnost', 'bioestimul', 'colageno' ),
 			'stem' => 'consulta-medica-personalizada-nuvanx-madrid',
 			'alt'  => 'Consulta médica personalizada en NUVANX',
 		),
