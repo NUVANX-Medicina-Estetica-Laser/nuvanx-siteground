@@ -50,6 +50,23 @@ siteground_cache_purge() {
       exit 1
     fi
 
+    # Every optimizer activation/deactivation is performed by one WP-CLI process
+    # and verified by a later process. SiteGround persistent object cache can
+    # otherwise serve the later process a stale `active_plugins` option even
+    # though the mutation committed successfully. Flush after each state mutation
+    # before verification; a real failed mutation or failed flush remains fatal.
+    optimizer_activate_coherent() {
+      wp plugin activate "$plugin_slug" --quiet || return $?
+      wp cache flush >/dev/null || return $?
+      wp plugin is-active "$plugin_slug" >/dev/null 2>&1
+    }
+
+    optimizer_deactivate_coherent() {
+      wp plugin deactivate "$plugin_slug" --quiet || return $?
+      wp cache flush >/dev/null || return $?
+      ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1
+    }
+
     restore_requested_state_on_failure() {
       local rc=$?
       local restore_rc=0
@@ -70,7 +87,7 @@ siteground_cache_purge() {
           fi
         elif [[ "$expected_state" == 'active' ]]; then
           if ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-            wp plugin activate "$plugin_slug" --quiet
+            optimizer_activate_coherent
             restore_rc=$?
           fi
           if [[ "$restore_rc" -eq 0 ]] && ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
@@ -78,7 +95,7 @@ siteground_cache_purge() {
           fi
         else
           if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-            wp plugin deactivate "$plugin_slug" --quiet
+            optimizer_deactivate_coherent
             restore_rc=$?
           fi
           if [[ "$restore_rc" -eq 0 ]] && wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
@@ -103,7 +120,8 @@ siteground_cache_purge() {
 
     if [[ "$sg_command_available" -eq 0 ]]; then
       if [[ "$initial_state" != 'active' ]]; then
-        wp plugin activate "$plugin_slug" --quiet || exit $?
+        optimizer_activate_coherent \
+          || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_activation_failed' >&2; exit 1; }
       fi
       wp plugin is-active "$plugin_slug" >/dev/null 2>&1 \
         || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_activation_failed' >&2; exit 1; }
@@ -136,7 +154,7 @@ siteground_cache_purge() {
           wp plugin is-active "$plugin_slug" >/dev/null 2>&1 || exit $?
         else
           if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-            wp plugin deactivate "$plugin_slug" --quiet || exit $?
+            optimizer_deactivate_coherent || exit $?
           fi
           if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
             exit 1
@@ -145,13 +163,13 @@ siteground_cache_purge() {
         ;;
       active)
         if ! wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-          wp plugin activate "$plugin_slug" --quiet || exit $?
+          optimizer_activate_coherent || exit $?
         fi
         wp plugin is-active "$plugin_slug" >/dev/null 2>&1 || exit $?
         ;;
       inactive)
         if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
-          wp plugin deactivate "$plugin_slug" --quiet || exit $?
+          optimizer_deactivate_coherent || exit $?
         fi
         if wp plugin is-active "$plugin_slug" >/dev/null 2>&1; then
           exit 1
