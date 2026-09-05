@@ -5,11 +5,13 @@
  * Normal GitHub Staging acceptance uses the already host-key-pinned SSH
  * identity as the network egress owner for Lighthouse. This prevents
  * SiteGround Antibot from classifying a burst of browser navigations from an
- * ephemeral Azure runner IP as anonymous traffic while preserving the real
- * HTTPS URL/TLS/WordPress path. There is deliberately no direct-network
- * fallback in GitHub Actions: an unavailable or challenged tunnel fails closed.
+ * ephemeral Azure runner IP as anonymous traffic while preserving the exact
+ * HTTPS URL, TLS hostname and unmodified Lighthouse/Chrome measurement stack.
+ * There is deliberately no direct-network fallback in GitHub Actions.
  */
 
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { resolvePerformanceGateMode } from './performance-gate-mode.mjs';
 import {
   shouldUseAuthenticatedStagingEgress,
@@ -26,7 +28,10 @@ console.log(
 );
 
 let tunnel = null;
+let cleaned = false;
 const cleanup = () => {
+  if (cleaned) return;
+  cleaned = true;
   if (tunnel) tunnel.close();
 };
 process.once('exit', cleanup);
@@ -42,9 +47,8 @@ process.once('SIGTERM', () => {
 if (shouldUseAuthenticatedStagingEgress(process.env)) {
   try {
     tunnel = await startAuthenticatedStagingEgress({ baseUrl: process.env.BASE_URL });
-    process.env.PERFORMANCE_CHROME_PROXY_SERVER = tunnel.proxyServer;
     console.log(
-      `PERF_NETWORK_PATH=AUTHENTICATED_SSH_SOCKS status=${tunnel.probe.status} path=${tunnel.probe.effectivePath}`,
+      `PERF_NETWORK_PATH=AUTHENTICATED_SSH_HTTPS path_owner=${tunnel.networkPath} status=${tunnel.probe.status} path=${tunnel.probe.effectivePath} local_peer=${tunnel.probe.localPeer}`,
     );
   } catch (error) {
     console.error(`PERF_NETWORK_PATH=FAIL_CLOSED reason=${String(error?.message || error).slice(0, 1500)}`);
@@ -55,8 +59,20 @@ if (shouldUseAuthenticatedStagingEgress(process.env)) {
   process.exit(78);
 }
 
-try {
-  await import('./lighthouse-performance-gate-core.mjs');
-} finally {
-  cleanup();
+const corePath = fileURLToPath(new URL('./lighthouse-performance-gate-core.mjs', import.meta.url));
+const core = spawnSync(process.execPath, [corePath], {
+  stdio: 'inherit',
+  env: process.env,
+  timeout: 29 * 60 * 1000,
+});
+
+cleanup();
+if (core.error) {
+  console.error(`PERF_GATE_WRAPPER=FAIL reason=${String(core.error.message || core.error)}`);
+  process.exit(1);
 }
+if (core.signal) {
+  console.error(`PERF_GATE_WRAPPER=FAIL signal=${core.signal}`);
+  process.exit(1);
+}
+process.exit(core.status ?? 1);
