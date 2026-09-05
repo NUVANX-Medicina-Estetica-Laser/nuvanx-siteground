@@ -19,6 +19,14 @@ class WP_Post {
 	public string $post_status = 'draft';
 	public string $post_content = '';
 	public string $post_date_gmt = '';
+
+	public function __construct( mixed $post = null ) {
+		if ( is_object( $post ) ) {
+			foreach ( get_object_vars( $post ) as $key => $value ) {
+				$this->$key = $value;
+			}
+		}
+	}
 }
 
 function is_wp_error( mixed $value ): bool { return $value instanceof WP_Error; }

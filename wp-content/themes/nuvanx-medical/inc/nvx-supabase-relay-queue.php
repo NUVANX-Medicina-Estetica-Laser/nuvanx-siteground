@@ -629,9 +629,13 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_compare_and_swap_status' ) ) {
 			if ( $post instanceof WP_Post ) {
 				$post_snapshot = clone $post;
 			} else {
-				$post_snapshot            = new WP_Post();
-				$post_snapshot->ID        = $post_id;
-				$post_snapshot->post_type = NVX_SUPABASE_RELAY_QUEUE_CPT;
+				$post_snapshot = new WP_Post(
+					(object) array(
+						'ID'          => $post_id,
+						'post_type'   => NVX_SUPABASE_RELAY_QUEUE_CPT,
+						'post_status' => $new_status,
+					)
+				);
 			}
 			$post_snapshot->post_status = $new_status;
 
