@@ -90,8 +90,8 @@ if (hmacAware) assert.equal(consentAware, true);
 
 assert.doesNotMatch(relay, /Snippet:|substr\(\s*\$body|json_last_error_msg\(\)/);
 if (hmacAware) {
-  assert.match(relay, /runtime bootstrap HTTP failure; status=%d/);
-  const logLines = relay.split('\n').filter((line) => line.includes('error_log') || line.includes('sprintf('));
+  assert.match(relay, /'lead_captured_bootstrap',\s*'http_failure'/);
+  const logLines = relay.split('\n').filter((line) => line.includes('nvx_observability_log') || line.includes('sprintf('));
   assert.doesNotMatch(logLines.join('\n'), /\$token|Authorization|x-nvx-signature/);
 }
 

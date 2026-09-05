@@ -547,11 +547,7 @@ if ( ! function_exists( 'nvx_hubspot_secure_pre_http_request' ) ) {
 		$fields            = nvx_hubspot_secure_append_qa( $fields );
 		$payload['fields'] = $fields;
 
-		if (
-			function_exists( 'nvx_environment_is_staging2' )
-			&& true === (bool) nvx_environment_is_staging2()
-			&& ! nvx_hubspot_secure_payload_is_staging_qa( $payload )
-		) {
+		if ( function_exists( 'nvx_environment_is_staging2' ) && nvx_environment_is_staging2() && ! nvx_hubspot_secure_payload_is_staging_qa( $payload ) ) {
 			nvx_hubspot_secure_log( 'FAILURE', 'staging_outbound_blocked' );
 			return new WP_Error( 'nvx_staging_outbound_blocked', 'Staging2 outbound HubSpot traffic is restricted to server-owned QA submissions.' );
 		}
