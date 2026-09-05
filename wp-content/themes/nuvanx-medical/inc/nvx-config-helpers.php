@@ -5,9 +5,13 @@
  * @package nuvanx-medical
  */
 
+declare(strict_types=1);
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+require_once __DIR__ . '/nvx-catalog-json.php';
 
 /** Normalize a telephone value to international digits only. */
 function nvx_phone_digits( string $phone ): string {
@@ -61,15 +65,12 @@ function nvx_medical_staff_registry(): array {
 		return $staff;
 	}
 
-	$file = __DIR__ . '/data/medical-staff.json';
-	if ( ! is_readable( $file ) ) {
-		$staff = array();
-		return $staff;
-	}
-
-	$json = file_get_contents( $file );
-	$data = false !== $json ? json_decode( $json, true ) : null;
-	if ( ! is_array( $data ) || 1 !== (int) ( $data['schema'] ?? 0 ) || ! is_array( $data['staff'] ?? null ) ) {
+	$data = nvx_catalog_json_load( 'medical-staff.json' );
+	if (
+		! empty( $data['_error'] )
+		|| 1 !== (int) ( $data['schema'] ?? 0 )
+		|| ! is_array( $data['staff'] ?? null )
+	) {
 		$staff = array();
 		return $staff;
 	}
@@ -140,10 +141,11 @@ function nvx_clinic_asset_registry(): array {
 		return $registry;
 	}
 
-	$file = __DIR__ . '/data/clinic-asset-registry.json';
-	$json = is_readable( $file ) ? file_get_contents( $file ) : false;
-	$data = false !== $json ? json_decode( $json, true ) : null;
-	$registry = is_array( $data ) && 'nuvanx-clinic-asset-registry/v3' === ( $data['schema'] ?? '' ) ? $data : array();
+	$data     = nvx_catalog_json_load( 'clinic-asset-registry.json' );
+	$registry = empty( $data['_error'] )
+		&& 'nuvanx-clinic-asset-registry/v3' === ( $data['schema'] ?? '' )
+		? $data
+		: array();
 	return $registry;
 }
 
