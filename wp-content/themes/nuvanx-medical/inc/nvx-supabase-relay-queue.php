@@ -1313,9 +1313,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 				if ( '' !== $current && ctype_digit( $current ) ) {
 					$existing_post_id = absint( $current );
 					if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) || nvx_supabase_relay_queue_is_valid_prepared_item( $existing_post_id, $dedupe_key ) ) {
-						if ( nvx_supabase_relay_queue_acquire_publication_fence( $existing_post_id, $dedupe_key ) ) {
-							return nvx_supabase_relay_queue_record_existing_attempt( $existing_post_id, $endpoint, $attempts );
-						}
+						nvx_supabase_relay_queue_acquire_publication_fence( $existing_post_id, $dedupe_key );
 						return nvx_supabase_relay_queue_record_existing_attempt( $existing_post_id, $endpoint, $attempts );
 					}
 					if ( nvx_supabase_relay_compare_and_swap_option( $claim_key, $current, $in_flight_value ) ) {
@@ -1340,9 +1338,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 				if ( '' !== $final_claim && ctype_digit( $final_claim ) ) {
 					$existing_post_id = absint( $final_claim );
 					if ( nvx_supabase_relay_queue_is_valid_pending_item( $existing_post_id, $dedupe_key ) || nvx_supabase_relay_queue_is_valid_prepared_item( $existing_post_id, $dedupe_key ) ) {
-						if ( nvx_supabase_relay_queue_acquire_publication_fence( $existing_post_id, $dedupe_key ) ) {
-							return nvx_supabase_relay_queue_record_existing_attempt( $existing_post_id, $endpoint, $attempts );
-						}
+						nvx_supabase_relay_queue_acquire_publication_fence( $existing_post_id, $dedupe_key );
 						return nvx_supabase_relay_queue_record_existing_attempt( $existing_post_id, $endpoint, $attempts );
 					}
 				}
@@ -1374,9 +1370,7 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_enqueue' ) ) {
 				if ( ctype_digit( $current_claim ) ) {
 					$current_post_id = absint( $current_claim );
 					if ( nvx_supabase_relay_queue_is_valid_pending_item( $current_post_id, $dedupe_key ) || nvx_supabase_relay_queue_is_valid_prepared_item( $current_post_id, $dedupe_key ) ) {
-						if ( nvx_supabase_relay_queue_acquire_publication_fence( $current_post_id, $dedupe_key ) ) {
-							return nvx_supabase_relay_queue_record_existing_attempt( $current_post_id, $endpoint, $attempts );
-						}
+						nvx_supabase_relay_queue_acquire_publication_fence( $current_post_id, $dedupe_key );
 						return nvx_supabase_relay_queue_record_existing_attempt( $current_post_id, $endpoint, $attempts );
 					}
 				}
