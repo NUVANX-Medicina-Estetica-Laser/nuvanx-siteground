@@ -36,6 +36,7 @@ function nvx_observability_log( string $domain, string $event, array $context = 
 		'endpoint',
 		'field',
 		'filename',
+		'form_id',
 		'http_status',
 		'hutk_present',
 		'key',
@@ -43,6 +44,7 @@ function nvx_observability_log( string $domain, string $event, array $context = 
 		'mode',
 		'operation',
 		'owner',
+		'page_uri_hash',
 		'phase',
 		'post_id',
 		'provider',
@@ -50,10 +52,11 @@ function nvx_observability_log( string $domain, string $event, array $context = 
 		'route',
 		'source',
 		'status',
+		'test_id',
 		'value',
 	);
-	$allowed      = array_fill_keys( $allowed_keys, true );
-	$parts        = array(
+	$allowed = array_fill_keys( $allowed_keys, true );
+	$parts   = array(
 		'NUVANX_OBSERVABILITY',
 		'domain=' . $domain,
 		'event=' . $event,
