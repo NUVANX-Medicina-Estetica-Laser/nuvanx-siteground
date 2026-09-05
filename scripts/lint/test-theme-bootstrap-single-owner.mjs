@@ -16,6 +16,7 @@ const structured = read('wp-content/themes/nuvanx-medical/inc/nvx-structured-dat
 const pageRegistry = read('wp-content/themes/nuvanx-medical/inc/nvx-page-registry.php');
 const pageRenderHelpers = read('wp-content/themes/nuvanx-medical/inc/nvx-page-render-helpers.php');
 const pageShell = read('wp-content/themes/nuvanx-medical/template-parts/content/nvx-page-shell.php');
+const nativeStyle = read('wp-content/themes/nuvanx-medical/inc/nvx-native-style-governance.php');
 
 assert.match(functions, /require_once __DIR__ \. '\/inc\/nvx-theme-bootstrap\.php';/,
   'functions.php must delegate module loading to the canonical bootstrap');
@@ -63,8 +64,8 @@ requireOrder('inc/nvx-clinics-dom-helpers.php', 'inc/nvx-clinics-hub.php');
 
 // Page ownership is fail-closed at the canonical registry. Legacy module filters
 // can remain during retirement, but an unregistered route receives an explicit
-// sentinel before nvx_get_page_owner() could consult them. The generic shell
-// must treat that sentinel as unowned so ordinary CMS pages retain their H1.
+// sentinel before nvx_get_page_owner() could consult them. Consumers that use
+// owner truthiness must explicitly preserve unowned generic-page behavior.
 assert.match(pageRegistry, /const NVX_CANONICAL_PAGE_UNOWNED = 'nvx_unowned';/,
   'Canonical page registry must define the unowned sentinel');
 assert.match(pageRegistry, /return NVX_CANONICAL_PAGE_UNOWNED;/,
@@ -77,6 +78,8 @@ assert.match(pageRenderHelpers, /if \( function_exists\( 'nvx_get_canonical_page
   'Page-render helper must consult canonical ownership before legacy filters');
 assert.match(pageShell, /NVX_CANONICAL_PAGE_UNOWNED !== \$owner/,
   'Generic page shell must not classify the canonical unowned sentinel as managed editorial');
+assert.match(nativeStyle, /NVX_CANONICAL_PAGE_UNOWNED === \$owner/,
+  'Native-style governance must leave unowned CMS prose untouched');
 
 assert.ok(manifest.includes('inc/nvx-structured-data.php'), 'Structured-data package owner must be in manifest');
 for (const implementation of [
@@ -102,4 +105,4 @@ assert.doesNotMatch(header, /require_once[^;]+\/inc\/nvx-/,
 assert.doesNotMatch(singlePost, /require_once[^;]+nvx-governed-blog-runtime\.php/,
   'single-post.php must not load the governed blog runtime laterally');
 
-console.log(`THEME_BOOTSTRAP_SINGLE_OWNER=PASS modules=${manifest.length} request_snapshot=early schema_package=single_owner page_owner=canonical-fail-closed generic_shell=preserved`);
+console.log(`THEME_BOOTSTRAP_SINGLE_OWNER=PASS modules=${manifest.length} request_snapshot=early schema_package=single_owner page_owner=canonical-fail-closed generic_shell=preserved native_style=preserved`);
