@@ -14,6 +14,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+const NVX_CANONICAL_PAGE_UNOWNED = 'nvx_unowned';
+
 /**
  * Returns the canonical Page Registry matrix:
  * path => [ 'owner' => ..., 'renderer' => ..., 'surface' => ..., 'template' => ... ]
@@ -333,10 +335,17 @@ function nvx_resolve_canonical_page_entry( ?int $post_id = null ): ?array {
 /**
  * Get canonical page owner, independent of hook registration order.
  *
+ * A route outside the registry receives an explicit non-empty sentinel. This
+ * makes the canonical registry authoritative even while legacy nvx_page_owner
+ * callbacks remain registered: they cannot claim an unregistered path.
+ *
  * @param int|null $post_id Post ID if available.
- * @return string|null
  */
-function nvx_get_canonical_page_owner( ?int $post_id = null ): ?string {
+function nvx_get_canonical_page_owner( ?int $post_id = null ): string {
 	$entry = nvx_resolve_canonical_page_entry( $post_id );
-	return $entry['owner'] ?? null;
+	if ( is_array( $entry ) && ! empty( $entry['owner'] ) ) {
+		return (string) $entry['owner'];
+	}
+
+	return NVX_CANONICAL_PAGE_UNOWNED;
 }
