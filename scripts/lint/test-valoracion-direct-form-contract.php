@@ -200,7 +200,7 @@ foreach ( array( '$firstname', '$lastname', '$email', '$phone', '$message', '$pa
 	$assert( false === strpos( $logger_body, $forbidden ), 'NO_PII_LOG_' . $index );
 }
 
-$assert( false === preg_match( '/\berror_log\s*\(/', $source ), 'VALORACION_NO_DIRECT_ERROR_LOG' );
+$assert( 0 === preg_match( '/\berror_log\s*\(/', $source ), 'VALORACION_NO_DIRECT_ERROR_LOG' );
 
 echo 'VALORACION_DIRECT_FORM_LASTNAME=PASS' . PHP_EOL;
 echo 'VALORACION_DIRECT_FORM_HUBSPOT_CONFIG=PASS fail_closed=1 zero_transport=1' . PHP_EOL;
