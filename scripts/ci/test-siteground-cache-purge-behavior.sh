@@ -72,6 +72,10 @@ case "$cmd:$sub" in
     exit 0
     ;;
   eval:*)
+    if [[ "$fail_cmd" == 'opcache-reset-fail' ]]; then
+      echo "opcache_reset failed" >&2
+      exit 1
+    fi
     [[ "$fail_cmd" != 'eval' ]] || exit 33
     exit 0
     ;;
@@ -189,6 +193,8 @@ run_failure_case inactive_preserve_sg inactive preserve sg-purge inactive 32
 run_failure_case active_inactive_eval active inactive eval inactive 33
 run_failure_case active_preserve_eval active preserve eval active 33
 run_failure_case inactive_active_eval inactive active eval active 33
+run_failure_case active_preserve_opcache_fail active preserve opcache-reset-fail active 1
+grep -Fq 'opcache_reset failed' "$TMP/active_preserve_opcache_fail.err" || fail 'case=active_preserve_opcache_fail missing opcache_reset stderr'
 
 # Success-path state transitions use the same contract.
 run_success_case inactive_preserve_success inactive preserve inactive
@@ -201,4 +207,4 @@ run_command_first_case command_only_success
 run_command_first_case command_only_failure sg-purge
 run_missing_capability_case
 
-echo 'SITEGROUND_CACHE_BEHAVIOR=PASS failure_cases=5 success_cases=4 original_rc=preserved requested_state=restored opcache_return=fail_closed command_first=verified missing_capability=fail_closed'
+echo 'SITEGROUND_CACHE_BEHAVIOR=PASS failure_cases=6 success_cases=4 original_rc=preserved requested_state=restored opcache_return=fail_closed command_first=verified missing_capability=fail_closed'
