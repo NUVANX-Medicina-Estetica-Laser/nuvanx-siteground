@@ -8,8 +8,64 @@ const CANONICAL_SSH_ALIAS = 'nvx-staging2';
 const LOCAL_HTTPS_PORT = 443;
 const HOSTS_MARKER = '# nvx-lighthouse-ssh-egress';
 
+const EXIT_TRANSIENT = 75;
+const EXIT_CONFIG = 78;
+const EXIT_DETERMINISTIC = 1;
+
+export class StagingEgressError extends Error {
+  constructor(kind, message, options = {}) {
+    super(message, options);
+    this.name = 'StagingEgressError';
+    this.kind = kind;
+    this.exitCode = kind === 'transient_infrastructure'
+      ? EXIT_TRANSIENT
+      : kind === 'configuration'
+        ? EXIT_CONFIG
+        : EXIT_DETERMINISTIC;
+  }
+}
+
+function typedError(kind, message, cause) {
+  return new StagingEgressError(kind, message, cause ? { cause } : undefined);
+}
+
+export function classifyStagingEgressFailure(error, diagnostic = '') {
+  if (error instanceof StagingEgressError) return error;
+
+  const message = `${String(error?.message || error || '')}\n${String(diagnostic || '')}`.trim();
+
+  if (
+    /sudo:.*(?:password|not allowed|command not found)|identity file .* not accessible|no such file or directory|bad configuration option|cannot bind.*permission denied|address already in use/i.test(message)
+  ) {
+    return typedError('configuration', message || 'Authenticated Staging egress configuration failed', error);
+  }
+
+  if (
+    /Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|Permission denied \(publickey|Authentication failed|Too many authentication failures|No more authentication methods to try/i.test(message)
+  ) {
+    return typedError('deterministic_failure', message || 'Authenticated Staging SSH identity verification failed', error);
+  }
+
+  if (
+    /Connection timed out|Operation timed out|Connection refused|Connection reset by peer|No route to host|Network is unreachable|Could not resolve hostname|Temporary failure in name resolution|Name or service not known|kex_exchange_identification:.*(?:Connection closed|Connection reset)|Connection closed by .* port|socket timeout|did not become ready|code=255/i.test(message)
+  ) {
+    return typedError('transient_infrastructure', message || 'Authenticated Staging egress transport failed', error);
+  }
+
+  return typedError('deterministic_failure', message || 'Authenticated Staging egress failed', error);
+}
+
+export function stagingEgressExitCode(error) {
+  return error instanceof StagingEgressError ? error.exitCode : EXIT_DETERMINISTIC;
+}
+
 function assertCanonicalBaseUrl(raw) {
-  const parsed = new URL(String(raw || '').trim());
+  let parsed;
+  try {
+    parsed = new URL(String(raw || '').trim());
+  } catch (error) {
+    throw typedError('configuration', 'Authenticated Lighthouse egress requires a valid canonical Staging2 URL', error);
+  }
   if (
     parsed.protocol !== 'https:'
     || parsed.hostname !== CANONICAL_STAGING_HOSTNAME
@@ -17,7 +73,7 @@ function assertCanonicalBaseUrl(raw) {
     || parsed.username
     || parsed.password
   ) {
-    throw new Error('Authenticated Lighthouse egress is restricted to canonical Staging2 HTTPS');
+    throw typedError('configuration', 'Authenticated Lighthouse egress is restricted to canonical Staging2 HTTPS');
   }
   return parsed.origin;
 }
@@ -85,7 +141,11 @@ function runSudo(args, options = {}) {
     ...options,
   });
   if (result.error || result.status !== 0) {
-    throw new Error(`sudo ${args[0]} failed: ${result.error?.message || result.stderr || `exit=${result.status}`}`);
+    throw typedError(
+      'configuration',
+      `sudo ${args[0]} failed: ${result.error?.message || result.stderr || `exit=${result.status}`}`,
+      result.error,
+    );
   }
   return result;
 }
@@ -128,7 +188,11 @@ function verifyCanonicalStagingPath(baseUrl) {
     { encoding: 'utf8', timeout: 25000, maxBuffer: 1024 * 1024 },
   );
   if (result.error || result.status !== 0) {
-    throw new Error(`Authenticated Staging egress probe failed: ${result.error?.message || result.stderr || `exit=${result.status}`}`);
+    throw typedError(
+      'transient_infrastructure',
+      `Authenticated Staging egress probe transport failed: ${result.error?.message || result.stderr || `exit=${result.status}`}`,
+      result.error,
+    );
   }
 
   const [statusRaw, effectiveRaw, remoteIp] = String(result.stdout || '').trim().split('\t');
@@ -136,22 +200,40 @@ function verifyCanonicalStagingPath(baseUrl) {
   let effective;
   try {
     effective = new URL(effectiveRaw);
-  } catch {
-    throw new Error('Authenticated Staging egress probe returned an invalid effective URL');
+  } catch (error) {
+    throw typedError('deterministic_failure', 'Authenticated Staging egress probe returned an invalid effective URL', error);
   }
-  if (
-    !Number.isInteger(status)
-    || status < 200
-    || status >= 400
-    || status === 202
+
+  const challenge = status === 202
     || status === 429
     || status === 503
-    || effective.hostname !== CANONICAL_STAGING_HOSTNAME
-    || effective.pathname.startsWith('/.well-known/sgcaptcha/')
-    || remoteIp !== '127.0.0.1'
-  ) {
-    throw new Error(`Authenticated Staging egress was intercepted status=${statusRaw || 'missing'} final_path=${effective.pathname} local_peer=${remoteIp || 'missing'}`);
+    || effective.pathname.startsWith('/.well-known/sgcaptcha/');
+  if (challenge) {
+    throw typedError(
+      'transient_infrastructure',
+      `Authenticated Staging egress was intercepted status=${statusRaw || 'missing'} final_path=${effective.pathname}`,
+    );
   }
+
+  if (!Number.isInteger(status) || status < 200 || status >= 400) {
+    throw typedError(
+      'deterministic_failure',
+      `Authenticated Staging egress returned unexpected HTTP status=${statusRaw || 'missing'} final_path=${effective.pathname}`,
+    );
+  }
+  if (effective.hostname !== CANONICAL_STAGING_HOSTNAME) {
+    throw typedError(
+      'deterministic_failure',
+      `Authenticated Staging egress escaped canonical host host=${effective.hostname}`,
+    );
+  }
+  if (remoteIp !== '127.0.0.1') {
+    throw typedError(
+      'deterministic_failure',
+      `Authenticated Staging egress bypassed local SSH forward local_peer=${remoteIp || 'missing'}`,
+    );
+  }
+
   return { status, effectivePath: effective.pathname, localPeer: remoteIp };
 }
 
@@ -205,6 +287,6 @@ export async function startAuthenticatedStagingEgress({
     removeCanonicalHostsRoute();
     if (child.exitCode === null && !child.killed) child.kill('SIGTERM');
     const diagnostic = stderrChunks.join('').trim();
-    throw new Error(`${String(error?.message || error)}${diagnostic ? ` ssh=${diagnostic.slice(0, 1000)}` : ''}`);
+    throw classifyStagingEgressFailure(error, diagnostic);
   }
 }
