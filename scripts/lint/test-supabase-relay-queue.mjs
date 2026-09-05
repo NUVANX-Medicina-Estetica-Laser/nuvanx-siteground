@@ -36,7 +36,7 @@ assert.match(queue, /'public'\s*=>\s*false/);
 assert.match(queue, /'publicly_queryable'\s*=>\s*false/);
 assert.match(queue, /'show_ui'\s*=>\s*false/);
 assert.match(queue, /'show_in_rest'\s*=>\s*false/);
-assert.match(queue, /NVX_SUPABASE_RELAY=[\s\S]*endpoint=/);
+assert.match(queue, /(?:NVX_SUPABASE_RELAY=[\s\S]*endpoint=|nvx_observability_log\(\s*['"]supabase_relay['"][\s\S]*'endpoint')/);
 assert.match(queue, /SUCCESS[\s\S]*HTTP_4XX[\s\S]*HTTP_429[\s\S]*HTTP_5XX[\s\S]*TRANSPORT[\s\S]*QUEUED[\s\S]*DRAINED[\s\S]*DEAD/);
 assert.match(queue, /function nvx_supabase_relay_dispatch\(/);
 assert.match(queue, /wp_schedule_event\(\s*time\(\) \+ (60|MINUTE_IN_SECONDS),\s*'nvx_relay_outbox_5min'/);

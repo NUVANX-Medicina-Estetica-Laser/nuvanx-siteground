@@ -9,6 +9,8 @@
  * @package nuvanx-medical
  */
 
+declare(strict_types=1);
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -38,11 +40,11 @@ function nvx_tariff_shortcode_render( array $atts ): string {
 		return '';
 	}
 
-	// Parse key format: "group.subkey" (e.g., "laser_co2.facial")
+	// Parse key format: "group.subkey" (e.g., "laser_co2.facial").
 	$parts = explode( '.', $key, 2 );
 	if ( 2 !== count( $parts ) ) {
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( sprintf( '[nvx_tariff] Invalid key format: %s (expected "group.subkey")', $key ) );
+			nvx_observability_log( 'tariff', 'invalid_key_format' );
 		}
 		return '';
 	}
@@ -52,7 +54,7 @@ function nvx_tariff_shortcode_render( array $atts ): string {
 	$tariffs = nvx_catalog_json_load( 'tariff-catalog.json' );
 	if ( ! empty( $tariffs['_error'] ) || ! isset( $tariffs[ $group ] ) || ! is_array( $tariffs[ $group ] ) ) {
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( sprintf( '[nvx_tariff] Unable to load tariff group "%s" from tariff-catalog.json', $group ) );
+			nvx_observability_log( 'tariff', 'catalog_group_unavailable' );
 		}
 		return '';
 	}
@@ -60,7 +62,7 @@ function nvx_tariff_shortcode_render( array $atts ): string {
 	$price = nvx_catalog_tariff_display_price( $tariffs, $group, $subkey );
 	if ( '' === $price ) {
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( sprintf( '[nvx_tariff] Price not found for key: %s', $key ) );
+			nvx_observability_log( 'tariff', 'price_not_found' );
 		}
 		return '';
 	}

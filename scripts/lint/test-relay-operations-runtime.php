@@ -346,6 +346,7 @@ class MockWpdbDirectCas {
 global $wpdb;
 $wpdb = new MockWpdbDirectCas();
 
+require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-observability.php';
 require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-supabase-relay-operations.php';
 require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-supabase-relay-queue.php';
 

@@ -47,23 +47,27 @@ function nvx_supabase_relay_operational_log( string $event, string $endpoint = '
 		'dead_timestamped',
 		'dead_cleanup_deleted',
 	);
-	if ( ! in_array( $event, $allowed, true ) || '' === $endpoint ) {
+	if ( ! in_array( $event, $allowed, true ) || '' === $endpoint || ! function_exists( 'nvx_observability_log' ) ) {
 		return;
 	}
-	$line = 'NVX_RELAY_OP event=' . $event . ' endpoint=' . $endpoint;
-	if ( $value > 0 ) {
-		$line .= ' value=' . absint( $value );
-	}
-	error_log( $line );
+
+	nvx_observability_log(
+		'supabase_relay_ops',
+		$event,
+		array(
+			'endpoint' => $endpoint,
+			'value'    => $value > 0 ? absint( $value ) : null,
+		)
+	);
 }
 
 /** Validate one relay payload against the generic and endpoint-specific ceilings. */
-function nvx_supabase_relay_validate_payload( string $endpoint, string $body ): true|WP_Error {
-	$endpoint     = sanitize_key( $endpoint );
+function nvx_supabase_relay_validate_payload( string $endpoint, string $body ): bool|WP_Error {
+	$endpoint      = sanitize_key( $endpoint );
 	$generic_limit = defined( 'NVX_SUPABASE_RELAY_QUEUE_MAX_BODY_BYTES' )
 		? (int) NVX_SUPABASE_RELAY_QUEUE_MAX_BODY_BYTES
 		: 32768;
-	$limit = 'google_click' === $endpoint
+	$limit         = 'google_click' === $endpoint
 		? min( $generic_limit, (int) NVX_SUPABASE_RELAY_GOOGLE_CLICK_MAX_BODY_BYTES )
 		: $generic_limit;
 

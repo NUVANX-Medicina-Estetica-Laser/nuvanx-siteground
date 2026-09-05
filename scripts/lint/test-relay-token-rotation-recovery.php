@@ -103,8 +103,21 @@ function wp_delete_post( int $post_id, bool $force = false ): bool {
 	unset( $post_id, $force );
 	return true;
 }
+if ( ! class_exists( 'WP_Post' ) ) {
+	final class WP_Post {
+		public int $ID = 0;
+		public string $post_content = '';
+		public string $post_status = 'pending';
+	}
+}
+
+$GLOBALS['mock_posts'] = array();
 function wp_update_post( array $args = array() ): int {
-	return (int) ( $args['ID'] ?? 0 );
+	$id = (int) ( $args['ID'] ?? 0 );
+	if ( isset( $args['post_status'] ) && isset( $GLOBALS['mock_posts'][ $id ] ) ) {
+		$GLOBALS['mock_posts'][ $id ]->post_status = (string) $args['post_status'];
+	}
+	return $id;
 }
 function wp_slash( $val ) { return $val; }
 function wp_unslash( $val ) { return $val; }
@@ -113,20 +126,17 @@ $GLOBALS['nvx_next_post_id'] = 2000;
 function wp_insert_post( array $args, bool $wp_error = false ) {
 	unset( $wp_error );
 	$id = ++$GLOBALS['nvx_next_post_id'];
+	$p  = new WP_Post();
+	$p->ID           = $id;
+	$p->post_status  = (string) ( $args['post_status'] ?? 'pending' );
+	$p->post_content = (string) ( $args['post_content'] ?? '' );
+	$GLOBALS['mock_posts'][ $id ] = $p;
 	if ( isset( $args['meta_input'] ) && is_array( $args['meta_input'] ) ) {
 		foreach ( $args['meta_input'] as $k => $v ) {
 			update_post_meta( $id, $k, (string) $v );
 		}
 	}
 	return $id;
-}
-
-if ( ! class_exists( 'WP_Post' ) ) {
-	final class WP_Post {
-		public int $ID = 0;
-		public string $post_content = '';
-		public string $post_status = 'pending';
-	}
 }
 
 if ( ! class_exists( 'WP_Query' ) ) {
@@ -139,15 +149,19 @@ if ( ! class_exists( 'WP_Query' ) ) {
 }
 
 function get_post( $post_id ) {
+	$id = (int) $post_id;
+	if ( isset( $GLOBALS['mock_posts'][ $id ] ) ) {
+		return $GLOBALS['mock_posts'][ $id ];
+	}
 	foreach ( ($GLOBALS['mock_query_posts'] ?? array()) as $p ) {
-		if ( $p instanceof WP_Post && $p->ID == $post_id ) {
-			$p->post_status = 'pending';
+		if ( $p instanceof WP_Post && $p->ID === $id ) {
 			return $p;
 		}
 	}
 	$post = new WP_Post();
-	$post->ID = (int) $post_id;
+	$post->ID = $id;
 	$post->post_status = 'pending';
+	$GLOBALS['mock_posts'][ $id ] = $post;
 	return $post;
 }
 
@@ -391,14 +405,18 @@ nvx_supabase_relay_queue_unlock( $token_a );
 assert( ! isset( $GLOBALS['nvx_mock_options'][ $lock_key ] ), 'Winner unlock must cleanly release lock' );
 
 // Assert Test 7: Queued item with 401 whose forced bootstrap fails increments attempts by exactly 1
+$drain_fail_body = '{"lead_id":"d1234567-89ab-4cde-0123-drain-fail-999","client_timestamp":"2026-09-02T10:00:00Z"}';
 $post_fail = new WP_Post();
 $post_fail->ID = 999;
-$post_fail->post_content = $valid_body;
+$post_fail->post_content = $drain_fail_body;
+$fail_dedupe_key = nvx_supabase_relay_dedupe_key( 'lead_captured', $drain_fail_body, '' );
 $GLOBALS['mock_query_posts'] = array( $post_fail );
 $GLOBALS['post_meta'][999] = array(
-	'_nvx_relay_endpoint' => 'lead_captured',
-	'_nvx_relay_origin'   => '',
-	'_nvx_relay_attempts' => '0',
+	'_nvx_relay_endpoint'     => 'lead_captured',
+	'_nvx_relay_origin'       => '',
+	'_nvx_relay_attempts'     => '0',
+	'_nvx_relay_dedupe_key'   => $fail_dedupe_key,
+	'_nvx_relay_next_attempt' => '0',
 );
 
 // Clear lock so drain can acquire lock:
@@ -421,14 +439,18 @@ assert( '1' === (string) get_post_meta( 999, '_nvx_relay_attempts', true ), 'Fai
 assert( 2 === count( $GLOBALS['remote_post_log'] ), 'Expected 2 HTTP calls: 1 failed delivery + 1 failed bootstrap' );
 
 // Assert Test 8: Queued item with 401 whose forced bootstrap succeeds but second delivery fails increments attempts by 2
+$drain_retry_body = '{"lead_id":"d1234567-89ab-4cde-0123-drain-retry-1000","client_timestamp":"2026-09-02T10:00:00Z"}';
 $post_retry = new WP_Post();
 $post_retry->ID = 1000;
-$post_retry->post_content = $valid_body;
+$post_retry->post_content = $drain_retry_body;
+$retry_dedupe_key = nvx_supabase_relay_dedupe_key( 'lead_captured', $drain_retry_body, '' );
 $GLOBALS['mock_query_posts'] = array( $post_retry );
 $GLOBALS['post_meta'][1000] = array(
-	'_nvx_relay_endpoint' => 'lead_captured',
-	'_nvx_relay_origin'   => '',
-	'_nvx_relay_attempts' => '0',
+	'_nvx_relay_endpoint'     => 'lead_captured',
+	'_nvx_relay_origin'       => '',
+	'_nvx_relay_attempts'     => '0',
+	'_nvx_relay_dedupe_key'   => $retry_dedupe_key,
+	'_nvx_relay_next_attempt' => '0',
 );
 
 unset( $GLOBALS['nvx_mock_options']['nvx_supabase_relay_drain_lock_v1'] );

@@ -9,8 +9,10 @@
  * @package nuvanx-medical
  */
 
+declare(strict_types=1);
+
 if ( ! defined( 'ABSPATH' ) ) {
-    exit;
+	exit;
 }
 
 /**
@@ -84,7 +86,11 @@ function nvx_seo_retirement_block_divergent_canonical_persistence( $check, $post
 		return $check;
 	}
 
-	error_log( sprintf( '[nuvanx] Rejected divergent Yoast canonical persistence for manifest post %d.', (int) $post_id ) );
+	nvx_observability_log(
+		'seo_retirement',
+		'divergent_canonical_rejected',
+		array( 'post_id' => (int) $post_id )
+	);
 	return true;
 }
 add_filter( 'add_post_metadata', 'nvx_seo_retirement_block_divergent_canonical_persistence', PHP_INT_MAX, 4 );
@@ -92,24 +98,24 @@ add_filter( 'update_post_metadata', 'nvx_seo_retirement_block_divergent_canonica
 
 /** Remove legacy text-metadata filters once every theme module is registered. */
 add_action(
-    'wp_loaded',
-    static function (): void {
-        $legacy = array(
-            array( 'wpseo_title', 'nvx_filter_valoracion_document_title', 21 ),
-            array( 'wpseo_metadesc', 'nvx_filter_valoracion_metadesc', 21 ),
-            array( 'wpseo_title', 'nvx_filter_contacto_document_title', 21 ),
-            array( 'wpseo_metadesc', 'nvx_filter_contacto_metadesc', 21 ),
-            array( 'wpseo_title', 'nvx_contacto_seo_title', 10 ),
-            array( 'wpseo_metadesc', 'nvx_contacto_seo_metadesc', 10 ),
-            array( 'wpseo_opengraph_title', 'nvx_filter_contacto_social_title', 110 ),
-            array( 'wpseo_twitter_title', 'nvx_filter_contacto_social_title', 110 ),
-            array( 'wpseo_opengraph_desc', 'nvx_filter_contacto_social_description', 110 ),
-            array( 'wpseo_twitter_description', 'nvx_filter_contacto_social_description', 110 ),
-        );
+	'wp_loaded',
+	static function (): void {
+		$legacy = array(
+			array( 'wpseo_title', 'nvx_filter_valoracion_document_title', 21 ),
+			array( 'wpseo_metadesc', 'nvx_filter_valoracion_metadesc', 21 ),
+			array( 'wpseo_title', 'nvx_filter_contacto_document_title', 21 ),
+			array( 'wpseo_metadesc', 'nvx_filter_contacto_metadesc', 21 ),
+			array( 'wpseo_title', 'nvx_contacto_seo_title', 10 ),
+			array( 'wpseo_metadesc', 'nvx_contacto_seo_metadesc', 10 ),
+			array( 'wpseo_opengraph_title', 'nvx_filter_contacto_social_title', 110 ),
+			array( 'wpseo_twitter_title', 'nvx_filter_contacto_social_title', 110 ),
+			array( 'wpseo_opengraph_desc', 'nvx_filter_contacto_social_description', 110 ),
+			array( 'wpseo_twitter_description', 'nvx_filter_contacto_social_description', 110 ),
+		);
 
-        foreach ( $legacy as $registration ) {
-            remove_filter( $registration[0], $registration[1], $registration[2] );
-        }
-    },
-    1
+		foreach ( $legacy as $registration ) {
+			remove_filter( $registration[0], $registration[1], $registration[2] );
+		}
+	},
+	1
 );
