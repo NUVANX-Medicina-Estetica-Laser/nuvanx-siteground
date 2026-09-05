@@ -93,12 +93,12 @@ function waitForListeningPort(port, child, timeoutMs = 12000) {
     const started = Date.now();
     let settled = false;
     let lastError = '';
-    let timer;
+    let timer = null;
 
     const finish = (error) => {
       if (settled) return;
       settled = true;
-      if (timer) clearInterval(timer);
+      if (timer) clearTimeout(timer);
       child.off('exit', onExit);
       child.off('error', onError);
       if (error) reject(error);
@@ -110,25 +110,39 @@ function waitForListeningPort(port, child, timeoutMs = 12000) {
     child.once('exit', onExit);
     child.once('error', onError);
 
-    const probe = () => {
-      const socket = net.createConnection({ host: '127.0.0.1', port });
-      socket.setTimeout(1000);
-      socket.once('connect', () => {
-        socket.destroy();
-        finish();
-      });
-      const record = (error) => {
-        lastError = String(error?.message || error || 'not-listening');
-        socket.destroy();
-        if (Date.now() - started >= timeoutMs) {
-          finish(new Error(`SSH HTTPS tunnel did not become ready: ${lastError}`));
-        }
-      };
-      socket.once('error', record);
-      socket.once('timeout', () => record(new Error('socket timeout')));
+    const scheduleNextProbe = () => {
+      if (settled) return;
+      const elapsed = Date.now() - started;
+      if (elapsed >= timeoutMs) {
+        finish(new Error(`SSH HTTPS tunnel did not become ready: ${lastError || 'not-listening'}`));
+        return;
+      }
+      timer = setTimeout(probe, Math.min(250, timeoutMs - elapsed));
     };
 
-    timer = setInterval(probe, 250);
+    const probe = () => {
+      if (settled) return;
+      let attemptDone = false;
+      const socket = net.createConnection({ host: '127.0.0.1', port });
+      socket.setTimeout(1000);
+
+      const completeAttempt = (error) => {
+        if (attemptDone || settled) return;
+        attemptDone = true;
+        socket.destroy();
+        if (!error) {
+          finish();
+          return;
+        }
+        lastError = String(error?.message || error || 'not-listening');
+        scheduleNextProbe();
+      };
+
+      socket.once('connect', () => completeAttempt(null));
+      socket.once('error', completeAttempt);
+      socket.once('timeout', () => completeAttempt(new Error('socket timeout')));
+    };
+
     probe();
   });
 }
