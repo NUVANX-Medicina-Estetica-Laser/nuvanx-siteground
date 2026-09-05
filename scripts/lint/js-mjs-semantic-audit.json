@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "manual_entrypoints": {},
+  "browser_entrypoints": {
+    "wp-content/themes/nuvanx-medical/assets/js/nvx-attribution-contract.js": {
+      "owner": "wp-content/themes/nuvanx-medical/inc/nvx-gtm-integration.php",
+      "init": "One canonical WordPress enqueue per document; attribution capture runs at DOM ready and consent changes.",
+      "listeners": "DOMContentLoaded plus WordPress/Complianz consent events; no per-element rebinding loop.",
+      "observers": "None.",
+      "timers": "No recurring timers; attribution TTL is persisted data expiry, not a live timer.",
+      "global_state": "Owns NUVANXAttributionContract and nvxAttribution APIs plus bounded storage keys.",
+      "notes": "Execution ownership is PHP-enqueue single-owner; storage reads/writes are exception-safe and consent-gated."
+    },
+    "wp-content/themes/nuvanx-medical/assets/js/nvx-conversion-events.js": {
+      "owner": "wp-content/themes/nuvanx-medical/functions.php",
+      "init": "One canonical WordPress enqueue per document; delegated listeners avoid per-CTA rebinding.",
+      "listeners": "One capturing document click listener, HubSpot success event, and origin-validated postMessage listener.",
+      "observers": "None.",
+      "timers": "gtag polling clears after at most 2 seconds; navigation fallback is a one-shot 1500 ms timeout.",
+      "global_state": "Owns NUVANXConversionEvents; dedupe Maps are module-local and bounded by page lifetime.",
+      "notes": "Successful-form dedupe is conversion-id/page scoped; no browser Meta publisher is introduced."
+    },
+    "wp-content/themes/nuvanx-medical/assets/js/nvx-footer.js": {
+      "owner": "wp-content/themes/nuvanx-medical/functions.php",
+      "init": "One canonical WordPress enqueue per document and one initial disclosure synchronization.",
+      "listeners": "One matchMedia change listener for responsive native details state.",
+      "observers": "None.",
+      "timers": "None.",
+      "global_state": "None; section list and media query remain closure-local.",
+      "notes": "Desktop/mobile state is idempotent assignment to native details.open."
+    },
+    "wp-content/themes/nuvanx-medical/assets/js/nvx-home-video.js": {
+      "owner": "wp-content/themes/nuvanx-medical/functions.php",
+      "init": "One home-only WordPress enqueue; DOMContentLoaded is used only when needed.",
+      "listeners": "Video error listener and loadeddata once-listener when media is not yet ready.",
+      "observers": "One IntersectionObserver owned by the hero video for page lifetime.",
+      "timers": "None.",
+      "global_state": "None; video/toggle/observer are closure-local.",
+      "notes": "Reduced-motion and media errors fail closed to the poster; observer does not create repeated bindings."
+    },
+    "wp-content/themes/nuvanx-medical/assets/js/nvx-hubspot-attribution-sync.js": {
+      "owner": "wp-content/themes/nuvanx-medical/inc/nvx-attribution-integration.php",
+      "init": "One dependency-bound WordPress enqueue after nvx-attribution-contract.",
+      "listeners": "HubSpot form-ready plus consent-change listeners; DOMContentLoaded uses once=true.",
+      "observers": "None.",
+      "timers": "Read-back verification is capped at three attempts with two 25 ms waits.",
+      "global_state": "Owns frozen NUVANXHubSpotAttributionSync API; field maps are local Sets/Maps.",
+      "notes": "Synchronization is form-id scoped and read-back verified; marketing fields remain consent-gated."
+    },
+    "wp-content/themes/nuvanx-medical/assets/js/nvx-main.js": {
+      "owner": "wp-content/themes/nuvanx-medical/functions.php",
+      "init": "One canonical WordPress enqueue; dynamic lazy-map binding uses data-nvx-map-bound guard.",
+      "listeners": "Navigation, anchors, map buttons and Complianz lifecycle listeners are page-owned.",
+      "observers": "Complianz MutationObserver is scoped to the resolved banner root for page lifetime.",
+      "timers": "Idle callbacks have 2/3 second deadlines and fallback timeouts are one-shot 1 ms callbacks.",
+      "global_state": "No exported mutable application state.",
+      "notes": "FAQ is native details; map and banner rebinding paths are explicitly idempotent or root-scoped."
+    },
+    "wp-content/themes/nuvanx-medical/assets/js/nvx-runtime-governance.js": {
+      "owner": "wp-content/themes/nuvanx-medical/inc/nvx-document-governance.php",
+      "init": "One dependency-bound WordPress enqueue after nvx-main; DOMContentLoaded uses once=true.",
+      "listeners": "Mobile navigation, modal, consent and reduced-motion listeners are document/page lifetime owners.",
+      "observers": "Mobile-nav MutationObserver is attribute-scoped to the canonical nav element.",
+      "timers": "Focus handoff uses one-shot 0/50 ms timeouts only; no polling loop.",
+      "global_state": "Owns hsConversationsSettings policy and nvxOpen/CloseValoracionModal entrypoints.",
+      "notes": "HubSpot global tracking is consent-owned and script-id deduped; visible form remains first-party."
+    }
+  },
+  "raw_json_validators": {
+    "scripts/lint/test-ads-conversion-catalog.mjs": {"duplicate_keys":"Tracked catalog is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No recursive alias graph; conversion identities are validated as stable catalog keys.","structural_invariants":"Consumer asserts required account/action ownership fields and supported values."},
+    "scripts/lint/test-clinical-evidence-contract.mjs": {"duplicate_keys":"Tracked clinical JSON is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No recursive aliases; route/treatment references are finite canonical identifiers.","structural_invariants":"Consumer validates clinical evidence shape, route identity, approved media and canonical loader ownership."},
+    "scripts/lint/test-clinics-hub-equipment-contract.mjs": {"duplicate_keys":"Tracked clinic catalogs are covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No recursive alias traversal; equipment references are direct identifiers.","structural_invariants":"Consumer asserts clinic/equipment keys, publication routing and required records."},
+    "scripts/lint/test-config-workflow-semantic-audit.mjs": {"duplicate_keys":"This is the canonical raw-source owner: it scans JSON text for duplicate keys before destructive parse.","aliases_cycles":"Canonical structural model validates aliases/references with bounded traversal and cycle rejection where applicable.","structural_invariants":"Owns repository JSON/workflow structural interpretation and fails closed on malformed source."},
+    "scripts/lint/test-conversion-ownership-contract.mjs": {"duplicate_keys":"Tracked conversion catalog is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No recursive aliases; action/account ownership is direct.","structural_invariants":"Asserts canonical publisher/account/send_to ownership and retired parallel publishers."},
+    "scripts/lint/test-css-manifest-contract.mjs": {"duplicate_keys":"Tracked CSS manifest/config JSON is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No recursive alias graph; source-to-artifact mappings are direct.","structural_invariants":"Asserts source coverage, unique runtime representation and hash/materialization integrity."},
+    "scripts/lint/test-doctoralia-gbp-service-parity.mjs": {"duplicate_keys":"Tracked service catalogs are covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No aliases; service keys are projected directly from treatment-hub schema.","structural_invariants":"Asserts identical canonical service sets across both clinics and external platforms."},
+    "scripts/lint/test-endolaser-claim-approval.mjs": {"duplicate_keys":"Tracked approval/catalog JSON is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"Approval dependencies are finite file/key references; no recursive aliases are accepted.","structural_invariants":"Asserts bound base/fingerprint/schema and fails closed for protected Endolaser changes."},
+    "scripts/lint/test-frontend-media-integrity.mjs": {"duplicate_keys":"Tracked media registries are covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No recursive aliases; media IDs and route references are direct.","structural_invariants":"Asserts approved/quarantined case pairing, public-path exclusion and owner uniqueness."},
+    "scripts/lint/test-integration-config-fail-closed.mjs": {"duplicate_keys":"Tracked integration JSON is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"Legacy aliases are explicitly bounded migration inputs, not recursive resolution.","structural_invariants":"Asserts required validated pairs, canonical staging source and fail-closed missing configuration."},
+    "scripts/lint/test-js-mjs-semantic-audit.mjs": {"duplicate_keys":"Its own registry is tracked JSON and is prevalidated by CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before this consumer runs.","aliases_cycles":"Reachability graph uses visited sets and finite tracked-file edges, preventing traversal cycles.","structural_invariants":"Asserts schema=1, required registry sections, live files, explicit review fields and zero stale entries."},
+    "scripts/lint/test-meta-capi-governance.mjs": {"duplicate_keys":"Tracked Meta/CAPI configuration is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No recursive aliases; event/config ownership is direct.","structural_invariants":"Asserts server-side Meta ownership, browser retirement and required event governance."},
+    "scripts/lint/test-performance-regression-policy.mjs": {"duplicate_keys":"Tracked baseline/policy JSON is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No aliases; route/mode cells are direct keys.","structural_invariants":"Validates approved baseline schema, complete required cells and regression thresholds."},
+    "scripts/lint/test-php-entrypoints-templates.mjs": {"duplicate_keys":"Any tracked JSON inventory consumed here is covered by CONFIG_WORKFLOW_RAW_SOURCE_AUDIT first.","aliases_cycles":"No recursive JSON aliases; PHP reachability is independently bounded by tracked paths.","structural_invariants":"Asserts PHP entrypoint/template ownership and rejects unowned executable surfaces."},
+    "scripts/lint/test-repository-hygiene.mjs": {"duplicate_keys":"Tracked JSON examined by repository hygiene is prevalidated by CONFIG_WORKFLOW_RAW_SOURCE_AUDIT.","aliases_cycles":"Dependency graph uses finite tracked paths and visited ownership sets.","structural_invariants":"Asserts workflows=2, no residues/generated files, executable references and owner reachability."},
+    "scripts/lint/test-schema-semantic-contract.mjs": {"duplicate_keys":"Tracked schema/catalog JSON is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"Schema references are bounded to canonical IDs; recursive alias ownership is not accepted.","structural_invariants":"Asserts semantic schema identities, route coverage and canonical source ownership."},
+    "scripts/lint/validate-rendered-prices.mjs": {"duplicate_keys":"Tracked tariff/catalog JSON is covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"No recursive aliases; tariff identities are direct group/key pairs.","structural_invariants":"Validates rendered numeric prices against canonical tariff source and fail-closed destinations."},
+    "scripts/lint/validate-routes-schema.mjs": {"duplicate_keys":"routes.json and schema are covered by blocking CONFIG_WORKFLOW_RAW_SOURCE_AUDIT before JSON.parse.","aliases_cycles":"Route aliases/references are validated as finite canonical paths; cycles are rejected by route contract.","structural_invariants":"Validates routes against routes.schema.json and canonical required fields."},
+    "scripts/staging2/block-c-entrypoint-core.mjs": {"duplicate_keys":"Read JSON is generated acceptance artifact/config; tracked config inputs are prevalidated and generated output uses JSON serialization.","aliases_cycles":"No recursive aliases; artifact cells use direct route/check identities.","structural_invariants":"Validates expected SHA, artifact status and bounded retry/result contracts before acceptance."},
+    "scripts/staging2/block-c-entrypoint-orchestrator.mjs": {"duplicate_keys":"Read JSON artifacts are generated by canonical stages with JSON serialization, not hand-authored duplicate-key sources.","aliases_cycles":"Stage graph is a fixed finite list; no recursive alias resolution.","structural_invariants":"Asserts stage result/status contracts and bounded recovery cycles."},
+    "scripts/staging2/block-c-home-mobile-recovery.mjs": {"duplicate_keys":"Read artifact JSON is generated by the browser harness; duplicate-key ambiguity is not an editable source path.","aliases_cycles":"No aliases; recovery targets fixed artifact cells.","structural_invariants":"Asserts exact home/mobile failure classification and bounded targeted recovery."},
+    "scripts/staging2/block-c-transient-visual-recovery.mjs": {"duplicate_keys":"Read artifact JSON is generated by the browser harness; duplicate-key ambiguity is not an editable source path.","aliases_cycles":"No aliases; transient cells are direct identifiers.","structural_invariants":"Asserts only classified transient visual failures can enter bounded recovery."},
+    "scripts/staging2/clinical-evidence-runtime.mjs": {"duplicate_keys":"Tracked clinical inputs are prevalidated; runtime JSON artifacts are generated through JSON serialization.","aliases_cycles":"No recursive aliases; evidence rows map directly to canonical route/case IDs.","structural_invariants":"Validates exact SHA, required evidence count and per-case runtime invariants."},
+    "scripts/staging2/governed-blog-head-contract.mjs": {"duplicate_keys":"Tracked manifest/catalog inputs are prevalidated by raw-source audit before runtime parse.","aliases_cycles":"No recursive aliases; governed paths are direct canonical entries.","structural_invariants":"Asserts head metadata/canonical/robots contracts for governed blog pages."},
+    "scripts/staging2/h1-hubspot-a11y-safe.mjs": {"duplicate_keys":"Read JSON is generated acceptance evidence via JSON serialization, not a hand-authored source.","aliases_cycles":"No aliases; issue/control identities are direct values.","structural_invariants":"Validates exact deploy SHA, form/control uniqueness, interception policy and bounded safe-scope conditions."},
+    "scripts/staging2/lighthouse-performance-gate-core.mjs": {"duplicate_keys":"Baseline is tracked and prevalidated by raw-source audit; Lighthouse output is machine-generated JSON.","aliases_cycles":"No aliases; route/mode cells are direct keys.","structural_invariants":"Validates baseline schema, exact required cells, numeric metrics and navigation identity before regression evaluation."},
+    "scripts/staging2/published-pages-contract.mjs": {"duplicate_keys":"Tracked publication inputs are prevalidated by raw-source audit before parse.","aliases_cycles":"No recursive aliases; publication routes are canonical direct paths.","structural_invariants":"Asserts published route coverage, robots state and exact runtime identity."},
+    "scripts/staging2/sync-publication-parity.mjs": {"duplicate_keys":"Tracked publication manifest is prevalidated by raw-source audit before parse.","aliases_cycles":"No recursive aliases; synchronization operates on direct canonical route records.","structural_invariants":"Validates manifest schema/status and only reconciles bounded publication fields."},
+    "scripts/staging2/test-visual-qa-contract.mjs": {"duplicate_keys":"Read JSON fixtures/artifacts are generated or tracked fixtures already covered by raw-source validation.","aliases_cycles":"No aliases; visual cells are direct scenario identifiers.","structural_invariants":"Asserts accepted visual result taxonomy and fail-closed malformed/partial artifacts."},
+    "scripts/staging2/verify-publication-sitemap-from-xml.mjs": {"duplicate_keys":"Tracked publication manifest is prevalidated by raw-source audit before JSON.parse.","aliases_cycles":"No recursive aliases; route records are direct canonical paths.","structural_invariants":"Validates manifest schema, expected host and exact sitemap inclusion/exclusion parity."}
+  },
+  "bounded_waits": {
+    "scripts/staging2/block-a11y.mjs": {"reason":"Browser stabilization and accessibility checks require short asynchronous settling windows.","bound":"All waits are fixed milliseconds within one Playwright stage; no unbounded retry loop."},
+    "scripts/staging2/block-c-browser-visual-contract.mjs": {"reason":"Visual state requires bounded render/media stabilization before assertions.","bound":"Wait calls are fixed/timeout-governed by the Playwright stage and terminate on stage timeout."},
+    "scripts/staging2/block-c-entrypoint-orchestrator.mjs": {"reason":"Retry delay separates a finite number of classified recovery cycles.","bound":"Each stage declares maxCycles and the orchestrator loops only to that finite bound."},
+    "scripts/staging2/block-c-home-mobile-recovery.mjs": {"reason":"Targeted home/mobile recovery waits for a classified transient render to settle.","bound":"Recovery has a finite targeted cycle count and Playwright timeout; no open-ended polling."},
+    "scripts/staging2/block-c-matrix.mjs": {"reason":"Matrix pages require bounded load, font and interaction stabilization.","bound":"Playwright/navigation timeouts and finite route/check matrices cap every wait and total work."},
+    "scripts/staging2/block-c-transient-visual-recovery.mjs": {"reason":"Transient SiteGround/render recovery uses delay between finite classified attempts.","bound":"Recovery attempts are explicitly finite and only operate on the bounded failed-cell set."},
+    "scripts/staging2/clinic-media-runtime.mjs": {"reason":"Images/media need bounded browser decode/render settling before clinical media assertions.","bound":"Finite 12-case inventory plus Playwright timeouts bounds all waits."},
+    "scripts/staging2/clinical-evidence-runtime.mjs": {"reason":"Clinical evidence browser checks wait for deterministic page/media readiness.","bound":"Finite 9-case inventory plus Playwright/navigation timeouts bounds all waits."},
+    "scripts/staging2/complianz-first-visit-mobile.mjs": {"reason":"Consent UI must render and transition before first-visit mobile assertions.","bound":"Playwright action/navigation timeouts and fixed one-shot waits bound the scenario."},
+    "scripts/staging2/first-party-valoracion-a11y.mjs": {"reason":"First-party form validation/focus feedback needs a short browser settling interval.","bound":"Finite field scenarios and Playwright timeouts cap all waits; there is no unbounded retry."},
+    "scripts/staging2/hubspot-form-definition-contract.mjs": {"reason":"Remote form-definition reads/retries require bounded backoff for transient transport.","bound":"Attempt count and request timeout are fixed by the contract before the loop starts."},
+    "scripts/staging2/valoracion-placement-resilient.mjs": {"reason":"Resilient valoración acceptance retries only classified transient browser outcomes.","bound":"maxCycles is finite and each child stage is process/Playwright-timeout bounded."},
+    "scripts/staging2/verify-staging-boundary.mjs": {"reason":"Boundary verification permits short retry delay for classified transient SiteGround responses.","bound":"Retry count and request timeout are finite configuration validated by the script."}
+  }
+}
