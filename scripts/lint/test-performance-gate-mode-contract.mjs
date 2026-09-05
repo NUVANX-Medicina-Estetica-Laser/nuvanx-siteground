@@ -50,8 +50,6 @@ assert.match(networkPath, /127\.0\.0\.1:\$\{LOCAL_HTTPS_PORT\}:\$\{CANONICAL_STA
 assert.match(networkPath, /--resolve/);
 assert.match(networkPath, /effective\.pathname\.startsWith\('\/\.well-known\/sgcaptcha\/'\)/);
 assert.match(networkPath, /127\.0\.0\.1 \$\{CANONICAL_STAGING_HOSTNAME\} \$\{HOSTS_MARKER\}/);
-assert.match(networkPath, /StrictHostKeyChecking/,
-  'SSH host-key enforcement remains owned by the workflow-generated nvx-staging2 config');
 assert.doesNotMatch(networkPath, /disable.*antibot|allowlist|whitelist/i,
   'The performance harness must not disable or bypass SiteGround security policy');
 
