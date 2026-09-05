@@ -2,7 +2,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { resolvePerformanceGateMode } from '../staging2/performance-gate-mode.mjs';
-import { shouldUseAuthenticatedStagingEgress } from '../staging2/lighthouse-network-path.mjs';
+import {
+  StagingEgressError,
+  classifyStagingEgressFailure,
+  shouldUseAuthenticatedStagingEgress,
+  stagingEgressExitCode,
+} from '../staging2/lighthouse-network-path.mjs';
 
 assert.equal(resolvePerformanceGateMode({ eventName: 'push', requestedMode: 'baseline' }), 'enforce');
 assert.equal(resolvePerformanceGateMode({ eventName: 'push', requestedMode: 'enforce' }), 'enforce');
@@ -29,6 +34,13 @@ assert.equal(shouldUseAuthenticatedStagingEgress({
   BASE_URL: 'http://staging2.nuvanx.com',
 }), false);
 
+assert.equal(stagingEgressExitCode(classifyStagingEgressFailure(new Error('Connection timed out'))), 75);
+assert.equal(stagingEgressExitCode(classifyStagingEgressFailure(new Error('sudo: a password is required'))), 78);
+assert.equal(stagingEgressExitCode(classifyStagingEgressFailure(new Error('Host key verification failed'))), 1);
+assert.equal(stagingEgressExitCode(new StagingEgressError('transient_infrastructure', 'sgcaptcha challenge')), 75);
+assert.equal(stagingEgressExitCode(new StagingEgressError('configuration', 'bad canonical URL')), 78);
+assert.equal(stagingEgressExitCode(new StagingEgressError('deterministic_failure', 'host escaped')), 1);
+
 const entrypoint = await fs.readFile(new URL('../staging2/lighthouse-performance-gate.mjs', import.meta.url), 'utf8');
 const core = await fs.readFile(new URL('../staging2/lighthouse-performance-gate-core.mjs', import.meta.url), 'utf8');
 const networkPath = await fs.readFile(new URL('../staging2/lighthouse-network-path.mjs', import.meta.url), 'utf8');
@@ -38,8 +50,10 @@ assert.match(entrypoint, /resolvePerformanceGateMode/);
 assert.match(entrypoint, /process\.env\.GITHUB_EVENT_NAME/);
 assert.match(entrypoint, /process\.env\.PERFORMANCE_GATE_MODE = effectiveMode/);
 assert.match(entrypoint, /startAuthenticatedStagingEgress/);
+assert.match(entrypoint, /stagingEgressExitCode/);
 assert.match(entrypoint, /PERF_NETWORK_PATH=AUTHENTICATED_SSH_HTTPS/);
-assert.match(entrypoint, /PERF_NETWORK_PATH=FAIL_CLOSED/);
+assert.match(entrypoint, /PERF_NETWORK_PATH=FAIL_\$\{classification\}/);
+assert.match(entrypoint, /exitCode === 75 \? 'TRANSIENT' : exitCode === 78 \? 'CONFIG' : 'DETERMINISTIC'/);
 assert.match(entrypoint, /spawnSync\(process\.execPath/,
   'The wrapper must keep the authenticated tunnel alive while the canonical core runs as a child process');
 assert.doesNotMatch(entrypoint, /PERFORMANCE_CHROME_PROXY_SERVER/,
@@ -50,6 +64,10 @@ assert.match(networkPath, /127\.0\.0\.1:\$\{LOCAL_HTTPS_PORT\}:\$\{CANONICAL_STA
 assert.match(networkPath, /--resolve/);
 assert.match(networkPath, /effective\.pathname\.startsWith\('\/\.well-known\/sgcaptcha\/'\)/);
 assert.match(networkPath, /127\.0\.0\.1 \$\{CANONICAL_STAGING_HOSTNAME\} \$\{HOSTS_MARKER\}/);
+assert.match(networkPath, /timer = setTimeout\(probe, Math\.min\(250, timeoutMs - elapsed\)\)/,
+  'Tunnel readiness must use a finite one-shot wait governed by the existing bounded-wait authority');
+assert.doesNotMatch(networkPath, /setInterval\s*\(/,
+  'The harness must not introduce an ungoverned periodic timer for tunnel readiness');
 assert.doesNotMatch(networkPath, /disable.*antibot|allowlist|whitelist/i,
   'The performance harness must not disable or bypass SiteGround security policy');
 
@@ -65,4 +83,4 @@ assert.match(workflow, /Configure strict Staging2 SSH \(read-only\)[\s\S]*Strict
 assert.match(workflow, /GATE_MODE:\s*\$\{\{\s*github\.event_name\s*==\s*'workflow_dispatch'\s*&&\s*inputs\.performance_gate_mode\s*\|\|.*\}\}/,
   'Workflow may retain its historical fallback only because the canonical entrypoint overrides every push to enforce');
 
-console.log('PERFORMANCE_GATE_MODE_CONTRACT=PASS push=enforce manual_baseline=explicit default=enforce network=authenticated_ssh_https');
+console.log('PERFORMANCE_GATE_MODE_CONTRACT=PASS push=enforce manual_baseline=explicit default=enforce network=authenticated_ssh_https taxonomy=75_78_1');
