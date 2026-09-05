@@ -30,6 +30,7 @@ require_once __DIR__ . '/nvx-theme-request.php';
 function nvx_theme_bootstrap_manifest(): array {
 	return array(
 		// Infrastructure and request-independent governance.
+		'inc/nvx-observability.php',
 		'inc/nvx-page-registry.php',
 		'inc/nvx-business-config.php',
 		'inc/nvx-clinical-governance.php',
