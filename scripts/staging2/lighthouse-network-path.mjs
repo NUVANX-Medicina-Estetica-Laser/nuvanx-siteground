@@ -13,13 +13,24 @@ function assertPort(value) {
   return port;
 }
 
+function assertCanonicalBaseUrl(raw) {
+  const parsed = new URL(String(raw || '').trim());
+  if (
+    parsed.protocol !== 'https:'
+    || parsed.hostname !== CANONICAL_STAGING_HOSTNAME
+    || parsed.username
+    || parsed.password
+  ) {
+    throw new Error('Authenticated Lighthouse egress is restricted to canonical Staging2');
+  }
+  return parsed.origin;
+}
+
 export function shouldUseAuthenticatedStagingEgress(env = process.env) {
   if (String(env.GITHUB_ACTIONS || '').toLowerCase() !== 'true') return false;
-  const raw = String(env.BASE_URL || '').trim();
-  if (!raw) return false;
   try {
-    const parsed = new URL(raw);
-    return parsed.protocol === 'https:' && parsed.hostname === CANONICAL_STAGING_HOSTNAME;
+    assertCanonicalBaseUrl(env.BASE_URL || '');
+    return true;
   } catch {
     return false;
   }
@@ -44,11 +55,12 @@ function waitForListeningPort(port, child, timeoutMs = 12000) {
     const started = Date.now();
     let settled = false;
     let lastError = '';
+    let timer;
 
     const finish = (error) => {
       if (settled) return;
       settled = true;
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
       child.off('exit', onExit);
       child.off('error', onError);
       if (error) reject(error);
@@ -78,12 +90,13 @@ function waitForListeningPort(port, child, timeoutMs = 12000) {
       socket.once('timeout', () => record(new Error('socket timeout')));
     };
 
-    const timer = setInterval(probe, 250);
+    timer = setInterval(probe, 250);
     probe();
   });
 }
 
 function verifyCanonicalStagingPath(proxyServer, baseUrl) {
+  const canonicalOrigin = assertCanonicalBaseUrl(baseUrl);
   const result = spawnSync(
     'curl',
     [
@@ -98,7 +111,7 @@ function verifyCanonicalStagingPath(proxyServer, baseUrl) {
       '/dev/null',
       '--write-out',
       '%{http_code}\t%{url_effective}',
-      `${baseUrl.replace(/\/$/, '')}/`,
+      `${canonicalOrigin}/`,
     ],
     { encoding: 'utf8', timeout: 25000, maxBuffer: 1024 * 1024 },
   );
@@ -134,6 +147,7 @@ export async function startAuthenticatedStagingEgress({
   sshAlias = CANONICAL_SSH_ALIAS,
   port = process.env.PERFORMANCE_SOCKS_PORT || DEFAULT_SOCKS_PORT,
 } = {}) {
+  const canonicalOrigin = assertCanonicalBaseUrl(baseUrl);
   const resolvedPort = assertPort(port);
   const proxyServer = `socks5://127.0.0.1:${resolvedPort}`;
   const stderrChunks = [];
@@ -144,7 +158,6 @@ export async function startAuthenticatedStagingEgress({
       '-N',
       '-T',
       '-o', 'ExitOnForwardFailure=yes',
-      '-o', 'ClearAllForwardings=yes',
       '-D', `127.0.0.1:${resolvedPort}`,
       sshAlias,
     ],
@@ -156,7 +169,7 @@ export async function startAuthenticatedStagingEgress({
 
   try {
     await waitForListeningPort(resolvedPort, child);
-    const probe = verifyCanonicalStagingPath(proxyServer, baseUrl);
+    const probe = verifyCanonicalStagingPath(proxyServer, canonicalOrigin);
     return {
       proxyServer,
       probe,
