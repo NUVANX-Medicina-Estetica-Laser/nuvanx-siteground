@@ -622,7 +622,15 @@ if ( ! function_exists( 'nvx_supabase_relay_queue_compare_and_swap_status' ) ) {
 				wp_cache_delete( $post_id, 'posts' );
 			}
 			$post = get_post( $post_id );
-			return $post instanceof WP_Post && $new_status === (string) $post->post_status;
+			if ( ! $post instanceof WP_Post || $new_status !== (string) $post->post_status ) {
+				return false;
+			}
+			if ( function_exists( 'wp_transition_post_status' ) ) {
+				wp_transition_post_status( $new_status, $expected_status, $post );
+			} elseif ( function_exists( 'do_action' ) ) {
+				do_action( 'transition_post_status', $new_status, $expected_status, $post );
+			}
+			return true;
 		}
 
 		$post = get_post( $post_id );

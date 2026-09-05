@@ -16,16 +16,136 @@ final class WP_Error {
 class WP_Post {
 	public int $ID = 1;
 	public string $post_type = 'nvx_relay_outbox';
+	public string $post_status = 'draft';
+	public string $post_content = '';
+	public string $post_date_gmt = '';
 }
 
 function is_wp_error( mixed $value ): bool { return $value instanceof WP_Error; }
 function sanitize_key( string $value ): string { return strtolower( preg_replace( '/[^a-z0-9_\-]/', '', $value ) ?? '' ); }
 function sanitize_url( string $value ): string { return trim( $value ); }
 function absint( mixed $value ): int { return abs( (int) $value ); }
-function add_action( mixed ...$args ): void { unset( $args ); }
-function add_filter( mixed ...$args ): void { unset( $args ); }
+function sanitize_text_field( mixed $value ): string { return trim( (string) $value ); }
+function wp_slash( mixed $value ): string { return addslashes( (string) $value ); }
+function wp_parse_url( string $url, int $component = -1 ): mixed { return parse_url( $url, $component ); }
+function wp_remote_retrieve_response_code( mixed $response ): int {
+	return ( is_array( $response ) && isset( $response['response']['code'] ) ) ? (int) $response['response']['code'] : 0;
+}
+
+$mock_actions = array();
+$mock_filters = array();
+
+function add_action( string $hook, callable $callback, int $priority = 10, int $accepted_args = 1 ): void {
+	global $mock_actions;
+	$mock_actions[ $hook ][] = array(
+		'callback'      => $callback,
+		'priority'      => $priority,
+		'accepted_args' => $accepted_args,
+	);
+	usort(
+		$mock_actions[ $hook ],
+		static fn( array $a, array $b ): int => $a['priority'] <=> $b['priority']
+	);
+}
+
+function remove_action( string $hook, mixed $callback, int $priority = 10 ): bool {
+	global $mock_actions;
+	if ( ! isset( $mock_actions[ $hook ] ) ) {
+		return false;
+	}
+	$mock_actions[ $hook ] = array_values(
+		array_filter(
+			$mock_actions[ $hook ],
+			static fn( array $entry ): bool => ! ( $entry['callback'] === $callback && $entry['priority'] === $priority )
+		)
+	);
+	return true;
+}
+
+function has_action( string $hook, mixed $callback = false ): bool|int {
+	global $mock_actions;
+	if ( empty( $mock_actions[ $hook ] ) ) {
+		return false;
+	}
+	if ( false === $callback ) {
+		return true;
+	}
+	foreach ( $mock_actions[ $hook ] as $entry ) {
+		if ( $entry['callback'] === $callback ) {
+			return $entry['priority'];
+		}
+	}
+	return false;
+}
+
+function do_action( string $hook, mixed ...$args ): void {
+	global $mock_actions;
+	if ( empty( $mock_actions[ $hook ] ) ) {
+		return;
+	}
+	foreach ( $mock_actions[ $hook ] as $entry ) {
+		$callback   = $entry['callback'];
+		$entry_args = array_slice( $args, 0, $entry['accepted_args'] );
+		$callback( ...$entry_args );
+	}
+}
+
+function wp_transition_post_status( string $new_status, string $old_status, mixed $post ): void {
+	do_action( 'transition_post_status', $new_status, $old_status, $post );
+}
+
+function add_filter( string $hook, callable $callback, int $priority = 10, int $accepted_args = 1 ): void {
+	global $mock_filters;
+	$mock_filters[ $hook ][] = array(
+		'callback'      => $callback,
+		'priority'      => $priority,
+		'accepted_args' => $accepted_args,
+	);
+}
+
+function clean_post_cache( int $post_id ): void {}
+function wp_cache_delete( mixed $key, string $group = '' ): bool { return true; }
+function wp_cache_set( mixed $key, mixed $value, string $group = '', int $expire = 0 ): bool { return true; }
+function register_post_type( mixed ...$args ): void {}
+function wp_next_scheduled( mixed ...$args ): mixed { return false; }
+function wp_schedule_event( mixed ...$args ): bool { return true; }
+function wp_clear_scheduled_hook( mixed ...$args ): int { return 1; }
+
 function wp_json_encode( mixed $value ): string|false { return json_encode( $value ); }
-function nvx_supabase_relay_queue_endpoints(): array { return array( 'google_click' => 'https://example.test/google-click' ); }
+function nvx_supabase_relay_queue_endpoints(): array {
+	return array(
+		'google_click'  => 'https://example.test/google-click',
+		'lead_captured' => 'https://example.test/lead-captured',
+	);
+}
+
+$mock_options = array();
+
+function get_option( string $key, mixed $default = false ): mixed {
+	global $mock_options;
+	return $mock_options[ $key ] ?? $default;
+}
+
+function update_option( string $key, mixed $value, mixed $autoload = null ): bool {
+	global $mock_options;
+	$mock_options[ $key ] = (string) $value;
+	return true;
+}
+
+function add_option( string $key, mixed $value, string $deprecated = '', mixed $autoload = 'yes' ): bool {
+	global $mock_options;
+	if ( array_key_exists( $key, $mock_options ) ) {
+		return false;
+	}
+	$mock_options[ $key ] = (string) $value;
+	return true;
+}
+
+function delete_option( string $key ): bool {
+	global $mock_options;
+	unset( $mock_options[ $key ] );
+	return true;
+}
 
 $mock_posts         = array();
 $mock_deleted_posts = array();
@@ -112,7 +232,112 @@ function get_posts( array $args = array() ): array {
 	return $results;
 }
 
+function get_post( mixed $post = null, string $output = 'OBJECT', string $filter = 'raw' ): ?WP_Post {
+	global $mock_posts;
+	$post_id = $post instanceof WP_Post ? $post->ID : absint( $post );
+	if ( $post_id < 1 || ! isset( $mock_posts[ $post_id ] ) ) {
+		return null;
+	}
+	$p                = new WP_Post();
+	$p->ID            = $post_id;
+	$p->post_type     = $mock_posts[ $post_id ]['post_type'] ?? 'nvx_relay_outbox';
+	$p->post_status   = $mock_posts[ $post_id ]['post_status'] ?? 'draft';
+	$p->post_content  = $mock_posts[ $post_id ]['post_content'] ?? '';
+	$p->post_date_gmt = $mock_posts[ $post_id ]['post_date_gmt'] ?? '';
+	return $p;
+}
+
+function add_post_meta( int $post_id, string $key, mixed $value, bool $unique = false ): bool {
+	global $mock_posts;
+	if ( $unique && isset( $mock_posts[ $post_id ]['meta'][ $key ] ) ) {
+		return false;
+	}
+	return update_post_meta( $post_id, $key, $value );
+}
+
+function wp_update_post( array $postarr = array(), bool $wp_error = false ): int|WP_Error {
+	global $mock_posts;
+	$id = (int) ( $postarr['ID'] ?? 0 );
+	if ( $id < 1 || ! isset( $mock_posts[ $id ] ) ) {
+		return $wp_error ? new WP_Error( 'invalid_post', 'Post not found.' ) : 0;
+	}
+	if ( isset( $postarr['post_status'] ) ) {
+		$old_status                        = $mock_posts[ $id ]['post_status'] ?? '';
+		$mock_posts[ $id ]['post_status'] = (string) $postarr['post_status'];
+		$post                              = get_post( $id );
+		if ( function_exists( 'wp_transition_post_status' ) ) {
+			wp_transition_post_status( (string) $postarr['post_status'], $old_status, $post );
+		}
+	}
+	return $id;
+}
+
+class MockWpdbDirectCas {
+	public string $posts   = 'wp_posts';
+	public string $options = 'wp_options';
+
+	public function prepare( string $query, ...$args ): string {
+		foreach ( $args as $arg ) {
+			if ( is_int( $arg ) || ctype_digit( (string) $arg ) ) {
+				if ( preg_match( '/%[ds]/', $query, $match, PREG_OFFSET_CAPTURE ) ) {
+					$placeholder = $match[0][0];
+					$offset      = $match[0][1];
+					$val         = '%d' === $placeholder ? (string) (int) $arg : "'" . addslashes( (string) $arg ) . "'";
+					$query       = substr_replace( $query, $val, $offset, 2 );
+				}
+			} else {
+				if ( preg_match( '/%s/', $query, $match, PREG_OFFSET_CAPTURE ) ) {
+					$offset = $match[0][1];
+					$val    = "'" . addslashes( (string) $arg ) . "'";
+					$query  = substr_replace( $query, $val, $offset, 2 );
+				}
+			}
+		}
+		return $query;
+	}
+
+	public function query( string $query ): int {
+		global $mock_posts, $mock_options;
+		// CAS on posts: UPDATE wp_posts SET post_status = %s WHERE ID = %d AND post_type = %s AND post_status = %s
+		if ( preg_match( "/UPDATE wp_posts SET post_status = '([^']+)' WHERE ID = '?(\d+)'? AND post_type = '([^']+)' AND post_status = '([^']+)'/", $query, $m ) ) {
+			$new_status      = $m[1];
+			$post_id         = (int) $m[2];
+			$expected_type   = $m[3];
+			$expected_status = $m[4];
+
+			if (
+				isset( $mock_posts[ $post_id ] )
+				&& ( $mock_posts[ $post_id ]['post_type'] ?? '' ) === $expected_type
+				&& ( $mock_posts[ $post_id ]['post_status'] ?? '' ) === $expected_status
+			) {
+				$mock_posts[ $post_id ]['post_status'] = $new_status;
+				return 1;
+			}
+			return 0;
+		}
+
+		// CAS on options: UPDATE wp_options SET option_value = %s WHERE option_name = %s AND option_value = %s
+		if ( preg_match( "/UPDATE wp_options SET option_value = '([^']*)' WHERE option_name = '([^']+)' AND option_value = '([^']*)'/", $query, $m ) ) {
+			$new_val  = $m[1];
+			$key      = $m[2];
+			$expected = $m[3];
+
+			if ( ( $mock_options[ $key ] ?? '' ) === $expected ) {
+				$mock_options[ $key ] = $new_val;
+				return 1;
+			}
+			return 0;
+		}
+
+		return 0;
+	}
+}
+
+global $wpdb;
+$wpdb = new MockWpdbDirectCas();
+
 require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-supabase-relay-operations.php';
+require_once dirname( __DIR__, 2 ) . '/wp-content/themes/nuvanx-medical/inc/nvx-supabase-relay-queue.php';
 
 $require = static function ( bool $condition, string $label ): void {
 	if ( ! $condition ) {
@@ -263,6 +488,93 @@ $mock_posts[14] = array(
 );
 nvx_supabase_relay_operations_stamp_dead_transition( 'publish', 'pending', $test_post_pub );
 $require( ! isset( $mock_posts[14]['meta']['_nvx_relay_dead_at'] ), 'NON_DRAFT_TRANSITION_IGNORED' );
+
+// =========================================================================
+// Runtime tests: direct-SQL CAS ($wpdb) and recovery quarantine dead stamping
+// =========================================================================
+
+// Test 1: Incomplete BUILDING row recovery
+// Expired building row with incomplete metadata must be transitioned to draft
+// via direct-SQL CAS ($wpdb) and immediately timestamped with _nvx_relay_dead_at
+// via wp_transition_post_status -> operations stamp hook without manual calls.
+$mock_posts[201] = array(
+	'post_type'     => 'nvx_relay_outbox',
+	'post_status'   => 'nvx_relay_building',
+	'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $mock_relay_time - 120 ),
+	'post_content'  => '',
+	'meta'          => array(
+		'_nvx_relay_endpoint'      => 'google_click',
+		'_nvx_relay_publish_claim' => ( $mock_relay_time - 120 ) . '|claim201',
+	),
+);
+
+$res_incomplete = nvx_supabase_relay_queue_recover_building_item( 201 );
+$require( false === $res_incomplete, 'INCOMPLETE_BUILDING_RECOVERY_RETURNS_FALSE' );
+$require( 'draft' === $mock_posts[201]['post_status'], 'INCOMPLETE_BUILDING_TRANSITIONS_TO_DRAFT' );
+$require( (string) $mock_relay_time === ( $mock_posts[201]['meta']['_nvx_relay_dead_at'] ?? '' ), 'INCOMPLETE_BUILDING_DIRECT_SQL_DEAD_AT_TIMESTAMPED' );
+
+// Test 2: Superseded BUILDING row recovery
+// Expired building row with complete metadata superseded by a competitor post
+// holding the claim option must transition to draft via direct-SQL CAS ($wpdb)
+// and immediately receive _nvx_relay_dead_at timestamp via the action hook.
+$body202       = '{"gclid":"test-gclid-superseded","source":"google"}';
+$endpoint202   = 'google_click';
+$origin202     = 'https://nuvanx.es';
+$dedupe_key202 = nvx_supabase_relay_dedupe_key( $endpoint202, $body202, $origin202 );
+$claim_key202  = nvx_supabase_relay_queue_claim_key( $dedupe_key202 );
+
+// Active competitor item 203 holds the claim option and is valid pending
+$mock_options[ $claim_key202 ] = '203';
+$mock_posts[203] = array(
+	'post_type'     => 'nvx_relay_outbox',
+	'post_status'   => 'pending',
+	'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $mock_relay_time - 60 ),
+	'post_content'  => $body202,
+	'meta'          => array(
+		'_nvx_relay_endpoint'   => $endpoint202,
+		'_nvx_relay_origin'     => $origin202,
+		'_nvx_relay_dedupe_key' => $dedupe_key202,
+		'_nvx_relay_ready'      => '1',
+		'_nvx_relay_attempts'   => '1',
+	),
+);
+
+// Expired building item 202 is superseded by item 203
+$mock_posts[202] = array(
+	'post_type'     => 'nvx_relay_outbox',
+	'post_status'   => 'nvx_relay_building',
+	'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $mock_relay_time - 120 ),
+	'post_content'  => $body202,
+	'meta'          => array(
+		'_nvx_relay_endpoint'      => $endpoint202,
+		'_nvx_relay_origin'        => $origin202,
+		'_nvx_relay_dedupe_key'    => $dedupe_key202,
+		'_nvx_relay_publish_claim' => ( $mock_relay_time - 120 ) . '|claim202',
+		'_nvx_relay_next_attempt'  => (string) $mock_relay_time,
+		'_nvx_relay_attempts'      => '1',
+		'_nvx_relay_ready'         => '1',
+	),
+);
+
+$res_superseded = nvx_supabase_relay_queue_recover_building_item( 202 );
+$require( false === $res_superseded, 'SUPERSEDED_BUILDING_RECOVERY_RETURNS_FALSE' );
+$require( 'draft' === $mock_posts[202]['post_status'], 'SUPERSEDED_BUILDING_TRANSITIONS_TO_DRAFT' );
+$require( (string) $mock_relay_time === ( $mock_posts[202]['meta']['_nvx_relay_dead_at'] ?? '' ), 'SUPERSEDED_BUILDING_DIRECT_SQL_DEAD_AT_TIMESTAMPED' );
+
+// Test 3: CAS failure does not dispatch transition_post_status or set dead_at
+$mock_posts[204] = array(
+	'post_type'     => 'nvx_relay_outbox',
+	'post_status'   => 'pending',
+	'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $mock_relay_time - 120 ),
+	'post_content'  => '',
+	'meta'          => array(
+		'_nvx_relay_endpoint' => 'google_click',
+	),
+);
+$cas_failed = nvx_supabase_relay_queue_compare_and_swap_status( 204, 'nvx_relay_building', 'draft' );
+$require( false === $cas_failed, 'CAS_MISMATCH_RETURNS_FALSE' );
+$require( 'pending' === $mock_posts[204]['post_status'], 'CAS_MISMATCH_LEAVES_STATUS_UNMODIFIED' );
+$require( ! isset( $mock_posts[204]['meta']['_nvx_relay_dead_at'] ), 'CAS_MISMATCH_DOES_NOT_TIMESTAMP_DEAD_AT' );
 
 // Test cleanup retention & untimestamped backfill
 $mock_posts         = array();
