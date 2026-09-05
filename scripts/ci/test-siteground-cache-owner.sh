@@ -107,7 +107,8 @@ grep -Fq "SITEGROUND_CACHE_HELPER='\$REMOTE_RELEASE/siteground-cache-purge.sh'" 
   || fail 'production_workflow_compensation_helper_handoff_missing'
 
 # The canonical helper itself is fail-closed, restores requested plugin state,
-# and invalidates persistent option cache between state mutation and verification.
+# invalidates persistent option cache after mutations, and never infers inactive
+# state from an undifferentiated non-zero command result.
 grep -Fq 'restore_requested_state_on_failure' "$HELPER" \
   || fail 'helper_failure_restore_trap_missing'
 grep -Fq 'SITEGROUND_CACHE_PURGE_RESTORE=PASS' "$HELPER" \
@@ -118,10 +119,12 @@ grep -Fq 'wp help sg' "$HELPER" \
   || fail 'helper_command_first_capability_probe_missing'
 grep -Fq 'no_siteground_purge_capability' "$HELPER" \
   || fail 'helper_missing_capability_must_fail_closed'
-grep -Fq 'optimizer_activate_coherent' "$HELPER" \
-  || fail 'helper_activation_coherence_owner_missing'
-grep -Fq 'optimizer_deactivate_coherent' "$HELPER" \
-  || fail 'helper_deactivation_coherence_owner_missing'
+grep -Fq 'optimizer_observed_state' "$HELPER" \
+  || fail 'helper_explicit_optimizer_state_probe_missing'
+grep -Fq 'optimizer_set_state_coherent' "$HELPER" \
+  || fail 'helper_coherent_state_mutation_owner_missing'
+grep -Fq 'plugin get "$plugin_slug" --field=status' "$HELPER" \
+  || fail 'helper_state_probe_must_use_explicit_status_data'
 
 bash -n "$HELPER"
 bash -n "$BEHAVIOR_TEST"
@@ -132,4 +135,4 @@ bash -n "$PROD_COMPENSATION"
 bash "$BEHAVIOR_TEST"
 bash "$STATE_COHERENCE_TEST"
 
-echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count staging_inline=0 staging_isolation_state=allowed production_inline=0 production_compensation_inline=0 retired_prod_duplicate=absent rollback_state=snapshot production_payload=lineage_verified command_first=verified fail_closed=true behavior=verified state_coherence=verified"
+echo "SITEGROUND_CACHE_OWNER_CONTRACT=PASS helper_purge_count=$helper_purge_count staging_inline=0 staging_isolation_state=allowed production_inline=0 production_compensation_inline=0 retired_prod_duplicate=absent rollback_state=snapshot production_payload=lineage_verified command_first=verified fail_closed=true behavior=verified state_coherence=verified explicit_state_probe=verified"
