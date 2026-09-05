@@ -100,6 +100,10 @@ function nvx_supabase_relay_operations_preflight_google_click( mixed $preempt, a
 	if ( '' === $target || $target !== sanitize_url( $url ) ) {
 		return $preempt;
 	}
+	$method = isset( $parsed_args['method'] ) ? strtoupper( (string) $parsed_args['method'] ) : 'POST';
+	if ( 'POST' !== $method ) {
+		return $preempt;
+	}
 
 	$body = $parsed_args['body'] ?? '';
 	if ( is_array( $body ) ) {
@@ -151,11 +155,11 @@ function nvx_supabase_relay_operations_stamp_dead_transition( string $new_status
 		return;
 	}
 	$endpoint = sanitize_key( (string) get_post_meta( absint( $post->ID ), '_nvx_relay_endpoint', true ) );
-	$dedupe   = (string) get_post_meta( absint( $post->ID ), '_nvx_relay_dedupe_key', true );
-	if ( '' === $endpoint || 1 !== preg_match( '/\A[a-f0-9]{64}\z/', $dedupe ) ) {
-		return;
+	if ( '' === $endpoint ) {
+		$endpoint = 'system';
 	}
-	update_post_meta( absint( $post->ID ), '_nvx_relay_dead_at', (string) nvx_supabase_relay_time() );
+	$time = function_exists( 'nvx_supabase_relay_time' ) ? nvx_supabase_relay_time() : time();
+	update_post_meta( absint( $post->ID ), '_nvx_relay_dead_at', (string) $time );
 	nvx_supabase_relay_operational_log( 'dead_timestamped', $endpoint );
 }
 add_action( 'transition_post_status', 'nvx_supabase_relay_operations_stamp_dead_transition', 20, 3 );
@@ -198,7 +202,8 @@ add_action( 'init', 'nvx_supabase_relay_operations_schedule_cleanup', 21 );
 
 /** Delete only terminal rows whose terminal timestamp exceeded retention. */
 function nvx_supabase_relay_operations_cleanup_dead_letters(): void {
-	$cutoff = nvx_supabase_relay_time() - (int) NVX_SUPABASE_RELAY_DEAD_RETENTION_SECONDS;
+	$now    = function_exists( 'nvx_supabase_relay_time' ) ? nvx_supabase_relay_time() : time();
+	$cutoff = $now - (int) NVX_SUPABASE_RELAY_DEAD_RETENTION_SECONDS;
 	$ids    = get_posts(
 		array(
 			'post_type'              => NVX_SUPABASE_RELAY_QUEUE_CPT,
@@ -245,6 +250,35 @@ function nvx_supabase_relay_operations_cleanup_dead_letters(): void {
 	}
 	if ( $deleted > 0 ) {
 		nvx_supabase_relay_operational_log( 'dead_cleanup_deleted', 'system', $deleted );
+	}
+
+	$untimestamped = get_posts(
+		array(
+			'post_type'              => NVX_SUPABASE_RELAY_QUEUE_CPT,
+			'post_status'            => 'draft',
+			'posts_per_page'         => (int) NVX_SUPABASE_RELAY_DEAD_CLEANUP_BATCH,
+			'fields'                 => 'ids',
+			'orderby'                => 'ID',
+			'order'                  => 'ASC',
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+			'meta_query'             => array(
+				array(
+					'key'     => '_nvx_relay_dead_at',
+					'compare' => 'NOT EXISTS',
+				),
+			),
+		)
+	);
+	foreach ( $untimestamped as $untimestamped_id ) {
+		$post_id  = absint( $untimestamped_id );
+		$endpoint = sanitize_key( (string) get_post_meta( $post_id, '_nvx_relay_endpoint', true ) );
+		if ( '' === $endpoint ) {
+			$endpoint = 'system';
+		}
+		update_post_meta( $post_id, '_nvx_relay_dead_at', (string) $now );
+		nvx_supabase_relay_operational_log( 'dead_timestamped', $endpoint );
 	}
 }
 add_action( NVX_SUPABASE_RELAY_QUEUE_CLEANUP_CRON, 'nvx_supabase_relay_operations_cleanup_dead_letters' );
