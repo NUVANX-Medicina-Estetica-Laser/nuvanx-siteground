@@ -66,6 +66,16 @@ siteground_cache_purge() {
 
     if wp plugin is-installed "$plugin_slug" >/dev/null 2>&1; then
       plugin_installed=1
+    fi
+
+    # Invalidate persistent object cache before snapshotting any state that may
+    # later be restored. Otherwise preserve mode can turn an already-stale
+    # active_plugins cache entry into the authoritative restoration target and
+    # actively reverse the database state. This single initial flush also makes
+    # the subsequent `wp help sg` capability probe coherent.
+    wp cache flush || exit $?
+
+    if [[ "$plugin_installed" -eq 1 ]]; then
       initial_state="$(optimizer_observed_state)" \
         || { echo 'SITEGROUND_CACHE_PURGE=FAIL reason=optimizer_state_probe_failed' >&2; exit 1; }
     fi
@@ -121,8 +131,6 @@ siteground_cache_purge() {
       exit "$rc"
     }
     trap restore_requested_state_on_failure EXIT
-
-    wp cache flush || exit $?
 
     if [[ "$sg_command_available" -eq 0 ]]; then
       optimizer_set_state_coherent active \
